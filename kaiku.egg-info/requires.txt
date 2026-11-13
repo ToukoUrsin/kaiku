@@ -1,0 +1,11 @@
+numpy
+mujoco>=3.2
+mink
+qpsolvers[daqp]
+aiohttp
+websockets
+msgpack
+pyyaml
+
+[dev]
+pytest

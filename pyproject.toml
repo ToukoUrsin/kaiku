@@ -1,0 +1,25 @@
+[project]
+name = "kaiku"
+version = "0.1.0"
+description = "One pair of Rokoko gloves, many robots: live teleoperation fan-out for humanoid demonstration data."
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "numpy",
+  "mujoco>=3.2",
+  "mink",
+  "qpsolvers[daqp]",
+  "aiohttp",
+  "websockets",
+  "msgpack",
+  "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+include = ["kaiku*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
