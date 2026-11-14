@@ -26,7 +26,7 @@ Every command is checked against the speed and workspace limits Junction's human
 
 ## How we used Modal
 
-Every number above was trained on Modal, 63 runs in all, each on its own GPU. The Train both button on the live page trains two policies on Modal while you watch, one with the echoes and one without, about six minutes from the click to the result.
+Every number above was trained on Modal, 63 runs in all, each on its own GPU. The Train both button on the live page trains two policies on Modal while you watch, one with the echoes and one without, four to six minutes from the click to the result.
 
 ## Deck line
 

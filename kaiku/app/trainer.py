@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WHICH = ("kaiku", "plain")
 SMOOTH_S = 45.0                      # how slowly the time left may change its mind
 MODAL_ABOUT_MIN = 6.0                # what a run on rented GPUs takes, start to result (5.9 measured on the hosted demo)
+RENTED_KEPT = 5                      # rented runs whose times are kept: the page promises the slowest of them
 MODAL_RUNS = int(os.environ.get("KAIKU_MODAL_RUNS", "40"))     # rented runs a demo may start; after that it trains here
 
 
@@ -34,16 +35,21 @@ class Trainer:
         self.clock = time.monotonic          # a test hands in its own
         # What the page may say a run takes: what somebody measured (--train-about), or else what the
         # last run took. This machine and rented GPUs are timed apart: one is six times the other.
+        # A rented run takes four minutes when its machines are warm and six when they are not. The
+        # page promises the slowest of the last few, so the number does not change with every run.
         self.about_min = about_min
-        self.rented_min = MODAL_ABOUT_MIN
+        self.rented_runs = [MODAL_ABOUT_MIN]
         try:
             timed = json.loads((self.out / "timing.json").read_text())
             if about_min is None and timed.get("minutes"):
                 self.about_min = float(timed["minutes"])
-            if timed.get("rented_minutes"):
-                self.rented_min = float(timed["rented_minutes"])
+            if timed.get("rented_runs"):
+                self.rented_runs = [float(m) for m in timed["rented_runs"]][-RENTED_KEPT:]
+            elif timed.get("rented_minutes"):
+                self.rented_runs.append(float(timed["rented_minutes"]))
         except (OSError, ValueError, TypeError, AttributeError):
             pass
+        self.rented_min = max(self.rented_runs)
         self.started = 0.0                   # when the run began
         self.total_s: float | None = None    # how long the whole run looks like taking
         self.total_at = 0.0                  # ... as of when
@@ -159,12 +165,13 @@ class Trainer:
         if seconds < 30.0:                   # nothing trains that fast: not a time to promise anybody
             return
         if self.using == "modal":
-            self.rented_min = round(seconds / 60.0, 1)
+            self.rented_runs = (self.rented_runs + [round(seconds / 60.0, 1)])[-RENTED_KEPT:]
+            self.rented_min = max(self.rented_runs)
         else:
             self.about_min = round(seconds / 60.0, 1)
         try:
             (self.out / "timing.json").write_text(json.dumps({"minutes": self.about_min, "rented_minutes": self.rented_min,
-                                                               "steps": self.steps}))
+                                                               "rented_runs": self.rented_runs, "steps": self.steps}))
         except OSError:
             pass
 

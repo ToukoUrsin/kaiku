@@ -1,4 +1,5 @@
 """The Train button's two places to train: rented GPUs, and this machine when those fail or run out."""
+import json
 import sys
 import time
 
@@ -48,3 +49,20 @@ def test_rented_runs_are_counted_and_run_out(tmp_path, monkeypatch):
 def test_training_here_is_left_as_it_was(tmp_path):
     t = Fake(tmp_path, tmp_path / "out", "local", about_min=25)
     assert t.about == 25 and t.start() and _wait(t)["state"] == "done" and t.ran == ["local"]
+
+
+def test_the_page_promises_the_slowest_of_the_last_rented_runs(tmp_path):
+    """A warm rented run takes four minutes and a cold one six: the number must not flip with every run."""
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "timing.json").write_text(json.dumps({"minutes": 25.0, "rented_minutes": 3.6}))     # as an older build left it
+    t = T.Trainer(tmp_path, out, "modal", about_min=25)
+    assert t.rented_min == T.MODAL_ABOUT_MIN
+    t.using = "modal"
+    for seconds in (216.0, 230.0, 240.0):
+        t._measured(seconds)
+    assert t.rented_min == T.MODAL_ABOUT_MIN            # the cold run is still among the last five
+    t._measured(250.0)
+    assert t.rented_min == round(250.0 / 60.0, 1)       # five warm runs in a row and it is forgotten
+    again = T.Trainer(tmp_path, out, "modal", about_min=25)
+    assert again.rented_min == t.rented_min and again.about_min == 25
