@@ -82,6 +82,20 @@ def test_the_echoes_redo_what_a_visitor_did():
     s.close()
 
 
+def test_a_glove_on_this_machine_drives_from_the_first_scene(tmp_path):
+    """With one glove plugged in, nothing the stand-in did is recorded ahead of the person's scenes."""
+    r = Runner(n=2, port=0, seed=7, threads=1, mode="visitor", glove_fingers="127.0.0.1:1", record=tmp_path)
+    try:
+        assert r.phase == "hold"
+        t0 = time.monotonic()
+        while r.phase != "run" and time.monotonic() - t0 < 30.0:
+            r._step()
+        assert r.mode == "visitor" and r.phase == "run"
+        assert not (tmp_path / "episodes.jsonl").exists()
+    finally:
+        r.close()
+
+
 def test_one_visitor_drives_at_a_time():
     r = Runner(n=2, port=0, seed=7, threads=1)
     try:

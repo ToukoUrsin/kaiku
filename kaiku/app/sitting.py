@@ -114,9 +114,10 @@ def read_fit(text: str) -> dict[str, dict]:
     """What a fit said when it finished, per arm: the ``KAIKU {...}`` line with stage ``done``."""
     out = {}
     for line in text.splitlines():
-        if line.startswith("KAIKU "):
+        at = line.find("KAIKU {")                              # a sandbox puts its own marks before a line
+        if at >= 0:
             try:
-                row = json.loads(line[6:])
+                row = json.loads(line[at + 6:])
             except ValueError:
                 continue
             if row.get("stage") == "done" and "success" in row:
@@ -124,16 +125,22 @@ def read_fit(text: str) -> dict[str, dict]:
     return out
 
 
+def _name(session: Path) -> str:
+    """A booth session keeps its demonstrations in ``demos``: its own name is the folder above."""
+    return session.parent.name if session.name == "demos" else session.name
+
+
 def _study(session: Path, rows: list[dict], steps: int, scenes: int, device: str | None, runs: Path,
-           execute: bool) -> dict:
+           execute: bool, keep: Path | None = None) -> dict:
     """The person's demonstrations alone against the same ones with their echoes, three seeds of each.
 
     Every number in the report is one a finished run said itself. A run that did not finish is left
     out and named; nothing is estimated. The fits are many cores for the better part of an hour, so
-    they run in sandboxes (``drun``), one per seed, and only when ``execute`` says so."""
+    they run in sandboxes (``drun``), one per seed, and only when ``execute`` says so. The report
+    is written into ``keep`` (the repo, for a real glove session) or else beside the logs."""
     runs.mkdir(parents=True, exist_ok=True)
-    stage = REPO / ".sitting" / session.name                   # inside the repo, so the sandbox gets it
-    data, out = f".sitting/{session.name}/session", f".sitting/{session.name}/policies"
+    stage = REPO / ".sitting" / _name(session)                 # inside the repo, so the sandbox gets it
+    data, out = f".sitting/{_name(session)}/session", f".sitting/{_name(session)}/policies"
     commands = {seed: study_command(data, f"{out}/seed{seed}", steps, scenes, seed, device) for seed in SEEDS}
     report = {"format": 2, "session": str(session), "protocol": "the person's scenes alone against the same scenes with their echoes",
               "steps": steps, "scenes": scenes, "seeds": list(SEEDS), "executed": False, "arms": {}, "missing": [],
@@ -170,15 +177,18 @@ def _study(session: Path, rows: list[dict], steps: int, scenes: int, device: str
     report["executed"] = bool(report["arms"])
     if report["executed"]:
         report["generated_at"] = time.time()
-        target = REPO / "kaiku" / "policy" / "pretrained"
+        target = keep or runs
         target.mkdir(parents=True, exist_ok=True)
+        report["file"] = str(target / "study_human.json")
         (target / "study_human.json").write_text(json.dumps(report, indent=2) + "\n")
         with (target / "study_human_runs.jsonl").open("a") as f:
             f.write(json.dumps(report) + "\n")
     return report
 
 
-def finish(session: Path, steps: int = 30000, scenes: int = 96, device: str | None = None, study: bool = True) -> int:
+def finish(session: Path, steps: int = 30000, scenes: int = 96, device: str | None = None,
+           study: bool | None = None) -> int:
+    """``study``: run it or not; left alone, it runs for a real glove session and not for an emulated one."""
     session = Path(session).expanduser().resolve()
     ok, verdict, rows = validate(session)
     print(("VALID: " if ok else "INVALID: ") + verdict)
@@ -187,21 +197,24 @@ def finish(session: Path, steps: int = 30000, scenes: int = 96, device: str | No
     meta = json.loads((session / "session.json").read_text())
     lead = [r for r in rows if r.get("env") == 0 and r.get("source") == "human"]
     real = meta.get("source") == "smartgloves"
+    study = real if study is None else study
     # Only a real glove session becomes what the hosted demo replays; an emulated one stays where it is.
     bundle = bundle_session(session, rows) if real else None
-    report = _study(session, rows, steps, scenes, device, RUNS / "sitting" / session.name, execute=study)
+    report = _study(session, rows, steps, scenes, device, RUNS / "sitting" / _name(session), execute=study,
+                    keep=REPO / "kaiku" / "policy" / "pretrained" if real else None)
     lines = [f"{len(lead)} scenes sorted by the lead, {len(rows)} demonstrations with their echoes.",
              f"Source: {'real Smartgloves' if real else meta.get('source', 'unknown')}, {meta.get('glove_count', '?')} glove(s), "
              f"Coil Pro: {meta.get('coil_present', '?')}, driver {meta.get('driver_version') or '?'}."]
     if report["executed"]:
-        for name, words in (("alone", "The person's scenes alone"), ("with_echoes", "With their echoes")):
+        for name, words in (("alone", "The person's scenes alone" if real else "The lead's scenes alone"),
+                            ("with_echoes", "With their echoes")):
             arm = report["arms"].get(name)
             if arm:
                 lines.append(f"{words}: {arm['mean']:.0%} of {scenes} new scenes sorted "
                              f"({', '.join(f'{v:.0%}' for v in arm['success'])}).")
         if report["missing"]:
             lines.append("Did not finish, left out: " + ", ".join(report["missing"]) + ".")
-        lines.append("Study file: kaiku/policy/pretrained/study_human.json")
+        lines.append(f"Study file: {report['file']}")
     else:
         lines.append("Study: not run. Each of these is one seed, to run off the box with drun: " + " | ".join(report["commands"]))
     if real:
@@ -224,9 +237,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--steps", "--study-steps", type=int, default=30000)
     ap.add_argument("--scenes", type=int, default=96, help="new scenes each policy is tested on")
     ap.add_argument("--device", default=None)
+    ap.add_argument("--study", action="store_true", help="run the study on an emulated session too")
     ap.add_argument("--no-study", action="store_true", help="validate and bundle only; say how the study is run")
     args = ap.parse_args(argv)
-    return finish(args.session, args.steps, args.scenes, args.device, study=not args.no_study)
+    return finish(args.session, args.steps, args.scenes, args.device,
+                  study=False if args.no_study else True if args.study else None)
 
 
 if __name__ == "__main__":

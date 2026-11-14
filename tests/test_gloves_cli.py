@@ -13,25 +13,40 @@ def test_checklist_has_the_operator_facing_lines(monkeypatch):
     })()
     rows = check.rows()
     assert [name for name, _, _ in rows] == [
-        "SDK found and licensed", "driver running", "hand solver answering",
-        "left glove streaming", "right glove streaming", "position from Coil Pro on both hands",
+        "Rokoko SDK installed and licensed", "Rokoko's driver running", "hand solver answering",
+        "gloves streaming: left 100 Hz, right 100 Hz", "hand position from the Coil Pro",
     ]
-    assert all(ok for _, ok, _ in rows)
+    assert all(ok for _, ok, _ in rows) and check.ready
 
 
-def test_one_glove_is_a_valid_checklist(monkeypatch):
+def _one_glove(monkeypatch, rate):
     monkeypatch.setattr(gloves, "_exe", lambda name: "/sdk/" + name)
     monkeypatch.setattr(gloves, "_open", lambda host, port, timeout=0.25: True)
     check = gloves.Checklist()
     check.stream = type("Stream", (), {
-        "rate_hz": lambda self, side: 100.0 if side == "left" else 0.0,
+        "rate_hz": lambda self, side: rate if side == "left" else 0.0,
         "latest": lambda self, side: type("Frame", (), {"coil_present": False})() if side == "left" else None,
         "connected": True,
         "emulated": False,
     })()
-    assert check.ready
-    assert any("One glove is connected" in message for message in check.messages())
+    return check
 
+
+def test_one_glove_is_a_valid_checklist(monkeypatch):
+    check = _one_glove(monkeypatch, 100.0)
+    assert check.ready and not check.messages()
+    names = [name for name, _, _ in check.rows()]
+    assert names[-2:] == ["gloves streaming: left 100 Hz (one glove is enough)",
+                          "hand position from the trackpad or the laptop camera (no Coil Pro)"]
+
+
+def test_the_checklist_says_what_is_wrong(monkeypatch):
+    slow = _one_glove(monkeypatch, 12.0)
+    assert not slow.ready and "left glove's rate is too low" in slow.messages()[0]
+    none = _one_glove(monkeypatch, 0.0)
+    none.stream.latest = lambda side: None
+    assert not none.ready and any("Plug the glove into this Mac by USB" in m for m in none.messages())
+    assert [name for name, _, _ in none.rows()][-1] == "a glove streaming"       # nothing claimed about a hand that is not there
 
 
 def _stream(left, right):

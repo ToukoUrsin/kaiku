@@ -84,7 +84,8 @@ class Checklist:
                 seen[side] = frame is not None
                 position[side] = bool(frame is not None and frame.coil_present)
         sdk_ok = sdk is not None
-        one = any(seen.values())
+        worn = [side for side in rates if seen[side]]
+        slow = [side for side in worn if rates[side] < 40]
         if doctor.get("signed_in") is False:
             sdk_fix = "Sign in to Rokoko on this Mac, then run this command again."
         elif doctor.get("activated") is False:
@@ -95,38 +96,37 @@ class Checklist:
             sdk_fix = "Install Rokoko Device SDK on this Mac, then run this command again."
         else:
             sdk_fix = "The SDK is installed; if it still fails, sign in and activate it."
-        return [
-            ("SDK found and licensed", sdk_ok and doctor.get("signed_in") is not False and
+        if not worn:
+            gloves, gloves_fix = "a glove streaming", ("Plug the glove into this Mac by USB, switch it on and put it on. "
+                                                      "One glove is enough.")
+        else:
+            gloves = "gloves streaming: " + ", ".join(f"{side} {round(rates[side] / 10) * 10:.0f} Hz" for side in worn)
+            gloves += "" if len(worn) == 2 else " (one glove is enough)"
+            gloves_fix = f"The {slow[0] if slow else ''} glove's rate is too low; move closer to its receiver or use the cable."
+        rows = [
+            ("Rokoko SDK installed and licensed", sdk_ok and doctor.get("signed_in") is not False and
              doctor.get("activated") is not False and doctor.get("licence") is not False, sdk_fix),
-            ("driver running", driver, "Start the Rokoko driver and leave it running."),
+            ("Rokoko's driver running", driver, "Start the Rokoko driver and leave it running."),
             ("hand solver answering", solver, "Start rkk-hand-solver with --emit world."),
-            ("left glove streaming", (seen["left"] and rates["left"] >= 40) or (one and not seen["left"]),
-             "The left glove rate is too low; move closer to its receiver." if seen["left"] else
-             "One glove is enough: fingers and pinch come from the glove; the other hand is optional."),
-            ("right glove streaming", (seen["right"] and rates["right"] >= 40) or (one and not seen["right"]),
-             "The right glove rate is too low; move closer to its receiver." if seen["right"] else
-             "One glove is enough: fingers and pinch come from the glove; the other hand is optional."),
-            ("position from Coil Pro on both hands", one,
-             "One glove works: fingers and pinch come from it; without a Coil Pro, position comes from the laptop camera."),
+            (gloves, bool(worn) and not slow, gloves_fix),
         ]
+        if worn:
+            coil = [side for side in worn if position[side]]
+            where = ("the Coil Pro" if len(coil) == len(worn) else
+                     "the trackpad or the laptop camera (no Coil Pro)" if not coil else
+                     f"the Coil Pro for the {coil[0]} hand only, so one hand drives")
+            rows.append(("hand position from " + where, True, ""))
+        return rows
 
     def messages(self) -> list[str]:
-        rows = self.rows()
-        out = [fix for _, ok, fix in rows if not ok]
-        if any(ok for name, ok, _ in rows if name in ("left glove streaming", "right glove streaming")) and self.stream:
-            frames = [self.stream.latest(s) for s in ("left", "right")]
-            if sum(f is not None for f in frames) == 1:
-                out.append("One glove is connected; fingers and pinch come from it, and the laptop camera supplies position when there is no Coil Pro.")
+        out = [fix for _, ok, fix in self.rows() if not ok]
         if self.stream is not None and self.stream.connected and not any(self.stream.latest(s) for s in ("left", "right")):
             out.append("The driver is open but no glove frames arrived for 3 seconds; start streaming in Rokoko.")
         return out
 
     @property
     def ready(self) -> bool:
-            rows = self.rows()
-            glove_ok = any(name.endswith("glove streaming") and ok for name, ok, _ in rows)
-            return all(ok for name, ok, _ in rows if name not in ("left glove streaming", "right glove streaming",
-                                                                    "position from Coil Pro on both hands")) and glove_ok
+        return all(ok for _, ok, _ in self.rows())
 
     def close(self) -> None:
         if self.stream is not None:
@@ -203,6 +203,20 @@ def _done(session: Path, started: float, source: str, target: int | None = None)
     (session / "DONE").write_text(json.dumps(summary, indent=2) + "\n")
 
 
+def _emulated_driver() -> bool:
+    """Is the Rokoko driver on this machine running its emulated gloves? They stream exactly what
+    real ones do, so the stream cannot say; the driver's own command line can."""
+    try:
+        out = subprocess.run(["ps", "-axo", "command"], capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return any("smartglove-emulated" in line for line in out.splitlines())
+
+
+def _stop(*_) -> None:
+    raise KeyboardInterrupt
+
+
 def drive_args(stream: GloveStream | None, driver: str) -> tuple[list[str], str]:
     """How Kaiku is started for the gloves that stream, and one line that says what drives what.
 
@@ -244,6 +258,10 @@ def main(argv: list[str] | None = None) -> int:
     session = _session_path(args.session_dir)
     source = "emulated" if args.emulator else "smartgloves"
     check = Checklist(driver_host, args.port, args.solver_port)
+    # Ctrl-C, a closed terminal window and a plain kill all end the sitting the same way: everything
+    # this started is stopped and the session is marked done.
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, _stop)
     try:
         if args.emulator:
             ready = True
@@ -259,8 +277,8 @@ def main(argv: list[str] | None = None) -> int:
         if not ready:
             print("The gloves are not ready yet. Fix the unchecked line above and run this command again.", file=sys.stderr)
             return 1
-        if check.stream is not None and check.stream.emulated:
-            source = "emulated"
+        if (check.stream is not None and check.stream.emulated) or _emulated_driver():
+            source = "emulated"                                # never a real session by mistake
         session.mkdir(parents=True, exist_ok=True)
         _write_metadata(session, source, check.stream, str(check.doctor.get("version") or "") or None)
         kaiku_port, changed = _free_port(args.kaiku_port)

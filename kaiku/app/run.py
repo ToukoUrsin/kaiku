@@ -118,6 +118,9 @@ class Runner:
         self.stop = False
         self.phase = "run"                                     # run -> hold -> run ...
         self.hold_until = 0.0
+        if self.glove_fingers and self.want_mode == "visitor":
+            self.phase = "hold"                                # a glove here drives from the first scene on:
+                                                               # no stand-in's scene is recorded ahead of the person's
         self.states = np.full(n, RUNNING, np.uint8)
         self.states[0] = LEAD
         self.sorted = np.zeros(n, int)

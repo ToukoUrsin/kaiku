@@ -73,6 +73,6 @@ def test_a_fit_is_read_from_what_it_said():
     from kaiku.app.sitting import read_fit
     text = ('noise\nKAIKU {"which": "plain", "stage": "training", "progress": 0.5}\n'
             'KAIKU {"which": "plain", "stage": "done", "success": 0.03, "humans": 30, "demos": 30}\n'
-            'KAIKU {"which": "kaiku", "stage": "done", "success": 0.81, "humans": 30, "demos": 1300}\n')
+            '\x01\x01\x01KAIKU {"which": "kaiku", "stage": "done", "success": 0.81, "humans": 30, "demos": 1300}\n')
     said = read_fit(text)
     assert said["plain"]["success"] == 0.03 and said["kaiku"]["demos"] == 1300
