@@ -31,6 +31,7 @@ export class CameraRig {
     // so a shot holds its subject on a wide laptop and on a tall phone alike.
     this.shots = {
       lead: { target: [0.25, 0.0, 0.38], azimuth: -30 * DEG, polar: 76 * DEG, frame: [2.1, 1.9] },
+      drive: { target: [0.18, 0.0, 0.04], azimuth: -2 * DEG, polar: 76 * DEG, frame: [1.45, 1.35] },
       overview: {
         target: [-0.5 * depth, 0, 0.45 + 0.05 * depth], azimuth: -12 * DEG, polar: 64 * DEG,
         frame: [width * 0.95 + 1.0, depth * 0.5 + 2.6],
@@ -50,6 +51,7 @@ export class CameraRig {
     this.shift = new THREE.Vector2(0, 0);   // where the subject sits on screen, in half-screens from the centre
     this.shiftGoal = new THREE.Vector2(0, 0);
     this.started = false;
+    this.driving = false;
 
     this.pointers = new Map();
     this.dragged = 0;
@@ -182,6 +184,7 @@ export class CameraRig {
   bind() {
     const surface = this.surface;
     surface.addEventListener('pointerdown', (event) => {
+      if (this.driving) return;
       surface.setPointerCapture(event.pointerId);
       this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       if (this.pointers.size === 1) this.dragged = 0;
@@ -189,6 +192,7 @@ export class CameraRig {
     });
 
     surface.addEventListener('pointermove', (event) => {
+      if (this.driving) return;
       const pointer = this.pointers.get(event.pointerId);
       if (!pointer) {
         if (event.pointerType === 'mouse') this.onHover(event.clientX, event.clientY);
@@ -217,6 +221,7 @@ export class CameraRig {
     });
 
     const release = (event) => {
+      if (this.driving) return;
       if (!this.pointers.delete(event.pointerId)) return;
       this.pinch = this.spread();
       if (this.pointers.size === 0 && this.dragged < 5 && event.type === 'pointerup') this.onPick(event.clientX, event.clientY);

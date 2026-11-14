@@ -25,8 +25,9 @@ const SOURCE_TEXT = {
   gloves: 'Smartgloves II · live',
   autopilot: 'Autopilot · scripted motion',
   policy: 'Trained policy · nobody is driving',
+  visitor: 'A visitor is driving',
 };
-const TAG_TEXT = { 'stand-in': 'Scripted hand, emulated gloves', gloves: 'Operator in Rokoko gloves', autopilot: 'Autopilot', policy: 'Policy' };
+const TAG_TEXT = { 'stand-in': 'Scripted hand, emulated gloves', gloves: 'Operator in Rokoko gloves', autopilot: 'Autopilot', policy: 'Policy', visitor: 'A visitor is driving' };
 const STAGE_TEXT = { loading: 'Reading the demonstrations', training: 'Training', testing: 'Testing on scenes it has not seen', done: 'Finishing' };
 const TOAST_MS = 4200;
 const MAX_TOASTS = 3;
@@ -65,6 +66,9 @@ export class Hud {
     this.onRetry = () => {};
     this.onLayout = () => {};
     this.bannerRun = null;
+    this.driveLocal = false;
+    this.onDriveStart = () => {};
+    this.onDriveEnd = () => {};
 
     if (flags.clean) app.dataset.clean = '';
     if (flags.sheet) app.dataset.sheet = flags.sheet;
@@ -108,6 +112,10 @@ export class Hud {
     el.train.addEventListener('click', () => command('train'));
     el['ds-copy'].addEventListener('click', () => this.copyPath());
     el['banner-action'].addEventListener('click', () => this.bannerRun?.());
+    el['drive-stage']?.addEventListener('click', () => this.onDriveStart());
+    el['drive-panel']?.addEventListener('click', () => this.onDriveStart());
+    el['drive-back']?.addEventListener('click', () => this.onDriveEnd());
+    el['drive-panel-back']?.addEventListener('click', () => this.onDriveEnd());
 
     el['focus-close'].addEventListener('click', () => this.onFocus(-1));
     el['focus-prev'].addEventListener('click', () => this.onFocus(this.focus - 1));
@@ -218,6 +226,7 @@ export class Hud {
     this.renderControls();
     this.renderBanner();
     this.renderFocus();
+    if (this.hud.mode !== 'visitor' && this.driveLocal) this.setDriveActive(false);
   }
 
   renderTopbar() {
@@ -325,6 +334,23 @@ export class Hud {
     const calibrating = this.hud.episode?.step === 'calibrating';
     this.text('calibrate', calibrating ? 'Calibrating' : operator.calibrated ? 'Recalibrate' : 'Calibrate');
     this.attr('calibrate', 'disabled', calibrating || source === 'autopilot' || source === 'policy');
+    const visitorBusy = source === 'visitor' && !this.driveLocal;
+    this.attr('drive-stage', 'disabled', visitorBusy);
+    this.attr('drive-panel', 'disabled', visitorBusy);
+    this.attr('drive-stage', 'title', visitorBusy ? 'A visitor is driving' : null);
+    this.attr('drive-panel', 'title', visitorBusy ? 'A visitor is driving' : null);
+    this.show('drive-tools', source !== 'policy');
+    this.show('drive-hint', this.driveLocal);
+    this.show('drive-back', this.driveLocal);
+    this.show('drive-panel-back', this.driveLocal);
+    this.show('drive-stage', !this.driveLocal);
+    this.text('drive-hint', 'Press on a part, drag it to the bin of its colour, let go.');
+  }
+
+  setDriveActive(active) {
+    this.driveLocal = Boolean(active);
+    this.app.toggleAttribute('data-driving', this.driveLocal);
+    this.renderOperator();
   }
 
   renderEpisode() {

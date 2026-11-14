@@ -31,6 +31,7 @@ from kaiku.app.autopilot import Autopilot
 from kaiku.app.sampler import Sampler
 from kaiku.app.session import FAILED, IDLE, LEAD, RUNNING, SUCCESS, Session
 from kaiku.app.trainer import Trainer
+from kaiku.app.visitor import VisitorOperator
 from kaiku.data.recorder import Recorder
 from kaiku.sim.fetch import ensure
 from kaiku.sim.twin import CONTROL_HZ
@@ -39,7 +40,7 @@ from kaiku.web.server import ViewerServer
 
 DT = 1.0 / CONTROL_HZ
 HUD_EVERY = 3                 # ticks between HUD updates (10 Hz)
-MODES = ("gloves", "autopilot", "policy")
+MODES = ("gloves", "autopilot", "policy", "visitor")
 HERE = Path(__file__).resolve().parents[1]
 PRETRAINED = HERE / "policy" / "pretrained" / "kaiku.pt"
 STUDY = HERE / "policy" / "pretrained" / "study.json"
@@ -67,6 +68,11 @@ class Runner:
         self.gloves = gloves                                   # HOST[:PORT] of a Rokoko driver, or None: the stand-in
         self.hand_solver = hand_solver                         # HOST:PORT of rkk-hand-solver, "off", or None: the default
         self.ops: dict = {}
+        self.visitor: VisitorOperator | None = None
+        self.driver_client: int | None = None
+        self.turn_started = 0.0
+        self.last_visitor_command = 0.0
+        self._visitor_expired = False
         self.lead = None                                       # kaiku.app.g1.Lead while a challenge runner follows
         self.mode = mode if mode in ("gloves", "autopilot") else "gloves"
         self.want_mode = mode if mode in MODES else "gloves"
@@ -109,6 +115,9 @@ class Runner:
         if mode not in self.ops:
             if mode == "autopilot":
                 self.ops[mode] = Autopilot(self.s)
+            elif mode == "visitor":
+                self.ops[mode] = VisitorOperator(self.s)
+                self.visitor = self.ops[mode]
             else:
                 host, _, port = (self.gloves or "").partition(":")
                 self.ops[mode] = GloveOperator(self.s, host or None, int(port) if port else None,
@@ -116,6 +125,8 @@ class Runner:
         return self.ops[mode]
 
     def _who(self) -> str:
+        if self.mode == "visitor":
+            return "visitor"
         if self.mode == "autopilot":
             return "autopilot"
         return "smartgloves" if self.gloves else "stand-in (emulated smartgloves)"
@@ -136,6 +147,7 @@ class Runner:
         return self.next.done()
 
     def _begin_episode(self) -> None:
+        self._visitor_expired = False
         if self.want_mode != self.mode:
             self.mode = self.want_mode
             if self.mode != "policy":
@@ -164,6 +176,29 @@ class Runner:
         self.done_ticks[:] = 0
         self.phase = "run"
 
+    def _end_visitor_turn(self, reason: str = "") -> None:
+        if self.driver_client is None:
+            return
+        self.viewer.send_event({"type": "toast", "text": "Your turn has ended. The stand-in is driving again.", "level": "info"})
+        self.driver_client = None
+        self.turn_started = self.last_visitor_command = 0.0
+        self.want_mode = "gloves"
+        if self.phase == "run":
+            self._end_episode(record=False)
+        self.hold_until = 0.0
+
+    def _start_visitor(self, client: int) -> None:
+        if self.driver_client is not None:
+            self.toast("A visitor is driving. Please wait for the next turn.", "info")
+            return
+        self.driver_client = int(client)
+        self.turn_started = self.last_visitor_command = time.monotonic()
+        self.want_mode = "visitor"
+        if self.phase == "run":
+            self._end_episode(record=False)
+        self.hold_until = 0.0
+        self.toast("Your turn has started. Press on a part, drag it to the bin of its colour, let go.", "info")
+
     def _end_episode(self, record: bool = True) -> None:
         s = self.s
         r = s.result()
@@ -175,16 +210,17 @@ class Runner:
         if not record:
             self.rec.begin()
         clean = ok & (r.clipped == 0)
-        t = self.tot
-        t["episodes"] += 1
-        t["human"] += int(clean[0])
-        t["robot"] += int(clean[1:].sum())
-        t["attempts"] += self.n - 1
-        t["clipped"] += int(r.clipped.sum())
-        t["ticks"] += s.tick_no
-        self.history.append({"episode": t["episodes"], "parts": len(r.layouts[0].placements),
-                             "ok": int(clean[1:].sum()), "robots": self.n - 1, "lead_ok": bool(clean[0]),
-                             "saved": kept["kept"], "seconds": round(s.tick_no * DT, 1)})
+        if record:
+            t = self.tot
+            t["episodes"] += 1
+            t["human"] += int(clean[0])
+            t["robot"] += int(clean[1:].sum())
+            t["attempts"] += self.n - 1
+            t["clipped"] += int(r.clipped.sum())
+            t["ticks"] += s.tick_no
+            self.history.append({"episode": t["episodes"], "parts": len(r.layouts[0].placements),
+                                 "ok": int(clean[1:].sum()), "robots": self.n - 1, "lead_ok": bool(clean[0]),
+                                 "saved": kept["kept"], "seconds": round(s.tick_no * DT, 1)})
         self.phase = "hold"
         self.hold_until = time.perf_counter() + self.hold_s
 
@@ -278,9 +314,21 @@ class Runner:
             except queue.Empty:
                 return
             if m.get("type") != "cmd":
+                if m.get("type") == "disconnect" and m.get("client") == self.driver_client:
+                    self._end_visitor_turn("disconnect")
                 continue
             name, value = m.get("name"), m.get("value")
-            if name == "pause":
+            client = m.get("client")
+            if name == "drive_start":
+                self._start_visitor(int(client))
+            elif name == "drive_end" and client == self.driver_client:
+                self._end_visitor_turn("handback")
+            elif name == "hand" and client == self.driver_client and self.mode == "visitor":
+                self.visitor.set_command(value if isinstance(value, dict) else {})
+                self.last_visitor_command = time.monotonic()
+            elif self.mode == "visitor" and client != self.driver_client:
+                continue
+            elif name == "pause":
                 self.paused = bool(value)
             elif name == "next_scene":
                 if self.phase == "run":
@@ -344,9 +392,17 @@ class Runner:
             self.tick_ms.append(1000.0 * (time.perf_counter() - t0))
             self.walls.append(time.perf_counter())
             return
+        if self.driver_client is not None:
+            now = time.monotonic()
+            if now - self.last_visitor_command > 25.0 or now - self.turn_started > 240.0:
+                self._end_visitor_turn("timeout")
+                return
         obs = s.observe()
         cmd = self.op.update(obs)
-        if self.op.done or s.tick_no >= self.lead_timeout:
+        limit = int(150 * CONTROL_HZ) if self.mode == "visitor" else self.lead_timeout
+        if self.op.done or s.tick_no >= limit:
+            if self.mode == "visitor" and s.tick_no >= limit and not self.op.done:
+                self._visitor_expired = True
             s.finish_lead()
         s.tick(cmd)
         self.rec.add(obs, *s.last_action)
@@ -356,7 +412,7 @@ class Runner:
         self.tick_ms.append(1000.0 * (time.perf_counter() - t0))
         self.walls.append(time.perf_counter())
         if s.settled:
-            self._end_episode()
+            self._end_episode(record=not self._visitor_expired)
 
     def _refresh(self) -> None:
         """Per-robot state for the viewer: who is working, who has finished, who has failed."""
@@ -389,7 +445,7 @@ class Runner:
         return {
             "mode": self.mode,
             "status": status,
-            "operator": self.op.hud() if isinstance(self.op, GloveOperator) and not alone else
+            "operator": self.op.hud() if (isinstance(self.op, GloveOperator) or self.mode == "visitor") and not alone else
             {"left": {"connected": False, "hz": 0.0}, "right": {"connected": False, "hz": 0.0},
              "calibrated": False, "stand_in": not alone, "source": "policy" if alone else "autopilot", "hands": None},
             "episode": {"index": self.pol["rounds"] + 1, "parts": int(self.want.sum()), "sorted": int(self.sorted.sum()),

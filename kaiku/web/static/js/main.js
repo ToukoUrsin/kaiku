@@ -14,6 +14,7 @@ import { previewHud } from './sample.js';
 import { describeScene, fetchPack, fetchScene } from './scene.js';
 import { Stage } from './stage.js';
 import { Stream } from './stream.js';
+import { Drive } from './drive.js';
 
 const flags = readFlags();
 const app = document.getElementById('app');
@@ -52,6 +53,7 @@ async function boot() {
   const markers = new Markers(stage, layout, described.nEnvs, described.groundZ);
   const hands = new Hands(stage);
   const rig = new CameraRig(stage, canvas, layout);
+  const drive = new Drive({ canvas, rig, send: (message) => link.send(message), tableZ: described.tableZ });
   const stream = new Stream({ nEnvs: described.nEnvs, nq: described.kin.nq, modelHash: described.modelHash });
   link.send = (message) => stream.send(message);
   hud.setStates(stream.state, described.nEnvs, layout);
@@ -79,6 +81,7 @@ async function boot() {
     }
     hands.setHands(data.operator?.hands || null, performance.now());
     hud.setHud(data);
+    if (data.mode === 'visitor' && drive.active && rig.shot !== 'drive') rig.goTo('drive', 0.6);
   };
   stream.onEvent = (event) => {
     if (event.type === 'toast') hud.toast(event.text, event.level);
@@ -108,6 +111,21 @@ async function boot() {
   };
   hud.onShot = (name) => rig.goTo(name);
   hud.onFocus = focusOn;
+  hud.onDriveStart = () => {
+    drive.start();
+    rig.goTo('drive', 0.6);
+  };
+  hud.onDriveEnd = () => drive.stop();
+  drive.onState = (active) => {
+    hud.setDriveActive(active);
+    if (active) {
+      rig.goTo('drive', 0.6);
+      app.dataset.sheet = 'tall';
+    } else if (rig.shot === 'drive') {
+      rig.goTo('lead', 0.6);
+      delete app.dataset.sheet;
+    }
+  };
 
   const origin = new THREE.Vector3();
   const direction = new THREE.Vector3();
@@ -211,7 +229,7 @@ async function boot() {
 
   // ---------------------------------------------------------------- go
 
-  window.kaiku = { stage, fleet, markers, hands, rig, stream, hud };     // for the console
+  window.kaiku = { stage, fleet, markers, hands, rig, stream, hud, drive };     // for the console
 
   hud.loading('Connecting to the robots', 0.8);
   stream.connect();

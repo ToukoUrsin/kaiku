@@ -66,6 +66,7 @@ export function describeScene(scene) {
   return {
     kin, robot, parts, fixtures,
     groundZ: scene.ground_z ?? scene.bounds?.min?.[2] ?? 0,
+    tableZ: scene.table_z ?? scene.ground_z ?? scene.bounds?.min?.[2] ?? 0,
     quantScale: Float64Array.from(scene.quant.scale),
     nEnvs: scene.n_envs || 1,
     textures: scene.textures || [],
