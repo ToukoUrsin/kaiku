@@ -35,6 +35,7 @@ boot().catch((error) => {
 
 async function boot() {
   hud.loading('Loading the scene', 0.06);
+  const robots = (n) => `${n} robot${n === 1 ? '' : 's'}`;
   if (flags.preview === 'error') {
     hud.loadingFailed('The runner is not answering. Trying again');
     return;
@@ -63,10 +64,12 @@ async function boot() {
   link.send = (message) => stream.send(message);
   hud.setStates(stream.state, described.nEnvs, layout);
 
-  hud.loading('Loading the robots', 0.15);
+  hud.loading(`Loading ${robots(described.nEnvs)}`, 0.15);
   const coarse = await untilAnswered(() => fetchPack(2, (bytes) => {
-    hud.loading('Loading the robots', 0.15 + 0.5 * (1 - Math.exp(-bytes / 300000)));
+    hud.loading(`Loading ${robots(described.nEnvs)}`, 0.15 + 0.5 * (1 - Math.exp(-bytes / 300000)));
   }));
+  hud.loading(`Building ${robots(described.nEnvs)}`, 0.7);
+  await sleep(0);                 // let the words reach the screen: building the meshes holds the page for a moment
   fleet.addPack(2, coarse);
   if (flags.preview === 'loading') return;
 
@@ -216,6 +219,7 @@ async function boot() {
   const tag = { x: 0, y: 0, visible: false };
   let last = performance.now();
   let ripple = 0;
+  let drawn = 0;                  // frames on screen with the robots where the runner has them
   const still = window.matchMedia('(prefers-reduced-motion: reduce)');     // no rings for those who asked
 
   function frame(now) {
@@ -242,6 +246,7 @@ async function boot() {
 
     stage.aimShadow(rig.target(target), rig.distance);
     stage.render(seconds, rig.distance);
+    if (stream.frames > 0) drawn++;
 
     // the operator's caption rides above the hands
     anchor.copy(hands.labelAnchor).project(stage.camera);
@@ -261,14 +266,19 @@ async function boot() {
 
   window.kaiku = { stage, fleet, markers, hands, rig, stream, hud, drive };     // for the console
 
-  hud.loading('Connecting to the robots', 0.8);
+  hud.loading('Connecting to the simulation', 0.8);
   stream.connect();
   requestAnimationFrame(frame);
   while (stream.frames === 0) await sleep(50);
+  // The first frames compile the shaders and can take seconds: the loading screen stays until the robots
+  // are on screen, and until the runner has said who drives (the opening's first line says it).
+  hud.loading('Drawing the robots', 0.92);
+  const since = performance.now();
+  while ((drawn < 3 || !hud.known) && performance.now() - since < 12000) await sleep(50);
   hud.loading('Ready', 1);
   hud.loaded();
   if (opening) {
-    playOpening({
+    const lines = playOpening({
       app,
       line: hud.el.opening,
       rig,
@@ -276,6 +286,7 @@ async function boot() {
       words: () => hud.openingWords(described.nEnvs),
       rest: () => rig.goTo(alone ? 'overview' : flags.shot, 1.3),
     });
+    hud.onWords = lines.refresh;
   }
   if (flags.preview === 'toast') {
     hud.toast('Next scene: 4 parts.');
