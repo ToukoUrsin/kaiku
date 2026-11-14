@@ -1157,7 +1157,7 @@ function spread(runs) {
 /** How fast the simulation runs against a clock, when it is not real time: "0.8× real time". */
 function speed(perf, lead) {
   const rate = perf?.realtime;
-  if (!Number.isFinite(rate) || rate <= 0 || rate >= 0.95) return '';
+  if (!Number.isFinite(rate) || rate <= 0 || rate >= 0.9) return '';
   return `${lead ? `${lead} at ` : ''}${rate.toFixed(1)}× real time`;
 }
 
