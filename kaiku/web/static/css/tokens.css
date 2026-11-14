@@ -31,7 +31,8 @@
   /* type */
   --text: oklch(0.965 0.003 264);
   --text-2: oklch(0.755 0.008 264);
-  --text-3: oklch(0.67 0.01 264);
+  --text-3: oklch(0.74 0.01 264);       /* 4.5:1 or more on --bg, more on every surface */
+  --text-off: oklch(0.7 0.008 264);    /* a held control: readable, plainly not pressable */
 
   /* meaning */
   --ok: oklch(0.82 0.17 152);

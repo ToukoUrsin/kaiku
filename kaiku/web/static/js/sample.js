@@ -17,7 +17,7 @@ export function samplePolicy() {
  * Change a HUD message into the state `?preview=NAME` asks for, so every state of the page can be
  * looked at (and photographed) without unplugging anything.
  */
-export function previewHud(hud, name) {
+export function previewHud(hud, name, client = null) {
   const d = structuredClone(hud);
   switch (name) {
     case 'paused':
@@ -44,13 +44,16 @@ export function previewHud(hud, name) {
       d.totals = { episodes: 0, human_demos: 0, robot_demos: 0, amplification: 0, yield: 0, demos_per_min: 0, clipped_steps: 0, minutes: 0.2 };
       d.dataset = { episodes: 0, frames: 0, path: '', recording: false };
       break;
-    case 'training':
-      // a run a third of the way through, with the time left as the runner would say it
+    case 'training': {
+      // a run a third of the way through. The time it takes is the runner's own estimate, or none:
+      // a number typed in here could disagree with what the runner says elsewhere on the page.
+      const about = d.policy?.about_min;
       d.policy = {
         ...d.policy, state: 'training', stage: 'training', progress: 0.36, loss: 0.0631, last: 16,
-        about_min: d.policy?.about_min ?? 25, eta_s: Math.round((d.policy?.about_min ?? 25) * 60 * 0.64),
+        eta_s: Number.isFinite(about) ? Math.round(about * 60 * 0.64) : null,
       };
       break;
+    }
     case 'trained':
       // a Train run that ended ten minutes ago
       d.policy = {
@@ -61,10 +64,23 @@ export function previewHud(hud, name) {
     case 'visitor':
       // somebody else has the robots, and drives with a pointer
       d.mode = 'visitor';
-      d.operator = { source: 'visitor', drive: 'pointer', input: 'pointer', fingers: null, own: false, driver: -1, turn_left_s: 205, hands: null };
+      d.operator = { source: 'visitor', drive: 'pointer', input: 'pointer', fingers: null, own: false, driver: -1, turn_left_s: 205, queue: [], hands: null };
+      break;
+    case 'queued':
+      // somebody else has the robots, and this page asked to drive next
+      d.mode = 'visitor';
+      d.operator = { source: 'visitor', drive: 'camera', input: 'camera', fingers: 'camera', own: false, driver: -1, turn_left_s: 132, queue: [client], hands: null };
+      break;
+    case 'alone':
+      // the policy has just been handed the robots: its first round is still running
+      d.mode = 'policy';
+      d.policy = { ...d.policy, state: 'running', alone: { rounds: 0, scenes: 0, ok: 0, parts: 0, sorted: 0, clipped: 0 } };
+      d.echo = { ...d.echo, robots: (d.echo?.robots ?? 7) + 1 };      // with nobody driving, every robot is the policy's
       break;
     case 'comparing':
-      d.copy = { ...d.copy, on: true, busy: true, free: false };
+      // the half without Kaiku runs now; an older comparison's result is still in hand
+      d.copy = { ...d.copy, on: true, busy: true, free: false,
+        last: { copy: 5, echo: (d.echo?.robots ?? 47) - 1, robots: d.echo?.robots ?? 47, at: 1, age_s: 400 } };
       break;
     case 'compared': {
       const robots = d.echo?.robots ?? 47;
@@ -76,8 +92,10 @@ export function previewHud(hud, name) {
       d.perf = { ...d.perf, realtime: 0.7 };
       break;
     case 'rented':
-      // the Train button where it trains on rented GPUs
-      d.policy = { ...d.policy, rented: true, about_min: 4 };
+      // the Train button where it trains on rented GPUs. This machine's minutes are not the rented ones,
+      // and the page has no other number to say: it says none.
+      d.policy = { ...d.policy, rented: true };
+      delete d.policy.about_min;
       break;
     case 'partial':
       // a runner that only knows the basics

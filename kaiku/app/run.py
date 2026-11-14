@@ -47,6 +47,7 @@ DT = 1.0 / CONTROL_HZ
 HUD_EVERY = 3                 # ticks between HUD updates (10 Hz)
 PAUSE_S = 20.0                # how long a pause lasts on a session that everybody shares
 MODES = ("gloves", "autopilot", "policy", "visitor")
+VISITOR_SCENE_S = 150.0                                # a scene a visitor drives is replaced after this long
 TURN_S, IDLE_S = 240.0, 45.0                      # a visitor's turn at the robots, and how long it may sit untouched
 HELD_BY_COMPARISON = ("pause", "next_scene", "parts", "mode", "drive_start")   # what waits while a comparison runs
 COPY_EVERY_S = 30.0                               # everybody shares the page: the scene without the echo is not the only one shown
@@ -114,6 +115,8 @@ class Runner:
         self.turn_started = 0.0
         self.last_visitor_command = 0.0
         self._visitor_expired = False
+        self.queue: list[int] = []                             # pages that asked for the next turn, in order
+        self.dealt_at = -1e9                                   # when a visitor's scene ran out of time and a new one came
         self.copy_next = False                                 # the next scene is the comparison: the echo is off
         self.again = None                                      # its tables, for the same scene once more with the echo
         self.replaying = False                                 # this scene is that second half
@@ -227,6 +230,8 @@ class Runner:
         return self.next.done() if not isinstance(self.op, ReplayOperator) else bool(self.op.rows)
 
     def _begin_episode(self) -> None:
+        if self._visitor_expired and self.driver_client is not None:
+            self.dealt_at = time.monotonic()                   # the driver is told a new scene was dealt
         self._visitor_expired = False
         self.scene_end = None
         if self.want_mode != self.mode:
@@ -278,34 +283,47 @@ class Runner:
         self.scene_no = self.tot["episodes"] + 1
         self.phase = "run"
 
+    def tell(self, client: int, text: str, level: str = "info") -> None:
+        """Say something about a turn to one page only. A newer word about the turn replaces an older one
+        on that page, so "started" and "ended" never stand on screen together."""
+        self.viewer.send_event({"type": "toast", "text": text, "level": level, "to": client, "key": "turn"})
+
     def _end_visitor_turn(self, reason: str = "") -> None:
         if self.driver_client is None:
             return
-        self.viewer.send_event({"type": "toast", "text": "Your turn has ended. The stand-in is driving again.", "level": "info"})
+        self.tell(self.driver_client, "You were away a while, so your turn ended." if reason == "idle"
+                  else "Your turn is over. Thanks for driving." if reason == "timeout"
+                  else "Your turn has ended. The stand-in drives again.")
         self.driver_client = None
         self.turn_started = self.last_visitor_command = 0.0
         self.want_mode = "visitor" if self.glove_fingers else "gloves"   # a glove on this machine keeps the robots
         if self.phase == "run":
             self._end_episode(record=False)
         self.hold_until = 0.0
+        if self.queue and reason != "reset":                   # whoever asked next has the robots now
+            self._start_visitor(self.queue.pop(0))
 
     def _start_visitor(self, client: int) -> None:
         if self.driver_client is not None:
-            self.toast("A visitor is driving. Please wait for the next turn.", "info")
+            if int(client) != self.driver_client and int(client) not in self.queue:
+                self.queue.append(int(client))                 # the page says who drives, for how long, and who is next
             return
+        if int(client) in self.queue:
+            self.queue.remove(int(client))
         self.driver_client = int(client)
         self.turn_started = self.last_visitor_command = time.monotonic()
         self.want_mode = "visitor"
         if self.phase == "run":
             self._end_episode(record=False)
         self.hold_until = 0.0
-        self.toast("Your turn has started. Press on a part, drag it to the bin of its colour, let go.", "info")
+        self.tell(self.driver_client, "Your turn has started. Press on a part, drag it to the bin of its colour, let go.")
 
     def _reset(self) -> None:
         """Back to the start, for filming: the first scenes again, this session's counts at zero."""
         if self.shared:
             self.toast("Everybody who opens this page shares it, so it is not started over.", "info")
             return
+        self.queue.clear()
         if self.driver_client is not None:
             self._end_visitor_turn("reset")
         self.sampler.close()
@@ -504,6 +522,8 @@ class Runner:
             except queue.Empty:
                 return
             if m.get("type") != "cmd":
+                if m.get("type") == "disconnect" and m.get("client") in self.queue:
+                    self.queue.remove(m.get("client"))
                 if m.get("type") == "disconnect" and m.get("client") == self.driver_client:
                     self._end_visitor_turn("disconnect")
                 continue
@@ -516,6 +536,8 @@ class Runner:
                 self._start_visitor(int(client))
             elif name == "drive_end" and client == self.driver_client:
                 self._end_visitor_turn("handback")
+            elif name == "drive_end" and client in self.queue:   # no longer waiting for a turn
+                self.queue.remove(client)
             elif name == "hand" and client == self.driver_client and self.mode == "visitor":
                 was = (self.visitor.command.copy(), self.visitor.grip, self.visitor.own)
                 self.visitor.set_command(value if isinstance(value, dict) else {})
@@ -606,7 +628,7 @@ class Runner:
             now = time.monotonic()
             # a glove on this machine is one person's sitting, not a queue of visitors: it has no clock
             if not self.glove_fingers and (now - self.last_visitor_command > IDLE_S or now - self.turn_started > TURN_S):
-                self._end_visitor_turn("timeout")
+                self._end_visitor_turn("idle" if now - self.turn_started <= TURN_S else "timeout")
                 return
         obs = s.observe()
         if isinstance(self.op, GloveOperator) and not self.op.person and not self.op.healthy:
@@ -618,7 +640,7 @@ class Runner:
             self.hold_until = time.perf_counter() + 1.0
             return
         cmd = self.op.update(obs)
-        limit = int(150 * CONTROL_HZ) if self.mode == "visitor" else self.lead_timeout
+        limit = int(VISITOR_SCENE_S * CONTROL_HZ) if self.mode == "visitor" else self.lead_timeout
         if self.op.done or s.tick_no >= limit:
             if self.mode == "visitor" and s.tick_no >= limit and not self.op.done:
                 self._visitor_expired = True
@@ -689,10 +711,22 @@ class Runner:
              "calibrated": False, "stand_in": not alone, "source": "policy" if alone else "autopilot", "hands": None}
         operator["drive"] = self._drive(operator)
         if self.driver_client is not None:                     # whose turn it is, and how long it still lasts
+            now = time.monotonic()
             operator["driver"] = self.driver_client
             operator["starting"] = self.mode != "visitor"      # asked for, and the tables are still being laid
+            operator["queue"] = list(self.queue)               # who asked for the next turn, first first
             if not self.glove_fingers:
-                operator["turn_left_s"] = round(max(0.0, TURN_S - (time.monotonic() - self.turn_started)))
+                operator["turn_left_s"] = round(max(0.0, TURN_S - (now - self.turn_started)))
+            if self.mode == "visitor" and working:
+                # A scene a visitor drives is replaced after VISITOR_SCENE_S of simulated time. In the
+                # seconds of this clock it is that over the rate the simulation keeps up.
+                left = max(0, int(VISITOR_SCENE_S * CONTROL_HZ) - s.tick_no) * DT
+                rate = hz / CONTROL_HZ if hz > 0 else 1.0
+                operator["scene_left_s"] = round(left / min(1.0, max(0.1, rate)))
+            operator["expired"] = self._visitor_expired        # this scene ran out of time: a new one comes
+            operator["dealt"] = now - self.dealt_at < 6.0      # and it has just come
+        elif self.queue:
+            operator["queue"] = list(self.queue)
         return {
             "mode": self.mode,
             "status": status,
@@ -768,6 +802,7 @@ class Runner:
         if self.trained:                                       # the page says a result out loud while it is news
             out["trained"] = dict(self.trained, age_s=round(time.time() - self.trained["at"], 1))
         out["rented"] = self.trainer.rented                     # where the next run (or the one in hand) trains
+        out["last"] = self.trainer.last                         # how many of the latest demonstrations it trains on
         out["about_min"] = self.trainer.rented_min if out["rented"] else self.trainer.about_min
         if st["state"] == "training":
             out.update(state="training", progress=st["progress"], stage=st["stage"], loss=st["loss"],
