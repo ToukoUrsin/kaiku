@@ -54,6 +54,7 @@ def main(argv=None) -> int:
             for which in ("kaiku", "plain"):
                 say(which=which, stage="loading", progress=0.0)
             sent = f"/sent/{run_id}"
+            sweep(volume)
             with volume.batch_upload(force=True) as up:
                 for name in names:
                     up.put_file(Path(a.data) / name, f"{sent}/{name}")
@@ -75,6 +76,18 @@ def main(argv=None) -> int:
                 volume.remove_file(sent, recursive=True)
             except Exception:
                 pass
+
+
+def sweep(volume, older_s: float = 3600.0) -> None:
+    """Remove what earlier runs sent and never cleaned up (a demo stopped in the middle of one)."""
+    try:
+        for entry in volume.listdir("/sent"):
+            name = entry.path.rstrip("/").rsplit("/", 1)[-1]
+            stamp = name.split("_")[1] if name.count("_") >= 2 else ""
+            if stamp.isdigit() and time.time() - int(stamp) / 1000.0 > older_s:
+                volume.remove_file(f"/sent/{name}", recursive=True)
+    except Exception:
+        pass
 
 
 def latest(root: Path, last: int) -> tuple[list[str], list[dict]]:
