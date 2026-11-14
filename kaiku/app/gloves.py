@@ -203,6 +203,24 @@ def _done(session: Path, started: float, source: str, target: int | None = None)
     (session / "DONE").write_text(json.dumps(summary, indent=2) + "\n")
 
 
+def drive_args(stream: GloveStream | None, driver: str) -> tuple[list[str], str]:
+    """How Kaiku is started for the gloves that stream, and one line that says what drives what.
+
+    Two gloves that both have a place on a Coil Pro drive both arms. Anything less (one glove, or no
+    Coil Pro) is one hand: its fingers and pinch drive the robot's, and its place comes from the Coil
+    Pro when the glove has one, from the pointer or the laptop camera when it has none."""
+    frames = [stream.latest(side) for side in ("left", "right")] if stream is not None else []
+    if len(frames) == 2 and all(f is not None and f.coil_present for f in frames):
+        return ["--gloves", driver], "Two gloves on a Coil Pro: both hands drive. Hold them flat and still to calibrate."
+    worn = [f for f in frames if f is not None]
+    if any(f.coil_present for f in worn):
+        words = "One hand drives: fingers and position from the glove. Hold it flat and still for 2 seconds to start."
+    else:
+        words = ("One hand drives: fingers and pinch from the glove, position from the trackpad "
+                 "(or press Use my hand on the page for the laptop camera).")
+    return ["--mode", "visitor", "--one-glove", driver], words
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Connect Smartgloves II and start Kaiku.")
     ap.add_argument("--check", action="store_true", help="print the checklist and exit")
@@ -254,7 +272,9 @@ def main(argv: list[str] | None = None) -> int:
             raw = session / "kaiku.rgmp.record"
             children.append(subprocess.Popen([sys.executable, "-m", "kaiku.rgmp.record", "--host", driver_host,
                                                "--port", str(args.port), "--out", str(raw)], start_new_session=True))
-            command += ["--gloves", f"{driver_host}:{args.port}"]
+            how, words = drive_args(check.stream, f"{driver_host}:{args.port}")
+            command += how
+            print(words, flush=True)
         run = subprocess.Popen(command, start_new_session=True)
         children.append(run)
         print(f"Kaiku running: http://127.0.0.1:{kaiku_port}/", flush=True)

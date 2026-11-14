@@ -10,3 +10,4 @@ runs/
 node_modules/
 *.egg-info/
 uv.lock
+.sitting/

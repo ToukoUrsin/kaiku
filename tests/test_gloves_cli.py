@@ -32,3 +32,20 @@ def test_one_glove_is_a_valid_checklist(monkeypatch):
     assert check.ready
     assert any("One glove is connected" in message for message in check.messages())
 
+
+
+def _stream(left, right):
+    """A glove stream with these hands on: None, or whether that glove has a place on a Coil Pro."""
+    frame = lambda coil: None if coil is None else type("Frame", (), {"coil_present": coil})()
+    frames = {"left": frame(left), "right": frame(right)}
+    return type("Stream", (), {"latest": lambda self, side: frames[side]})()
+
+
+def test_what_streams_decides_how_kaiku_is_driven():
+    pair, _ = gloves.drive_args(_stream(True, True), "127.0.0.1:12276")
+    assert pair == ["--gloves", "127.0.0.1:12276"]
+    one_hand = ["--mode", "visitor", "--one-glove", "127.0.0.1:12276"]
+    for left, right in ((None, False), (True, None), (False, False), (True, False)):
+        how, words = gloves.drive_args(_stream(left, right), "127.0.0.1:12276")
+        assert how == one_hand                                # calibrating two hands would refuse here
+        assert words.startswith("One hand drives")

@@ -779,7 +779,13 @@ def main(argv=None) -> None:
                threads=a.threads, mode=a.mode, gloves=a.gloves, hand_solver=a.hand_solver,
                glove_fingers=a.glove_fingers, policy=a.policy, train=a.train,
                train_steps=a.train_steps, shared=a.shared, train_about=a.train_about, target_scenes=a.target)
-    if a.session:
+    # A real glove session, once one exists (python -m kaiku.app.sitting puts it here), is what plays
+    # when nobody drives: a person's own demonstrations instead of the scripted stand-in's.
+    human = Path(__file__).resolve().parents[1] / "sessions" / "human"
+    if a.session is None and not a.gloves and not a.glove_fingers and a.mode == "gloves" \
+            and (human / "session.json").exists() and (human / "episodes.jsonl").exists():
+        a.session = str(human)
+    if a.session and a.session != "off":
         r.session_dir = Path(a.session)
         r.mode = r.want_mode = "gloves"
         old = r.ops.pop("gloves", None)

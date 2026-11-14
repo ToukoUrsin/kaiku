@@ -14,7 +14,8 @@ while true; do
       [ -f "$target/SITTING.md" ] && continue
       mkdir -p "$target"
       rsync -a --ignore-existing "macbook:$(dirname "$marker")/" "$target/" || continue
-      nice -n 10 drun --setup "python=3.12" -- python -m kaiku.app.sitting "$target" --n 8 >>"$target/after-sitting.log" 2>&1 || true
+      # light here; the study inside it runs in sandboxes
+      (cd "$(dirname "$0")/.." && nice -n 10 .venv/bin/python -m kaiku.app.sitting "$target" >>"$target/after-sitting.log" 2>&1) || true
     done
     rmdir "$LOCK" 2>/dev/null || true
     trap - EXIT

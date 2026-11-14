@@ -91,6 +91,10 @@ case "${1:-}" in
   stop)
     if [ ! -L "$CUR" ]; then echo "nothing is recording"; exit 0; fi
     S="$(readlink "$CUR")"
+    # What was on the hand, for python -m kaiku.app.sitting: read off the stream before it stops.
+    if [ -f "$S/demos/episodes.jsonl" ]; then
+      (cd "$REPO" && "$PY" tools/booth_meta.py "$S" "$PORT")
+    fi
     for name in run raw solved solver; do
       [ -f "$S/$name.pid" ] && kill "$(cat "$S/$name.pid")" 2>/dev/null
     done
@@ -99,6 +103,7 @@ case "${1:-}" in
     for pid in $(pgrep -x rokoko-sdk); do kill "$pid" 2>/dev/null; done
     rm -f "$CUR"
     date -u +%Y-%m-%dT%H:%M:%SZ > "$S/DONE"
+    [ -f "$S/demos/session.json" ] && cp "$S/DONE" "$S/demos/DONE"
     echo "stopped: $S"; ls -l "$S" | awk 'NR>1 {print $5, $9}'
     ;;
   *) echo "usage: booth_mac.sh start [--emulated one|two] | status | stop"; exit 2 ;;

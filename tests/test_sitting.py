@@ -34,12 +34,45 @@ def test_sitting_validates_and_bundles_lead_commands(tmp_path):
     assert json.loads((out / "session.json").read_text())["source"] == "emulated"
 
 
-def test_sitting_smoke_writes_study_and_summary(tmp_path, monkeypatch):
+def test_a_sitting_reports_only_what_was_measured(tmp_path, monkeypatch):
     session = _session(tmp_path)
     from kaiku.app import sitting
     monkeypatch.setattr(sitting, "REPO", tmp_path / "repo")
     monkeypatch.setattr(sitting, "BUNDLE", tmp_path / "bundle")
-    assert finish(session, n=2, steps=2, scenes=1, film=False, local=True) == 0
+    monkeypatch.setattr(sitting, "RUNS", tmp_path / "runs")
+    assert finish(session, study=False) == 0
     summary = (session / "SITTING.md").read_text()
-    assert "Deploy:" in summary
+    assert "Study: not run" in summary and "%" not in summary          # no number nobody measured
+    assert "not a real glove session" in summary                        # an emulated one changes no words
+    assert not (tmp_path / "bundle").exists()                           # and is not what the demo replays
+    assert not (tmp_path / "repo" / "kaiku" / "policy" / "pretrained" / "study_human.json").exists()
 
+
+def test_a_real_sitting_becomes_the_replay(tmp_path, monkeypatch):
+    session = _session(tmp_path)
+    (session / "session.json").write_text(json.dumps({"source": "smartgloves", "glove_count": 1, "coil_present": False}))
+    stand_in = {"env": 0, "episode": 0, "source": "human", "operator": "stand-in (emulated smartgloves)",
+                "file": "ep000000.npz", "row": 0}
+    gloved = {**stand_in, "episode": 1, "operator": "visitor (one Smartglove's fingers, position from the pointer, assisted grasp)"}
+    echo = {**gloved, "env": 1, "source": "echo", "operator": "echo", "row": 1}
+    (session / "episodes.jsonl").write_text("".join(json.dumps(r) + "\n" for r in (stand_in, gloved, echo)))
+    from kaiku.app import sitting
+    monkeypatch.setattr(sitting, "REPO", tmp_path / "repo")
+    monkeypatch.setattr(sitting, "BUNDLE", tmp_path / "bundle")
+    monkeypatch.setattr(sitting, "RUNS", tmp_path / "runs")
+    assert finish(session, study=False) == 0
+    summary = (session / "SITTING.md").read_text()
+    assert "real Smartgloves, 1 glove(s)" in summary and "SUBMISSION.gloves.md" in summary
+    assert summary.startswith("1 scenes sorted by the lead, 2 demonstrations")     # the stand-in's scene is not a glove's
+    (session / "episodes.jsonl").write_text(json.dumps(stand_in) + "\n")
+    assert finish(session, study=False) == 1                                       # nothing a glove drove: not a sitting
+    assert (tmp_path / "bundle" / "ep000000.npz").exists()
+
+
+def test_a_fit_is_read_from_what_it_said():
+    from kaiku.app.sitting import read_fit
+    text = ('noise\nKAIKU {"which": "plain", "stage": "training", "progress": 0.5}\n'
+            'KAIKU {"which": "plain", "stage": "done", "success": 0.03, "humans": 30, "demos": 30}\n'
+            'KAIKU {"which": "kaiku", "stage": "done", "success": 0.81, "humans": 30, "demos": 1300}\n')
+    said = read_fit(text)
+    assert said["plain"]["success"] == 0.03 and said["kaiku"]["demos"] == 1300
