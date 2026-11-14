@@ -1,6 +1,11 @@
 """The live demo: one operator, many robots, in the browser.
 
     python -m kaiku.app.run --n 48 --port 8651 [--parts auto|3|4|5] [--record DIR] [--seed 0]
+                            [--gloves HOST[:PORT]] [--mode gloves|autopilot]
+
+Without ``--gloves`` the operator is the stand-in: a scripted person wearing emulated Smartgloves
+II, sent through the same RGMP socket, hand solver, calibration and retargeting as real gloves.
+``--mode autopilot`` skips the gloves and commands the lead robot directly.
 
 One loop at the challenge's 30 Hz: the operator (gloves, or the stand-in) moves the lead robot,
 the echo carries the motion to every other robot's own scene, the safety filter and the physics
@@ -22,6 +27,7 @@ from kaiku.app.autopilot import Autopilot
 from kaiku.app.session import FAILED, IDLE, LEAD, RUNNING, SUCCESS, Session
 from kaiku.data.recorder import Recorder
 from kaiku.sim.twin import CONTROL_HZ
+from kaiku.teleop.operator import GloveOperator
 from kaiku.web.server import ViewerServer
 
 DT = 1.0 / CONTROL_HZ
@@ -32,7 +38,7 @@ MODES = ("autopilot", "gloves", "replay", "policy")
 class Runner:
     def __init__(self, n: int = 48, port: int = 8651, host: str = "0.0.0.0", seed: int = 0, parts: str | int = "auto",
                  record: Path | str | None = None, hold_s: float = 1.6, lead_timeout_s: float = 90.0,
-                 threads: int | None = None):
+                 threads: int | None = None, mode: str = "gloves", gloves: str | None = None):
         self.s = Session(n, seed=seed, threads=threads)
         self.n = n
         self.parts = parts
@@ -42,9 +48,11 @@ class Runner:
         self.viewer = ViewerServer(self.s.twin.model, n, host=host, port=port, title="Kaiku")
         self.commands: queue.Queue = queue.Queue()
         self.viewer.on_message(self.commands.put)
-        self.rec = Recorder(self.s, record)
-        self.op = Autopilot(self.s)
-        self.mode = "autopilot"
+        self.gloves = gloves                                   # HOST[:PORT] of a Rokoko driver, or None: the stand-in
+        self.ops: dict = {}
+        self.mode = self.want_mode = mode if mode in ("gloves", "autopilot") else "gloves"
+        self.op = self._operator(self.mode)
+        self.rec = Recorder(self.s, record, operator=self._who())
         self.paused = False
         self.stop = False
         self.phase = "run"                                     # run -> hold -> run ...
@@ -61,6 +69,21 @@ class Runner:
         self.hud_tick = 0
         self.next = self.pool.submit(self._sample)
 
+    # ------------------------------------------------------------------ operators
+    def _operator(self, mode: str):
+        if mode not in self.ops:
+            if mode == "autopilot":
+                self.ops[mode] = Autopilot(self.s)
+            else:
+                host, _, port = (self.gloves or "").partition(":")
+                self.ops[mode] = GloveOperator(self.s, host or None, int(port) if port else None)
+        return self.ops[mode]
+
+    def _who(self) -> str:
+        if self.mode == "autopilot":
+            return "autopilot"
+        return "smartgloves" if self.gloves else "stand-in (emulated smartgloves)"
+
     # ------------------------------------------------------------------ scenes
     def _sample(self):
         n = self.parts
@@ -72,6 +95,10 @@ class Runner:
         lead, followers = self.next.result()
         self.next = self.pool.submit(self._sample)
         self.s.new_episode(lead, followers)
+        if self.want_mode != self.mode:
+            self.mode = self.want_mode
+            self.op = self._operator(self.mode)
+            self.rec.operator = self._who()
         self.op.begin()
         self.rec.begin()
         self.states[:] = IDLE
@@ -128,11 +155,19 @@ class Runner:
                 if value and self.rec.root is None:
                     self.toast("Start with --record DIR to save demonstrations.", "warn")
             elif name == "mode":
-                if value == self.mode:
-                    continue
-                self.toast(f"{str(value).capitalize()} mode is not connected in this build.", "warn")
+                if value in ("gloves", "autopilot"):
+                    self.want_mode = value
+                    if value != self.mode:
+                        self.toast(f"{str(value).capitalize()} takes over at the next scene.", "info")
+                else:
+                    self.toast(f"{str(value).capitalize()} mode is not connected in this build.", "warn")
             elif name == "calibrate":
-                self.toast("Calibration needs the gloves. The stand-in operator is driving.", "info")
+                if isinstance(self.op, GloveOperator) and not self.op.person:
+                    ok = self.op.calibrate()
+                    self.toast("Calibrated. The robot follows your hands." if ok else
+                               "Hold both hands flat over the Coil Pro, then calibrate again.", "info" if ok else "warn")
+                else:
+                    self.toast("The stand-in operator calibrates itself. Connect gloves to calibrate yours.", "info")
             elif name == "train":
                 self.toast("Training is not connected in this build.", "warn")
 
@@ -189,8 +224,9 @@ class Runner:
         return {
             "mode": self.mode,
             "status": status,
-            "operator": {"left": {"connected": False, "hz": 0.0}, "right": {"connected": False, "hz": 0.0},
-                         "calibrated": False, "stand_in": True, "hands": None},
+            "operator": self.op.hud() if isinstance(self.op, GloveOperator) else
+            {"left": {"connected": False, "hz": 0.0}, "right": {"connected": False, "hz": 0.0},
+             "calibrated": False, "stand_in": True, "source": "autopilot", "hands": None},
             "episode": {"index": t["episodes"] + 1, "parts": parts, "sorted": int(self.sorted[0]),
                         "elapsed_s": round(s.tick_no * DT, 1), "step": self.op.label},
             "echo": {"robots": F, "done": int(s.echo.done.sum()) if F else 0,
@@ -233,6 +269,9 @@ class Runner:
         finally:
             self.viewer.stop()
             self.pool.shutdown(wait=False, cancel_futures=True)
+            for op in self.ops.values():
+                if hasattr(op, "close"):
+                    op.close()
             self.s.close()
 
 
@@ -245,9 +284,12 @@ def main(argv=None) -> None:
     ap.add_argument("--parts", default="auto", help="auto, 3, 4 or 5 parts per scene")
     ap.add_argument("--record", default=None, help="folder to save the demonstrations in")
     ap.add_argument("--threads", type=int, default=None)
+    ap.add_argument("--mode", default="gloves", choices=("gloves", "autopilot"))
+    ap.add_argument("--gloves", default=None, metavar="HOST[:PORT]",
+                    help="RGMP address of the Rokoko driver; without it the stand-in operator drives")
     a = ap.parse_args(argv)
     r = Runner(a.n, a.port, a.host, a.seed, a.parts if a.parts == "auto" else int(a.parts), a.record,
-               threads=a.threads)
+               threads=a.threads, mode=a.mode, gloves=a.gloves)
 
     def quit_(*_):
         r.stop = True
