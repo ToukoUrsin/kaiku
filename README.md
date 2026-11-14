@@ -37,7 +37,7 @@ Each number is the mean of 3 training runs, each tested on 96 scenes neither pol
 
 ```bash
 git clone https://github.com/ToukoUrsin/kaiku && cd kaiku
-python -m venv .venv && .venv/bin/pip install -e ".[policy,dev]"
+python -m venv .venv && .venv/bin/pip install -e ".[policy,export,dev]"
 .venv/bin/python -m kaiku.app.run          # then open http://localhost:8651
 ```
 

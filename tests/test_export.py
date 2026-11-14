@@ -2,8 +2,10 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
-from kaiku.data.export import export
+pytest.importorskip("pyarrow")          # the export extra
+from kaiku.data.export import export  # noqa: E402
 
 
 def test_export_tiny_recorder_round_trip(tmp_path: Path):
