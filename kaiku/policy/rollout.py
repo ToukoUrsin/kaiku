@@ -17,6 +17,7 @@ from kaiku.app.session import Session
 from kaiku.fanout.echo import SHAPE_CODE
 from kaiku.policy.features import HORIZON, MAX_PARTS, Featurizer, plan_for
 from kaiku.policy.model import Policy
+from kaiku.perception import CameraPerception, PartEstimate
 from kaiku.sim.scene import BINS, Layout
 from kaiku.sim.twin import CONTROL_HZ
 
@@ -31,9 +32,14 @@ BLEND = 4
 class Pilot:
     """Runs a policy on every env of a session, each with its own scene."""
 
-    def __init__(self, session: Session, policy: Policy, every: int = EVERY, blend: int = BLEND):
+    def __init__(self, session: Session, policy: Policy, every: int = EVERY, blend: int = BLEND,
+                 perception: str | None = None, depth_noise_mm: float = 0.0, edge_noise_px: float = 0.0):
         self.s, self.policy = session, policy
         self.feat = Featurizer(session.scene)
+        self.camera = perception == "camera"
+        self.perception = (CameraPerception(session.twin, session.scene, depth_noise_mm=depth_noise_mm,
+                                            edge_noise_px=edge_noise_px, seed=17)
+                           if self.camera else None)
         self.every, self.blend = min(every, HORIZON), min(blend, HORIZON - min(every, HORIZON))
         lo, hi = session.twin.hand_range[:, 0], session.twin.hand_range[:, 1]
         self.hand_lo, self.hand_hi = lo, hi
@@ -47,6 +53,32 @@ class Pilot:
         self.bins = np.zeros((n, P), int)
         self.side = np.zeros((n, P), int)
         self.present = np.zeros((n, P), bool)
+        if self.camera:
+            # The initial plan is made from the first head-camera frame.  Layouts are
+            # deliberately not consulted here: they are simulator bookkeeping only.
+            self._camera_estimates = [[] for _ in range(n)]
+            self.cam_pos = np.zeros((self.s.n, P, 3))
+            self.cam_yaw = np.zeros((self.s.n, P))
+            self.cam_shape = np.zeros((self.s.n, P), int)
+            self.cam_bins = np.zeros((self.s.n, P), int)
+            self.cam_present = np.zeros((self.s.n, P), bool)
+            for i in range(n):
+                self._camera_estimates[i] = self.perception.observe(self.s.sim.data[i])
+                self._set_camera_parts(i, self._camera_estimates[i])
+                k = min(P, len(self._camera_estimates[i]))
+                if k:
+                    order, side = plan_for(self.cam_pos[i, :k], self.cam_bins[i, :k])
+                    self.cam_pos[i, :k] = self.cam_pos[i, order]
+                    self.cam_yaw[i, :k] = self.cam_yaw[i, order]
+                    self.cam_shape[i, :k] = self.cam_shape[i, order]
+                    self.cam_bins[i, :k] = self.cam_bins[i, order]
+                    self.cam_present[i, :k] = self.cam_present[i, order]
+                    self.side[i, :k] = side
+                self.present[i] = self.cam_present[i]
+            self.rows = np.arange(n)[:, None]
+            self.chunk = None
+            self.clock = 0
+            return
         for i, lay in enumerate(layouts):
             obs = [sc.by_name[p.name] for p in lay.placements][:P]
             if not obs:
@@ -62,8 +94,40 @@ class Pilot:
         self.chunk = None                    # the policy's last answer, as places
         self.clock = 0
 
+    def _set_camera_parts(self, i: int, estimates: list[PartEstimate]) -> None:
+        """Update the held camera track; missing parts stay at their last estimate."""
+        P = MAX_PARTS
+        shape_code = {"cube": 0, "cylinder": 1, "triangle": 2}
+        # On later frames match by colour and proximity.  A hand can hide a part for
+        # several frames, so an unmatched track is intentionally held.
+        used: set[int] = set()
+        order = sorted(range(len(estimates)), key=lambda j: estimates[j].pos[0])
+        for j in order:
+            e = estimates[j]
+            candidates = [k for k in range(P) if self.cam_present[i, k] and k not in used
+                          and int(self.cam_bins[i, k]) == BINS.index({"red": "left", "yellow": "center", "blue": "right"}[e.color])]
+            if candidates:
+                k = min(candidates, key=lambda q: np.linalg.norm(self.cam_pos[i, q, :2] - e.pos[:2]))
+            else:
+                k = next((q for q in range(P) if not self.cam_present[i, q]), None)
+                if k is None:
+                    continue
+            self.cam_pos[i, k] = e.pos
+            self.cam_yaw[i, k] = e.yaw
+            self.cam_shape[i, k] = shape_code[e.shape]
+            self.cam_bins[i, k] = BINS.index({"red": "left", "yellow": "center", "blue": "right"}[e.color])
+            self.cam_present[i, k] = True
+            used.add(k)
+
+    def _camera_update(self) -> None:
+        for i in range(self.s.n):
+            estimates = self.perception.observe(self.s.sim.data[i])
+            self._set_camera_parts(i, estimates)
+
     def sorted(self, obs) -> np.ndarray:
         """(N,) parts of each env that are in a bin."""
+        if self.camera:
+            return (self.cam_present & self.feat.in_bin(self.cam_pos)).sum(axis=1)
         return (self.present & self.feat.in_bin(obs.obj_pos[self.rows, self.idx])).sum(axis=1)
 
     def step(self, obs) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -71,11 +135,16 @@ class Pilot:
 
         The policy is asked every ``every`` ticks and its answer is played out in between."""
         if self.clock % self.every == 0:
+            if self.camera:
+                self._camera_update()
+                pos, yaw, shape, bins, present = self.cam_pos, self.cam_yaw, self.cam_shape, self.cam_bins, self.cam_present
+            else:
+                pos, yaw, shape, bins, present = (obs.obj_pos[self.rows, self.idx], obs.obj_yaw[self.rows, self.idx],
+                                                   self.shape, self.bins, self.present)
             arm, asked_fingers = self.s.last_action
             palm, R, _ = self.s.kin.fk(arm.reshape(-1, 2, 7))
             asked = palm + np.einsum("nsij,sj->nsi", R, self.s.off)
-            x = self.feat.observe(obs.pinch, obs.rot, obs.hand_q, obs.obj_pos[self.rows, self.idx],
-                                  obs.obj_yaw[self.rows, self.idx], self.shape, self.bins, self.side, self.present,
+            x = self.feat.observe(obs.pinch, obs.rot, obs.hand_q, pos, yaw, shape, bins, self.side, present,
                                   asked, asked_fingers)
             y = self.policy.act(x).astype(float)
             y[..., :6] += asked.reshape(-1, 1, 6)                    # moves -> places
@@ -93,12 +162,13 @@ class Pilot:
 
 def run(policy: Policy, n: int = 48, episodes: int = 2, seed: int = 100, parts: int | None = None,
         max_s: float = 80.0, threads: int | None = None, session: Session | None = None, log=None,
-        every: int = EVERY, blend: int = BLEND, progress=None) -> dict:
+        every: int = EVERY, blend: int = BLEND, progress=None, perception: str | None = None,
+        depth_noise_mm: float = 0.0, edge_noise_px: float = 0.0) -> dict:
     """Roll the policy out on ``n * episodes`` fresh scenes. Returns success rates and counts.
     ``progress(fraction)`` is called twice a second of robot time."""
     s = session or Session(n, seed=seed, threads=threads)
     rng = np.random.default_rng(seed)
-    pilot = Pilot(s, policy, every, blend)
+    pilot = Pilot(s, policy, every, blend, perception, depth_noise_mm, edge_noise_px)
     tot = {"scenes": 0, "success": 0, "parts": 0, "sorted": 0, "clean": 0, "clipped": 0, "aborted": 0, "seconds": [],
            "outcomes": {}, "by_parts": {}, "untouched": 0, "in_hand": 0}
     for ep in range(episodes):
@@ -140,18 +210,25 @@ def run(policy: Policy, n: int = 48, episodes: int = 2, seed: int = 100, parts: 
             a[1] += 1
         # Of the parts not in a bin: still where they started, or up in a hand.
         obs = s.observe()
-        pos = obs.obj_pos[pilot.rows, pilot.idx]
-        start = np.zeros_like(pos)
-        for i, lay in enumerate(layouts):
-            byname = {p.name: p.pos for p in lay.placements}
-            for j in range(int(want[i])):
-                start[i, j] = byname[s.scene.objects[pilot.idx[i, j]].name]
+        pos = (pilot.cam_pos if pilot.camera else obs.obj_pos[pilot.rows, pilot.idx])
+        if pilot.camera:
+            # These counters are diagnostic only.  Keep them out of the camera
+            # policy path and avoid assigning camera tracks simulator identities.
+            start = pos.copy()
+        else:
+            start = np.zeros_like(pos)
+            for i, lay in enumerate(layouts):
+                byname = {p.name: p.pos for p in lay.placements}
+                for j in range(int(want[i])):
+                    start[i, j] = byname[s.scene.objects[pilot.idx[i, j]].name]
         out = pilot.present & ~pilot.feat.in_bin(pos)
         tot["untouched"] += int((out & (np.linalg.norm(pos - start, axis=-1) < 0.01)).sum())
         tot["in_hand"] += int((out & (pos[..., 2] > s.scene.rest_z + 0.03)).sum())
         if log:
             log(f"  round {ep + 1}: {int(ok.sum())}/{s.n} scenes sorted, {int(good.sum())}/{int(want.sum())} parts, "
                 f"{int(r.clipped.sum())} clipped, {r.ticks / CONTROL_HZ:.0f} s sim in {time.time() - t0:.0f} s")
+    if pilot.perception is not None:
+        pilot.perception.close()
     if session is None:
         s.close()
     tot["success_rate"] = round(tot["success"] / max(tot["scenes"], 1), 4)
@@ -170,9 +247,16 @@ def main(argv=None) -> None:
     ap.add_argument("--threads", type=int, default=None)
     ap.add_argument("--every", type=int, default=EVERY, help="ticks between two questions to the policy")
     ap.add_argument("--blend", type=int, default=BLEND)
+    ap.add_argument("--perception", choices=("camera",), default=None,
+                    help="estimate parts from the head RGB/depth camera")
+    ap.add_argument("--depth-noise-mm", type=float, default=0.0,
+                    help="Gaussian depth noise in millimetres for camera perception")
+    ap.add_argument("--edge-noise-px", type=float, default=0.0,
+                    help="one-pixel-style depth edge dropout (0 disables it)")
     a = ap.parse_args(argv)
     out = run(Policy.load(a.policy), a.n, a.episodes, a.seed, a.parts, threads=a.threads, log=print,
-              every=a.every, blend=a.blend)
+              every=a.every, blend=a.blend, perception=a.perception,
+              depth_noise_mm=a.depth_noise_mm, edge_noise_px=a.edge_noise_px)
     print(out)
 
 
