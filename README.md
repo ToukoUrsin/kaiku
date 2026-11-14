@@ -112,30 +112,21 @@ pytest                                                        # the tests, about
 ## What is real and what is not
 
 - Everything runs in a MuJoCo twin of the Aaltonomous sorting station. No real G1 has moved yet. The way there is built: `--g1 8000` serves the lead robot to the humanoid challenge's own runner as a policy server ([docs/G1.md](docs/G1.md)). With the runner's mock robot it followed the operator for 60 seconds through the official safety filter: 1,800 ticks, 29.6 commands a second, none clipped.
-- The policy reads where the parts are from the simulator, not from cameras. On the real station that has to come from the head camera. Our first try at that sorts nothing yet (next section).
+- The default simulator comparison reads where the parts are from the simulator. The camera-fed comparison is reported in the next section. Both are simulated in the MuJoCo twin.
 - The operator in the study is the stand-in, recorded live at real time on the hosted demo. No real gloves have been worn yet. The glove path runs against Rokoko's real driver and hand solver (Device SDK 2026.10.20) with the driver's emulated Smartgloves II, and against Kaiku's own emulator and recordings.
 - The parts and bins are the challenge's (45 mm cube, cylinder and triangle; red, yellow and blue bins). 3 to 5 parts per scene.
 
-## From the camera: not yet
+## From the camera
 
-Every policy number above is for a policy that is told where the parts are by the simulator. We
-also ran the same policy with only the robot's head camera (colour and depth) to tell it. That
-does not work yet.
+The camera path now keeps a coloured part's last stable tabletop estimate while a hand hides or carries it. The tracker filters depth jitter, uses the robot's own hand position and commanded finger closure while carrying, and retires a track when that hand opens at the part's known colour bin. In one traced scene the hand-covered estimate rose from the 34 mm tabletop height to 154 mm, while the held track stayed with the hand and was retired on release. Across 30 static noisy frames the raw estimate moved 1.03 mm per frame on average. The camera's measured initial error is 3.8 mm on average and 14.8 mm at the 95th percentile; colour was 100% and shape was 90.5% clean, 68.5% with the noise. A single noisy shape read can still send a part to the wrong motion.
 
 | what tells the policy where the parts are | scenes sorted | parts sorted |
 |---|---:|---:|
 | the simulator | 96 of 96 | 370 of 370 |
-| the head camera | 0 of 96 | 19 of 370 |
-| the head camera, 3 mm depth noise and 1 px edge noise | 0 of 96 | 16 of 370 |
+| the head camera, tracked | 8 of 96 | 127 of 370 |
+| the head camera, 3 mm depth noise and 1 px edge noise, tracked | 7 of 96 | 110 of 370 |
 
-Same policy, same 96 scenes, 80 seconds each, one seed. On 200 rendered parts the camera's
-estimate is 3.8 mm off on average (14.8 mm at the 95th percentile), reads the colour right every
-time and the shape 90.5% of the time (68.5% with the noise). A policy trained on exact places does
-not carry over to estimated ones as it is; training it on the camera's estimates is the next step.
-It is a simulated camera in the MuJoCo twin, not a real one on a real G1. In camera mode the policy
-still gets the robot's own joint angles and the bins' known places, and nothing else from the
-simulator. Scene by scene: [`perception_runs.jsonl`](kaiku/policy/pretrained/perception_runs.jsonl)
-and the files beside it; repeat it with `tools/measure_perception_policy.py`.
+Same pretrained policy, same held-out 96 scenes, one seed, 80 seconds per scene. In camera mode it gets the robot's own joint angles, the bins' known places, and the head camera's colour and depth images. It gets no simulator part positions, identities, contact flags or in-hand flags. The camera is rendered in the MuJoCo twin, not from a real G1 camera. Scene by scene: [`perception_camera_clean_100_after_tracker.jsonl`](kaiku/policy/pretrained/perception_camera_clean_100_after_tracker.jsonl), [`perception_camera_noisy_100_after_tracker.jsonl`](kaiku/policy/pretrained/perception_camera_noisy_100_after_tracker.jsonl), and [`perception_simulator_100.jsonl`](kaiku/policy/pretrained/perception_simulator_100.jsonl). Repeat it with `tools/measure_perception_policy.py`.
 
 ## Layout
 

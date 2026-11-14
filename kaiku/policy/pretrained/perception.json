@@ -1,129 +1,191 @@
 {
   "perception": {
     "camera": "head_rgb",
-    "resolution": [
-      320,
-      240
-    ],
-    "parts": 200,
-    "development_seed": 777,
     "clean": {
+      "colour_accuracy": 1.0,
       "position_error_mm_mean": 3.7976,
       "position_error_mm_p95": 14.7714,
-      "yaw_error_deg_mean_symmetry_aware": 2.928,
       "shape_accuracy": 0.905,
-      "colour_accuracy": 1.0
+      "yaw_error_deg_mean_symmetry_aware": 2.928
     },
     "depth_noise": {
+      "colour_accuracy": 1.0,
       "depth_noise_mm": 3.0,
       "edge_noise_px": 1.0,
       "position_error_mm_mean": 5.3884,
       "position_error_mm_p95": 14.9502,
-      "yaw_error_deg_mean_symmetry_aware": 3.7853,
       "shape_accuracy": 0.685,
-      "colour_accuracy": 1.0
-    }
+      "yaw_error_deg_mean_symmetry_aware": 3.7853
+    },
+    "development_seed": 777,
+    "parts": 200,
+    "resolution": [
+      320,
+      240
+    ]
   },
   "policy": {
-    "evaluation_seed": 100,
-    "scenes": 96,
-    "parts": 370,
-    "sim_seconds_cap": 80.0,
     "arms": {
-      "simulator": {
-        "success": 96,
-        "success_rate": 1.0,
-        "success_rate_ci95": [
-          0.962303,
-          1.0
-        ],
-        "sorted": 370,
-        "parts_rate": 1.0,
-        "parts_rate_ci95": [
-          0.99008,
-          1.0
-        ],
-        "clipped_commands": 0,
-        "clipped_scenes": 0
-      },
       "camera_clean": {
-        "success": 0,
-        "success_rate": 0.0,
-        "success_rate_ci95": [
-          0.0,
-          0.037697
+        "clipped_commands": 0,
+        "clipped_scenes": 0,
+        "parts_rate": 0.34324324324324323,
+        "parts_rate_ci95": [
+          0.294939,
+          0.39408
         ],
-        "sorted": 19,
+        "sorted": 127,
+        "success": 8,
+        "success_rate": 0.08333333333333333,
+        "success_rate_ci95": [
+          0.036666,
+          0.157611
+        ]
+      },
+      "camera_clean_before_fix": {
+        "clipped_commands": 0,
+        "clipped_scenes": 0,
         "parts_rate": 0.051351,
         "parts_rate_ci95": [
           0.031196,
           0.079032
         ],
-        "clipped_commands": 0,
-        "clipped_scenes": 0
-      },
-      "camera_noisy_before_fix": {
+        "sorted": 19,
         "success": 0,
         "success_rate": 0.0,
         "success_rate_ci95": [
           0.0,
           0.037697
-        ],
-        "sorted": 21,
-        "parts_rate": 0.056757,
-        "parts_rate_ci95": [
-          0.035473,
-          0.085453
-        ],
+        ]
+      },
+      "camera_noisy": {
         "clipped_commands": 0,
-        "clipped_scenes": 0
+        "clipped_scenes": 0,
+        "parts_rate": 0.2972972972972973,
+        "parts_rate_ci95": [
+          0.251159,
+          0.346714
+        ],
+        "sorted": 110,
+        "success": 7,
+        "success_rate": 0.07291666666666667,
+        "success_rate_ci95": [
+          0.029818,
+          0.14448
+        ]
       },
       "camera_noisy_after_fix": {
-        "success": 0,
-        "success_rate": 0.0,
-        "success_rate_ci95": [
-          0.0,
-          0.037697
-        ],
-        "sorted": 16,
+        "clipped_commands": 0,
+        "clipped_scenes": 0,
         "parts_rate": 0.043243,
         "parts_rate_ci95": [
           0.024916,
           0.069276
         ],
+        "sorted": 16,
+        "success": 0,
+        "success_rate": 0.0,
+        "success_rate_ci95": [
+          0.0,
+          0.037697
+        ]
+      },
+      "camera_noisy_before_fix": {
         "clipped_commands": 0,
-        "clipped_scenes": 0
+        "clipped_scenes": 0,
+        "parts_rate": 0.056757,
+        "parts_rate_ci95": [
+          0.035473,
+          0.085453
+        ],
+        "sorted": 21,
+        "success": 0,
+        "success_rate": 0.0,
+        "success_rate_ci95": [
+          0.0,
+          0.037697
+        ]
+      },
+      "simulator": {
+        "clipped_commands": 0,
+        "clipped_scenes": 0,
+        "parts_rate": 1.0,
+        "parts_rate_ci95": [
+          0.99008,
+          1.0
+        ],
+        "sorted": 370,
+        "success": 96,
+        "success_rate": 1.0,
+        "success_rate_ci95": [
+          0.962303,
+          1.0
+        ]
       }
     },
-    "noisy_policy_seeds_run": 1,
-    "noisy_policy_second_seed_run": false,
-    "simulator_state": {
-      "success": 96,
-      "success_rate": 1.0,
-      "parts": 370,
-      "sorted": 370,
-      "parts_rate": 1.0
-    },
     "camera": {
-      "success": 0,
-      "success_rate": 0.0,
       "parts": 370,
+      "parts_rate": 0.34324324324324323,
+      "sorted": 127,
+      "success": 8,
+      "success_rate": 0.08333333333333333
+    },
+    "camera_clean_before_fix": {
+      "parts": 370,
+      "parts_rate": 0.051351,
       "sorted": 19,
-      "parts_rate": 0.051351
+      "success": 0,
+      "success_rate": 0.0
+    },
+    "camera_noisy": {
+      "parts": 370,
+      "parts_rate": 0.2972972972972973,
+      "sorted": 110,
+      "success": 7,
+      "success_rate": 0.07291666666666667
     },
     "camera_noisy_before_fix": {
-      "success": 0,
-      "success_rate": 0.0,
       "parts": 370,
+      "parts_rate": 0.056757,
       "sorted": 21,
-      "parts_rate": 0.056757
-    },
-    "camera_noisy_after_fix": {
       "success": 0,
-      "success_rate": 0.0,
+      "success_rate": 0.0
+    },
+    "camera_noisy_before_tracker": {
       "parts": 370,
+      "parts_rate": 0.043243,
       "sorted": 16,
-      "parts_rate": 0.043243
+      "success": 0,
+      "success_rate": 0.0
+    },
+    "evaluation_seed": 100,
+    "noisy_policy_second_seed_run": false,
+    "noisy_policy_seeds_run": 1,
+    "parts": 370,
+    "scenes": 96,
+    "sim_seconds_cap": 80.0,
+    "simulator_state": {
+      "parts": 370,
+      "parts_rate": 1.0,
+      "sorted": 370,
+      "success": 96,
+      "success_rate": 1.0
+    },
+    "tracker_fix": {
+      "clean": {
+        "parts": 370,
+        "scenes": 96,
+        "sorted": 127,
+        "success": 8
+      },
+      "noisy": {
+        "parts": 370,
+        "scenes": 96,
+        "sorted": 110,
+        "success": 7
+      },
+      "seed": 100,
+      "sim_seconds_cap": 80.0
     }
   }
 }

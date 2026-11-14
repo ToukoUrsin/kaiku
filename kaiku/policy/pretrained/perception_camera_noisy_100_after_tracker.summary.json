@@ -1,0 +1,22 @@
+{
+  "aborted_scenes": 0,
+  "arm": "camera-noisy-after-tracker",
+  "clipped_commands": 0,
+  "clipped_scenes": 0,
+  "parts": 370,
+  "parts_rate": 0.297297,
+  "parts_rate_ci95": [
+    0.251159,
+    0.346714
+  ],
+  "scenes": 96,
+  "seed": 100,
+  "sim_seconds_cap": 80.0,
+  "sorted": 110,
+  "success": 7,
+  "success_rate": 0.072917,
+  "success_rate_ci95": [
+    0.029818,
+    0.14448
+  ]
+}
