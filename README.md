@@ -89,26 +89,41 @@ pytest                                                        # 108 tests
 
 ## From the camera, not the simulator
 
-The policy can use `--perception camera`.  It takes only the head camera's colour and depth
-images, back-projects the coloured blobs with the calibrated `head_rgb` camera, and reads the
-top outline for shape and turn.  A hidden part keeps its last camera estimate until it is seen
-again.  On 200 rendered parts the clean estimate had 4.12 mm mean position error (15.87 mm at
-the 95th percentile), 20.89 degrees mean turn error after the shape's symmetry, 89% shape
-accuracy and 100% colour accuracy.  With 3 mm depth noise and one-pixel edge noise these were
-5.74 mm, 15.35 mm, 17.35 degrees, 43% and 100%.  The noisy shape number is deliberately left
-as measured; edge pixels are the part that still needs work.
+The simulator-state policy sorted all 96 evaluation scenes (370/370 parts) with no clipped
+command.  The same pretrained policy, same seed and normal 80-second cap sorted 0/96 scenes
+from the head camera, even with clean images.  The camera is therefore the limiting part of this
+path today.
 
-The camera path tells the policy the estimated part position, turn, shape, colour/bin, next-part
-plan and nearby parts.  The simulator is still the referee for success and clipping, and supplies
-the robot's own arm and hand joint state (a real G1 measures that itself), the fixed camera
-calibration, and the known bin geometry.  No simulator object position, orientation or identity
-is passed to the policy in camera mode.  The full measurements are in
-[`perception.json`](kaiku/policy/pretrained/perception.json).
+| policy input | scenes sorted | parts sorted | unsafe/clipped commands | 95% scene interval |
+|---|---:|---:|---:|---:|
+| simulator object state | 96/96 | 370/370 | 0 | 96.23–100% |
+| camera, clean | 0/96 | 19/370 | 0 | 0–3.77% |
+| camera, 3 mm depth + 1 px edge noise | 0/96 | 21/370 | 0 | 0–3.77% |
+| camera, same noise after shape fix | 0/96 | 16/370 | 0 | 0–3.77% |
 
-For the same 96 seeded scenes, the short one-second smoke comparison was 0/96 complete scenes
-with simulator parts and 0/96 from the camera.  That is a wiring check, not a claim about the
-normal 80-second policy score; the camera renderer is intentionally kept out of the headline
-study numbers until a longer run is practical on this machine.
+The noisy policy result has one seed (`n=1`); a second noisy policy seed was not run because
+rendering the 96 scenes took about 30 minutes even after sharding the CPU work.  The JSONL scene
+records and summaries are in [`perception_runs.jsonl`](kaiku/policy/pretrained/perception_runs.jsonl)
+and the four arm files beside it.  The intervals are exact two-sided 95% binomial intervals.
+To reproduce a summary from any arm file:
+
+```bash
+python -c 'import json,sys; r=[json.loads(x) for x in open(sys.argv[1])]; print(len(r),sum(x["success"] for x in r),sum(x["sorted"] for x in r),sum(x["parts"] for x in r),sum(x["clipped"] for x in r))' kaiku/policy/pretrained/perception_camera_clean_100.jsonl
+```
+
+The camera estimate uses only the head camera's colour and depth images.  On a separate
+development set of 200 rendered parts (seed 777), the clean estimate was 3.80 mm mean position
+error (14.77 mm at p95), 2.93 degrees mean turn error after symmetry, 90.5% shape accuracy and
+100% colour accuracy.  With 3 mm depth noise and one-pixel edge noise it was 5.39 mm, 14.95 mm,
+3.79 degrees, 68.5% and 100%.  The earlier noisy shape measurement was 43%; the change uses
+projected top-face area and compactness to make the edge estimate less brittle.  On the held-out
+policy seed this did not improve sorting (21 parts before, 16 after), so that result is kept.
+
+In camera mode the policy still receives the robot's own arm and hand joint state (a real G1
+measures that itself), the fixed head-camera calibration, and the known bin geometry.  The
+simulator remains the referee for success and clipping.  No simulator object position,
+orientation, or identity is passed to the policy.  This is a simulated camera in a MuJoCo twin,
+not a real camera on a real G1.
 
 ## Layout
 

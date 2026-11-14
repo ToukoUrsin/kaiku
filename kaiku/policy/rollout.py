@@ -18,7 +18,7 @@ from kaiku.fanout.echo import SHAPE_CODE
 from kaiku.policy.features import HORIZON, MAX_PARTS, Featurizer, plan_for
 from kaiku.policy.model import Policy
 from kaiku.perception import CameraPerception, PartEstimate
-from kaiku.sim.scene import BINS, Layout
+from kaiku.sim.scene import BINS, Layout, SHAPE_SYMMETRY
 from kaiku.sim.twin import CONTROL_HZ
 
 
@@ -78,6 +78,7 @@ class Pilot:
             self.rows = np.arange(n)[:, None]
             self.chunk = None
             self.clock = 0
+            self.initial_estimates = [list(x) for x in self._camera_estimates]
             return
         for i, lay in enumerate(layouts):
             obs = [sc.by_name[p.name] for p in lay.placements][:P]
@@ -93,6 +94,42 @@ class Pilot:
         self.rows = np.arange(n)[:, None]
         self.chunk = None                    # the policy's last answer, as places
         self.clock = 0
+        self.initial_estimates = [[] for _ in range(n)]
+
+    def camera_diagnostics(self, i: int, layout: Layout) -> list[dict]:
+        """Match the first camera detections to truth for post-run failure analysis.
+
+        This is diagnostic bookkeeping only; the rollout itself never reads the layout
+        or simulator object arrays in camera mode.
+        """
+        if not self.camera:
+            return []
+        estimates = list(self.initial_estimates[i])
+        used: set[int] = set()
+        out = []
+        for p in layout.placements:
+            truth = self.s.scene.by_name[p.name]
+            candidates = [j for j, e in enumerate(estimates)
+                          if j not in used and e.color == truth.color]
+            if candidates:
+                j = min(candidates, key=lambda q: np.linalg.norm(estimates[q].pos[:2] - p.pos[:2]))
+                used.add(j)
+                e = estimates[j]
+                sym = SHAPE_SYMMETRY[truth.shape]
+                if sym:
+                    period = 2.0 * np.pi / sym
+                    yaw_error = abs((e.yaw - p.yaw + period / 2) % period - period / 2)
+                else:
+                    yaw_error = 0.0
+                out.append({"name": p.name, "color": truth.color, "shape": truth.shape,
+                            "visible": True, "estimate_shape": e.shape,
+                            "position_error_mm": round(float(np.linalg.norm(e.pos - p.pos) * 1000), 3),
+                            "yaw_error_deg": round(float(np.degrees(yaw_error)), 3)})
+            else:
+                out.append({"name": p.name, "color": truth.color, "shape": truth.shape,
+                            "visible": False, "estimate_shape": None,
+                            "position_error_mm": None, "yaw_error_deg": None})
+        return out
 
     def _set_camera_parts(self, i: int, estimates: list[PartEstimate]) -> None:
         """Update the held camera track; missing parts stay at their last estimate."""
@@ -163,7 +200,8 @@ class Pilot:
 def run(policy: Policy, n: int = 48, episodes: int = 2, seed: int = 100, parts: int | None = None,
         max_s: float = 80.0, threads: int | None = None, session: Session | None = None, log=None,
         every: int = EVERY, blend: int = BLEND, progress=None, perception: str | None = None,
-        depth_noise_mm: float = 0.0, edge_noise_px: float = 0.0) -> dict:
+        depth_noise_mm: float = 0.0, edge_noise_px: float = 0.0, scene_records: list[dict] | None = None,
+        scene_offset: int = 0) -> dict:
     """Roll the policy out on ``n * episodes`` fresh scenes. Returns success rates and counts.
     ``progress(fraction)`` is called twice a second of robot time."""
     s = session or Session(n, seed=seed, threads=threads)
@@ -171,12 +209,20 @@ def run(policy: Policy, n: int = 48, episodes: int = 2, seed: int = 100, parts: 
     pilot = Pilot(s, policy, every, blend, perception, depth_noise_mm, edge_noise_px)
     tot = {"scenes": 0, "success": 0, "parts": 0, "sorted": 0, "clean": 0, "clipped": 0, "aborted": 0, "seconds": [],
            "outcomes": {}, "by_parts": {}, "untouched": 0, "in_hand": 0}
+    # Sharded measurement jobs can discard the preceding deterministic layouts and
+    # then run their contiguous slice without changing the global scene stream.
+    for _ in range(int(scene_offset)):
+        discard_parts = parts if parts else int(rng.choice([3, 4, 5], p=[0.35, 0.40, 0.25]))
+        s.sample_lead(discard_parts, rng)
     for ep in range(episodes):
         layouts = [s.sample_lead(parts if parts else int(rng.choice([3, 4, 5], p=[0.35, 0.40, 0.25])), rng)
                    for _ in range(s.n)]
         s.free_episode(layouts)
         pilot.begin(layouts)
-        want = pilot.present.sum(axis=1)
+        # The denominator is the simulator's active layout for every arm.  In camera mode
+        # a hidden part is precisely a failure, so counting only detected tracks would bias
+        # the parts score upward.
+        want = np.array([len(lay.placements) for lay in layouts], int)
         calm = 0
         t0 = time.time()
         for tick in range(int(max_s * CONTROL_HZ)):
@@ -224,6 +270,17 @@ def run(policy: Policy, n: int = 48, episodes: int = 2, seed: int = 100, parts: 
         out = pilot.present & ~pilot.feat.in_bin(pos)
         tot["untouched"] += int((out & (np.linalg.norm(pos - start, axis=-1) < 0.01)).sum())
         tot["in_hand"] += int((out & (pos[..., 2] > s.scene.rest_z + 0.03)).sum())
+        if scene_records is not None:
+            for i, lay in enumerate(layouts):
+                scene_records.append({
+                    "episode": ep, "scene": int(scene_offset + ep * s.n + i), "seed": int(seed),
+                    "parts": int(want[i]), "sorted": int(good[i]),
+                    "success": bool(ok[i]), "clean": bool(ok[i] and r.clipped[i] == 0),
+                    "clipped": int(r.clipped[i]), "aborted": bool(r.aborted[i]),
+                    "seconds": round(float(r.ticks / CONTROL_HZ), 1),
+                    "outcomes": dict(r.outcomes[i]),
+                    "camera_diagnostics": pilot.camera_diagnostics(i, lay),
+                })
         if log:
             log(f"  round {ep + 1}: {int(ok.sum())}/{s.n} scenes sorted, {int(good.sum())}/{int(want.sum())} parts, "
                 f"{int(r.clipped.sum())} clipped, {r.ticks / CONTROL_HZ:.0f} s sim in {time.time() - t0:.0f} s")
