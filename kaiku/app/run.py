@@ -113,6 +113,13 @@ class Runner:
         self.study = json.loads(STUDY.read_text()) if STUDY.exists() else {}
         out = Path(record) / "policies" if record else None
         self.trainer = Trainer(record, out or "policies", train, train_steps, about_min=train_about)
+        try:                                                   # the last result outlives a restart
+            self.trained = json.loads((self.trainer.out / "last.json").read_text())
+        except (OSError, ValueError):
+            pass
+        mine = self.trainer.out / "kaiku.pt"                   # the one Train made here, if it was the one driving
+        if not policy and self.trained and self.trained.get("in_use") and mine.exists():
+            policy = mine
         policy = policy or (PRETRAINED if PRETRAINED.exists() else None)
         if policy:
             self.loading = self.pool.submit(self._load, Path(policy))
@@ -280,6 +287,10 @@ class Runner:
                 self.trained = {"kaiku": new, "plain": p.get("success", 0.0), "humans": k.get("humans"),
                                 "demos": k.get("demos"), "scenes": k.get("scenes"), "in_use": keep,
                                 "at": round(time.time(), 1)}
+                try:
+                    (self.trainer.out / "last.json").write_text(json.dumps(self.trained))
+                except OSError:
+                    pass
                 text = (f"Trained on the last {k.get('humans') or 0} demonstrations. With their echoes the policy "
                         f"sorts {new:.0%} of new scenes, without them {p.get('success', 0.0):.0%}.")
                 if keep:

@@ -229,7 +229,8 @@ export class Hud {
   /** A Train run that just ended is said once over the scene, where everybody looks. */
   renderResult() {
     const trained = this.hud.policy?.trained;
-    if (!trained || !(trained.age_s < 20) || this.resultSaid === trained.at || 'opening' in this.app.dataset) return;
+    const news = trained && (trained.age_s < 20 || this.flags.result);
+    if (!news || this.resultSaid === trained.at || 'opening' in this.app.dataset) return;
     this.resultSaid = trained.at;
     const line = this.el.opening;
     line.textContent = `Trained on ${trained.humans || 0} demonstrations.\n${percent(trained.plain)} alone, ${percent(trained.kaiku)} with echoes.`;
