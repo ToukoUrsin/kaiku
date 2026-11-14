@@ -2,20 +2,48 @@
  "about": "The one source of the film's words, numbers and timing. Edit here, then film/make.sh. Times are seconds. {name} in a line is filled in from numbers.",
  "cut": "nogloves",
  "fps": 30,
+ "open": {
+  "about": "The cold open and the end card, made elsewhere. The build reads them from dir when it runs and puts them in front and last as they are, picture and sound, at whatever length they have then. It stops if the whole film is over max seconds. film/make.sh vN --no-open builds the body alone. end: \"\" drops the end card. Shot 1 starts on the open's last frame: its picture fills the frame for hold seconds with its hand where the robot's hand is in that frame (measured in the frame; hand is used when the frame is not a bright hand on black: centre and size in film pixels), after a dissolve of dissolve seconds, then moves to its place over move seconds. film_hand: the hand in the hand film's picture at the start of shot 1 (centre x, centre y, height, as shares of the picture). grow: the picture is enlarged until it fills the frame, but its hand is never more than this many times the robot hand's height.",
+  "dir": "/bulk3/runs/opens/final/kaiku",
+  "file": "open.mp4",
+  "sound": "open.wav",
+  "end": "end.mp4",
+  "max": 120,
+  "aim": 110,
+  "hand": {
+   "centre": [
+    1017,
+    500
+   ],
+   "size": [
+    405,
+    600
+   ]
+  },
+  "film_hand": [
+   0.48,
+   0.545,
+   0.59
+  ],
+  "grow": 1.3,
+  "dissolve": 0.35,
+  "hold": 1.1,
+  "move": 0.7
+ },
  "voice": {
   "provider": "gemini",
   "id": "Charon",
   "name": "Charon (Gemini speech)",
   "model": "gemini-3.8-flash-tts",
   "speed": 1.0,
-  "about": "ElevenLabs (v2's voice, Brian) had no credit left when v3 was cut. To go back: provider elevenlabs, id nPczCjzI2devNBz1zQrb, model eleven_multilingual_v2, speed 1.04, no instructions."
+  "about": "ElevenLabs (v2's voice, Brian) had no credit left when v3 and v4 were cut. To go back: provider elevenlabs, id nPczCjzI2devNBz1zQrb, model eleven_multilingual_v2, speed 1.04, no instructions."
  },
  "music": {
   "prompt": "Minimal, calm, confident instrumental score for a robotics demo film, 96 BPM. Soft low pulse and warm analog pad from the start. Around 34 seconds the music thins to almost nothing for a few seconds, then at 50 seconds a clean hopeful lift with a gentle arpeggio and light percussion. Steady and warm through the middle, a small rise near 82 seconds, resolved soft final chord at 112 seconds. No vocals. Understated, not cheesy.",
   "seconds": 118,
   "gain_db": -15,
   "duck": 6,
-  "about": "The v2 score, kept: ElevenLabs had no credit left when v3 was cut (it resets on 5 December 2026). The prompt's times are v2's; the silence is placed by the edit, not the score."
+  "about": "The v2 score, kept: ElevenLabs had no credit left when v3 and v4 were cut (it resets on 5 December 2026). The prompt's times are v2's; the silence is placed by the edit, not the score."
  },
  "numbers": {
   "about": "Spoken by the voice and shown in the film's own type. The build stops unless each one is what the page said in that take AND what the checked-in files say (kaiku/policy/pretrained/study.json, baselines.json, the runner's summary).",
@@ -41,78 +69,107 @@
   "matched_kaiku": "73%",
   "matched_kaiku_say": "seventy-three",
   "runner_commands": 1800,
-  "runner_commands_say": "Eighteen hundred",
   "runner_clipped": 0,
   "address": "kaiku-echo.fly.dev",
   "address_say": "kaiku echo dot fly dot dev",
   "hand_credit": "Hand: S. Perquin, CC BY-SA 4.0",
   "hand_credit_long": "Hand film: “Finger-counting in Dutch” by S. Perquin, Wikimedia Commons, CC BY-SA 4.0",
-  "runner_commands_shown": "1,800"
+  "runner_commands_shown": "1,800",
+  "runner_commands_low": "eighteen hundred"
  },
  "shots": [
   {
    "id": "1-hand",
-   "dur": 14.0,
+   "dur": 7.1,
+   "dur_real": 10.0,
    "swappable": true,
    "clip": "shot2.mp4",
-   "about": "The swappable shot. Without --shot2 it is the hand film: the page's own camera picture beside the robot's hand, both from take hand (film/hand.py), lined up on the clock they were recorded with. With film/make.sh vN --shot2 FILE the clip fills the frame and vo_real is spoken.",
+   "about": "The swappable shot, and the one the cold open cuts to: it starts full frame on the hand, where the robot's hand was in the open's last frame, then the picture moves to its place (see open). Without --shot2 it is the hand film: the page's own camera picture beside the robot's hand, both from take hand (film/hand.py), lined up on the clock they were recorded with. With film/make.sh vN --shot2 FILE the phone clip of a gloved hand is the picture, for dur_real seconds, and head_real, label_real and vo_real are used: the only words in the film that say gloves.",
    "head": "A real hand moves the robot's fingers",
-   "label": "Film of a real hand (it loops), played into the page as its camera",
+   "label": "Film of a hand, played into the page as its camera",
    "label_robot": "The robot's hand, same run, same moment",
-   "head_real": "A person's hand moves the robot's fingers",
+   "head_real": "A person's hand in a Rokoko Smartglove drives the robot",
+   "label_real": "A real hand, a real glove",
    "vo": [
     {
-     "at": 0.4,
-     "text": "This is film of a real hand. We play it into the page as its camera, and the robot's fingers follow it. Nothing is worn on the hand."
+     "at": 0.5,
+     "text": "This is film of a real hand, played into the page as its camera. The robot's fingers follow it."
     }
    ],
    "vo_real": [
     {
-     "at": 0.4,
-     "text": "This is a person's hand in front of a laptop camera. The robot's fingers follow the fingers. Nothing is worn on the hand."
+     "at": 0.5,
+     "text": "This is a person's hand in a Rokoko glove. The glove drives the first robot's fingers."
     }
    ]
   },
   {
-   "id": "2-fleet",
-   "dur": 10.5,
-   "head": "One robot is driven. {fleet_others} echoes redo the job, each on its own table.",
-   "sub": "On the live page a scripted hand drives.",
+   "id": "2-sim",
+   "dur": 12.0,
+   "about": "What is simulated, said once: on screen line by line as the voice says it. cues: the first words of each sentence.",
+   "head": "Everything here runs in a simulator",
+   "lines": [
+    "A twin of Junction's G1 sorting station",
+    "The policy is told where the parts are",
+    "On the live page, a scripted hand drives when no visitor does"
+   ],
+   "cues": [
+    "a twin",
+    "The policy",
+    "On the"
+   ],
    "vo": [
     {
      "at": 0.3,
-     "text": "On the live page, a scripted hand drives one robot. {fleet_others_say} echoes redo the job as it happens, each on its own table."
+     "text": "Everything here runs in a simulator, a twin of Junction's G1 sorting station. The policy is told where the parts are. On the live page, a scripted hand drives when no visitor does."
     }
    ]
   },
   {
-   "id": "3-without",
+   "id": "3-fleet",
+   "dur": 6.5,
+   "head": "{fleet_others} echoes redo the driven robot's job, each on its own table",
+   "vo": [
+    {
+     "at": 0.2,
+     "text": "{fleet_others_say} echoes redo the driven robot's job as it happens, each on its own table."
+    }
+   ]
+  },
+  {
+   "id": "4-without",
    "dur": 12.0,
    "mark": "Real time",
-   "head": "Kaiku off: every robot gets the same motion",
+   "about": "Three neighbouring tables, then all 48, one take with no time skipped. The line at the top is the page's own banner.",
    "vo": [
     {
      "at": 0.3,
-     "text": "Every table is different. So if the others just copy the motion, this happens."
+     "text": "Every table is different. So if the others just copy the motion, they reach for parts that are not there."
     }
    ]
   },
   {
-   "id": "4-with",
-   "dur": 12.0,
+   "id": "5-with",
+   "dur": 14.5,
    "mark": "Real time",
-   "head": "Kaiku on, the same tables",
+   "pill": "Every clean run is saved as a demonstration",
+   "pill_cue": "Every",
    "vo": [
     {
      "at": 0.3,
      "text": "Same tables, Kaiku on. Each echo redoes the motion around the parts that are really there."
+    },
+    {
+     "at": 10.9,
+     "text": "Every clean run is saved as a demonstration."
     }
    ]
   },
   {
-   "id": "5-study",
-   "dur": 16.0,
-   "head": "What the echoes are worth: a policy trained on {study_demos} demonstrations",
+   "id": "6-study",
+   "dur": 10.8,
+   "about": "The one number slide. cues: each big number appears as the voice starts to say it; then_cue the same for the line under them.",
+   "head": "A policy trained on {study_demos} demonstrations",
    "big": [
     [
      "{study_alone}",
@@ -128,20 +185,19 @@
    "note": "Share of {study_scenes} unseen scenes sorted, mean of {study_runs} training runs. The study's demonstrations came from a scripted hand.",
    "vo": [
     {
-     "at": 0.3,
-     "text": "Why it matters. A policy trained on {study_demos_say} demonstrations sorts {study_alone_say} of new scenes. With their echoes, {study_with_echoes_say}. {study_demos_cap} with echoes beat {study_many_say} without."
+     "at": 0.2,
+     "text": "A policy trained on {study_demos_say} demonstrations sorts {study_alone_say} of new scenes. With their echoes, {study_with_echoes_say}. {study_demos_cap} with echoes beat {study_many_say} without."
     }
    ],
    "cues": [
     "{study_alone_say}",
     "{study_with_echoes_say}"
    ],
-   "then_cue": "{study_demos_cap}",
-   "about": "cues: each big number appears as the voice starts to say it; then_cue the same for the line under them."
+   "then_cue": "{study_demos_cap}"
   },
   {
-   "id": "6-matched",
-   "dur": 11.5,
+   "id": "7-matched",
+   "dur": 8.3,
    "head": "The same {matched_demos} demonstrations, multiplied two ways",
    "big": [
     [
@@ -153,11 +209,11 @@
      "Kaiku's echoes"
     ]
    ],
-   "note": "Share of {study_scenes} unseen tables sorted, {study_runs} runs each. The replay is our own implementation, not MimicGen's code.",
+   "note": "Share of {study_scenes} unseen tables sorted. The replay is our own implementation, not MimicGen's code.",
    "vo": [
     {
      "at": 0.3,
-     "text": "Against a MimicGen-style replay, from the same {matched_demos_say} demonstrations: {matched_replay_say} with the replay, {matched_kaiku_say} with Kaiku's echoes. The replay is our own implementation."
+     "text": "From the same {matched_demos_say} demonstrations, our own MimicGen-style replay reaches {matched_replay_say}. Kaiku's echoes reach {matched_kaiku_say}."
     }
    ],
    "cues": [
@@ -166,8 +222,27 @@
    ]
   },
   {
-   "id": "7-nobody",
-   "dur": 9.0,
+   "id": "8-runner",
+   "dur": 8.3,
+   "about": "The runner's log is on screen for takes.runner.for seconds (5 at most), printing its lines when the runner printed them. Its summary line arrives where the voice starts cut_cue, and the part of it that matters is shown large.",
+   "head": "The humanoid challenge's own runner and safety filter, with a mock robot",
+   "label_robot": "A local Kaiku. The runner follows this robot's commands.",
+   "vo": [
+    {
+     "at": 0.3,
+     "text": "The humanoid challenge's own runner, with a mock robot: {runner_commands_low} commands through its safety filter, none clipped."
+    }
+   ],
+   "cut_cue": "{runner_commands_low}",
+   "count": [
+    "{runner_commands_shown} commands",
+    "through the safety filter",
+    "{runner_clipped} clipped"
+   ]
+  },
+  {
+   "id": "9-nobody",
+   "dur": 10.0,
    "mark": "Real time",
    "head": "Then nobody drives",
    "vo": [
@@ -178,209 +253,174 @@
    ]
   },
   {
-   "id": "8-runner",
-   "dur": 11.0,
-   "head": "The humanoid challenge's own runner and safety filter, with a mock robot",
-   "label_robot": "A local Kaiku. The runner follows this robot's commands.",
-   "vo": [
-    {
-     "at": 0.3,
-     "text": "This is the humanoid challenge's own runner, with a mock robot. {runner_commands_say} commands went through its safety filter. None was clipped."
-    }
-   ],
-   "cut_cue": "{runner_commands_say}",
-   "later": "{seconds} seconds later",
-   "about": "The log skips from the first seconds of the run to its last second where the voice starts cut_cue; the film says how many seconds it skipped.",
-   "count": [
-    "{runner_commands_shown} commands",
-    "through the safety filter. {runner_clipped} clipped."
-   ]
-  },
-  {
-   "id": "9-dataset",
-   "dur": 6.5,
-   "head": "Every clean run is a demonstration, in the challenge's format",
-   "vo": [
-    {
-     "at": 0.3,
-     "text": "Every clean run is saved as a demonstration, in the format the challenge asks for."
-    }
-   ]
-  },
-  {
    "id": "10-address",
-   "dur": 8.0,
+   "dur": 6.6,
    "card": {
-    "line": "Live now. Drive it yourself.",
+    "line": "Open it and drive it yourself",
     "address": "{address}",
-    "at": 1.0
+    "at": 0.6
    },
    "vo": [
     {
-     "at": 0.4,
+     "at": 0.5,
      "text": "It is live at {address_say}. Open it and drive it yourself."
     }
    ]
   }
  ],
  "takes": {
-  "about": "What is filmed. rec = a recording under WORK/../rec made with film/rec.py (or film/hand.py, film/g1log.sh); start/end are seconds into it; speed = recorded seconds per film second (everything in this cut is 1). css and init are film-only: they hide buttons, enlarge or move the page's own lines, or move the camera. They never change a word or a number. whole = filmed by one browser from start to end (close shots, where a join between two browsers shows as a twitch).",
+  "about": "What is filmed. rec = a recording under WORK/../rec made with film/rec.py (or film/hand.py, film/g1log.sh); start/end are seconds into it; everything is at the speed it ran. css and init are film-only: they hide buttons, enlarge or move the page's own lines, or move the camera. They never change a word or a number. A line that is not shown but is still checked is made clear (opacity 0), not removed. whole = filmed by one browser from start to end (close shots, where a join between two browsers shows as a twitch).",
   "hand": {
    "take": "../hand/take4",
    "about": "film/hand.py's output: rec/ (the stream), inset/ + inset.jsonl (the page's camera picture, timed), hand.jsonl (what the page read and what the runner said was driving)."
   },
   "css": {
-   "hand": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:30px!important;line-height:1.3!important;max-width:900px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.story,.focus,.tag,.banner{display:none!important}",
-   "fleet": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:30px!important;line-height:1.3!important;max-width:900px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.tag{font-size:26px!important;padding:9px 18px!important}.app[data-clean] .story{transform:scale(1.5)!important;transform-origin:left bottom!important}",
-   "count": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:30px!important;line-height:1.3!important;max-width:900px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.app[data-clean] .banner:not([hidden]){display:flex!important;font-size:46px!important;padding:20px 40px!important;top:176px!important}.app[data-clean] .banner .banner-dot{width:20px!important;height:20px!important}.app[data-clean] .banner-action{display:none!important}",
-   "nobody": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:30px!important;line-height:1.3!important;max-width:900px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.app[data-clean] .banner:not([hidden]){display:flex!important;font-size:46px!important;padding:20px 40px!important;top:176px!important}.app[data-clean] .banner .banner-dot{width:20px!important;height:20px!important}.app[data-clean] .banner-action{display:none!important}.app[data-clean] .story{transform:scale(1.5)!important;transform-origin:left bottom!important}",
-   "stage": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.story,.caption,.banner{display:none!important}",
-   "page": "[data-ref=\"opening\"]{display:none!important}",
+   "hand": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:38px!important;line-height:1.25!important;max-width:980px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.story,.focus,.tag,.banner{display:none!important}",
+   "sim": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:38px!important;line-height:1.25!important;max-width:980px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.app[data-clean] .story{opacity:0!important}.banner{display:none!important}.tag{font-size:30px!important;padding:8px 18px!important}",
+   "fleet": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{opacity:0!important}.app[data-clean] .story{opacity:0!important}.banner{display:none!important}.tag{font-size:30px!important;padding:8px 18px!important}",
+   "close": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{opacity:0!important}.app[data-clean] .story{opacity:0!important}.tag{display:none!important}.app[data-clean] .banner:not([hidden]){display:flex!important;opacity:1!important;font-size:46px!important;padding:20px 40px!important;top:40px!important}.app[data-clean] .banner .banner-dot{width:20px!important;height:20px!important}.app[data-clean] .banner-action{display:none!important}",
+   "count": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:38px!important;line-height:1.25!important;max-width:980px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.app[data-clean] .story{opacity:0!important}.tag{display:none!important}.app[data-clean] .banner:not([hidden]){display:flex!important;opacity:1!important;font-size:46px!important;padding:20px 40px!important;top:40px!important}.app[data-clean] .banner .banner-dot{width:20px!important;height:20px!important}.app[data-clean] .banner-action{display:none!important}",
+   "with": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:38px!important;line-height:1.25!important;max-width:980px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.tag{display:none!important}.app[data-clean] .banner:not([hidden]){display:flex!important;opacity:1!important;font-size:46px!important;padding:20px 40px!important;top:40px!important}.app[data-clean] .banner .banner-dot{width:20px!important;height:20px!important}.app[data-clean] .banner-action{display:none!important}.app[data-clean] .story{transform:scale(1.8)!important;transform-origin:left bottom!important}.story-stats{display:none!important}",
+   "stage": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.story,.caption,.banner,.tag{display:none!important}",
    "panel": "[data-ref=\"opening\"]{display:none!important}.banner{display:none!important}",
-   "with": ".drive-tools{display:none!important}.app[data-clean] .caption{font-size:30px!important;line-height:1.3!important;max-width:900px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.app[data-clean] .banner:not([hidden]){display:flex!important;font-size:46px!important;padding:20px 40px!important;top:176px!important}.app[data-clean] .banner .banner-dot{width:20px!important;height:20px!important}.app[data-clean] .banner-action{display:none!important}"
+   "nobody": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:38px!important;line-height:1.25!important;max-width:980px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.app[data-clean] .story{opacity:0!important}.tag{display:none!important}.app[data-clean] .banner:not([hidden]){display:flex!important;opacity:1!important;font-size:46px!important;padding:20px 40px!important;top:40px!important}.app[data-clean] .banner .banner-dot{width:20px!important;height:20px!important}.app[data-clean] .banner-action{display:none!important}",
+   "end": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{opacity:0!important}.app[data-clean] .story{opacity:0!important}.tag{display:none!important}.app[data-clean] .banner:not([hidden]){display:flex!important;opacity:1!important;font-size:46px!important;padding:20px 40px!important;top:40px!important}.app[data-clean] .banner .banner-dot{width:20px!important;height:20px!important}.app[data-clean] .banner-action{display:none!important}"
   },
   "init": {
-   "hand-a": "(()=>{const r=window.kaiku.rig;r.look({target:[0.44,0.07,0.17],azimuth:-0.5,polar:1.05,frame:[0.42,0.42]},0.01);r.shiftGoal.set(0.45,0);r.shift.set(0.45,0);})()",
-   "hand-b": "(()=>{const r=window.kaiku.rig;r.look({target:[0.44,0.07,0.17],azimuth:0.55,polar:0.95,frame:[0.36,0.36]},0.01);r.shiftGoal.set(0.45,0);r.shift.set(0.45,0);})()",
-   "push": "(()=>{const r=window.kaiku.rig,f=[...r.frame],a=100000+6000;const go=()=>{const k=1-0.06*Math.min(1,Math.max(0,(performance.now()-a)/10500));r.frame=[f[0]*k,f[1]*k];r.refit();requestAnimationFrame(go);};go();})()",
-   "panel": "(()=>{window.kaiku.stage.render=()=>{};const d=document.querySelector('[data-ref=baselines]');if(d)d.open=true;})()",
-   "nostage": "window.kaiku.stage.render=()=>{}"
+   "hand": "(()=>{const r=window.kaiku.rig;r.look({target:[0.44, 0.07, 0.17],azimuth:-0.5,polar:1.05,frame:[0.42, 0.42]},0.01);r.shiftGoal.set(0.45,0);r.shift.set(0.45,0);})()",
+   "lead": "(()=>{const r=window.kaiku.rig;r.shiftGoal.set(0.42,0.08);r.shift.set(0.42,0.08);})()",
+   "runner": "(()=>{const r=window.kaiku.rig;r.shiftGoal.set(0.55,0.05);r.shift.set(0.55,0.05);})()",
+   "push": "(()=>{const r=window.kaiku.rig,f=[...r.frame],a=100000+14000;const go=()=>{const k=1-0.05*Math.min(1,Math.max(0,(performance.now()-a)/7000));r.frame=[f[0]*k,f[1]*k];r.refit();requestAnimationFrame(go);};go();})()",
+   "three": "(()=>{const r=window.kaiku.rig;r.look({target:[-2.35, 3.1, 0.6],azimuth:-0.12,polar:0.95,frame:[4.9, 2.4]},0.01);r.shiftGoal.set(0,0);r.shift.set(0,0);})()",
+   "three-b": "(()=>{const r=window.kaiku.rig;r.look({target:[-2.35, -3.1, 0.6],azimuth:0.14,polar:0.9,frame:[4.9, 2.4]},0.01);r.shiftGoal.set(0,0.3);r.shift.set(0,0.3);})()",
+   "panel": "(()=>{window.kaiku.stage.render=()=>{};const d=document.querySelector('[data-ref=baselines]');if(d)d.open=true;})()"
   },
   "clips": {
-   "1-robot-a": {
+   "1-robot": {
     "rec": "../hand/take4/rec",
     "start": 8.85,
     "end": 15.95,
     "query": "clean=1&shot=lead&quality=high",
     "css": "hand",
-    "init": "hand-a",
+    "init": "hand",
     "whole": true
    },
-   "1-robot-b": {
-    "rec": "../hand/take4/rec",
-    "start": 16.15,
-    "end": 23.05,
-    "query": "clean=1&shot=lead&quality=high",
-    "css": "hand",
-    "init": "hand-b",
-    "whole": true
-   },
-   "2-fleet": {
+   "2-sim": {
     "rec": "operator",
-    "start": 6.0,
-    "end": 16.5,
+    "start": 3.0,
+    "end": 15.0,
+    "query": "clean=1&shot=lead&quality=high",
+    "css": "sim",
+    "init": "lead",
+    "whole": true
+   },
+   "3-all": {
+    "rec": "operator",
+    "start": 14.0,
+    "end": 21.0,
     "query": "clean=1&shot=overview&quality=high",
     "css": "fleet",
     "init": "push"
    },
-   "3-without": {
+   "4-close": {
     "rec": "operator",
     "start": 39.5,
+    "end": 44.5,
+    "query": "clean=1&shot=overview&quality=high",
+    "css": "close",
+    "init": "three",
+    "whole": true
+   },
+   "4-wide": {
+    "rec": "operator",
+    "start": 44.5,
     "end": 51.5,
     "query": "clean=1&shot=overview&quality=high",
     "css": "count"
    },
-   "4-with": {
+   "5-close": {
     "rec": "operator",
-    "start": 71.4,
+    "start": 68.9,
+    "end": 74.9,
+    "query": "clean=1&shot=overview&quality=high",
+    "css": "close",
+    "init": "three",
+    "whole": true
+   },
+   "5-wide": {
+    "rec": "operator",
+    "start": 74.9,
     "end": 83.4,
     "query": "clean=1&shot=overview&quality=high",
     "css": "with",
     "whole": true
    },
-   "5-left": {
+   "6-back": {
     "rec": "operator",
     "start": 125.0,
-    "end": 141.0,
-    "size": "1138x1080",
-    "query": "clean=1&shot=lead&quality=high",
-    "css": "stage",
-    "whole": true
+    "end": 137.0,
+    "query": "clean=1&shot=overview&quality=high",
+    "css": "stage"
    },
-   "6-left": {
+   "7-robots": {
     "rec": "operator",
-    "start": 141.0,
-    "end": 152.5,
-    "size": "1138x1080",
-    "query": "clean=1&shot=lead&quality=high",
+    "start": 95.0,
+    "end": 106.0,
+    "query": "clean=1&shot=overview&quality=high",
     "css": "stage",
+    "init": "three-b",
     "whole": true
    },
-   "7-nobody": {
+   "8-robot": {
+    "rec": "g1",
+    "start": 56.0,
+    "end": 68.0,
+    "query": "clean=1&shot=lead&quality=high",
+    "css": "stage",
+    "init": "runner",
+    "whole": true
+   },
+   "9-close": {
     "rec": "policy",
-    "start": 56.2,
-    "end": 65.2,
+    "start": 24.5,
+    "end": 29.5,
+    "query": "clean=1&shot=overview&quality=high",
+    "css": "nobody",
+    "init": "three",
+    "whole": true
+   },
+   "9-wide": {
+    "rec": "policy",
+    "start": 40.0,
+    "end": 45.5,
     "query": "clean=1&shot=overview&quality=high",
     "css": "nobody"
    },
-   "8-robot-a": {
-    "rec": "g1",
-    "start": 2.6,
-    "end": 9.6,
-    "size": "740x1080",
-    "query": "clean=1&shot=lead&quality=high",
-    "css": "stage",
-    "whole": true
-   },
-   "8-robot-b": {
-    "rec": "g1",
-    "start": 60.0,
-    "end": 69.5,
-    "size": "740x1080",
-    "query": "clean=1&shot=lead&quality=high",
-    "css": "stage",
-    "whole": true
-   },
-   "9-left": {
-    "rec": "operator",
-    "start": 152.5,
-    "end": 159.0,
-    "size": "1138x1080",
-    "query": "clean=1&shot=lead&quality=high",
-    "css": "stage",
-    "whole": true
-   },
-   "10-page": {
-    "rec": "operator",
-    "start": 160.0,
-    "end": 168.0,
-    "query": "intro=0&shot=lead&quality=high",
-    "css": "page"
+   "10-policy": {
+    "rec": "policy",
+    "start": 60.6,
+    "end": 68.1,
+    "query": "clean=1&shot=overview&quality=high",
+    "css": "end"
    }
   },
   "stills": {
-   "5-panel": {
+   "panel": {
     "rec": "operator",
     "at": 130,
     "scale": 3,
     "clip": "1565,100,355,450",
     "query": "tab=policy&quality=low",
     "css": "panel",
-    "init": "panel"
-   },
-   "6-panel": {
-    "rec": "operator",
-    "at": 130,
-    "scale": 3,
-    "clip": "1565,560,355,345",
-    "query": "tab=policy&quality=low",
-    "css": "panel",
-    "init": "panel"
-   },
-   "9-panel": {
-    "rec": "operator",
-    "at": 155,
-    "scale": 3,
-    "clip": "1565,100,355,505",
-    "query": "tab=dataset&quality=low",
-    "css": "panel",
-    "init": "nostage"
+    "init": "panel",
+    "about": "The page's own study and comparison panel. Not shown in v4: the build reads what it says and stops if the film's numbers differ."
    }
   },
   "runner": {
-   "about": "Shot 8: the terminal shows WORK/g1/runner.log line by line at the moments the lines were printed. Part a starts a_from seconds into rec g1; part b starts b_lead seconds before the runner printed its summary, where the voice gets to the count.",
-   "a_from": 2.6,
-   "b_lead": 1.0
-  }
+   "about": "Shot 8: the terminal is on screen from `on` for `for` seconds (5 at most) and shows WORK/g1/runner.log line by line at the moments the lines were printed. The runner's summary line arrives where the voice gets to the count.",
+   "on": 1.2,
+   "for": 5.0
+  },
+  "init_about": "three: the three tables at the end of the first rank, from in front. three-b: the three at its other end. push: a slow push in over the 7 s from 14 s (the page's clock is 100000 ms at the recording's start)."
  }
 }
