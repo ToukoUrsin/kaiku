@@ -227,6 +227,8 @@ def test_client_reconnects_after_the_server_restarts():
     port = first.port
     with GloveStream(HOST, port) as gloves:
         wait_until(lambda: all(gloves.latest(side) is not None for side in SIDES))
+        first_seen = gloves.latest("left").t_us
+        wait_until(lambda: gloves.latest("left").t_us - first_seen > 500_000)   # the first session is half a second old
         before = gloves.latest("left")
         first.stop()
         wait_until(lambda: not gloves.connected and all(gloves.latest(side) is None for side in SIDES))

@@ -1,6 +1,0 @@
-pyproject.toml
-kaiku.egg-info/PKG-INFO
-kaiku.egg-info/SOURCES.txt
-kaiku.egg-info/dependency_links.txt
-kaiku.egg-info/requires.txt
-kaiku.egg-info/top_level.txt

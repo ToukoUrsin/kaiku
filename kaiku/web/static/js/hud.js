@@ -462,8 +462,12 @@ export class Hud {
       }
       this.show('finding', Boolean(widest));
       if (widest) {
+        // ... and the fewest demonstrations that, echoed, beat the most the operator gave alone
+        const most = curve[curve.length - 1];
+        const enough = curve.find((point) => point.kaiku > most.plain && point.demos < most.demos);
         this.text('finding', `From ${widest.demos} demonstrations by the operator: ${percent(widest.plain)} alone, `
-          + `${percent(widest.kaiku)} with echoes.`);
+          + `${percent(widest.kaiku)} with echoes.`
+          + (enough ? ` ${enough.demos} with echoes beat ${most.demos} without.` : ''));
       }
       const study = policy?.study;
       this.show('study-note', Boolean(study?.runs && study?.scenes));
@@ -502,11 +506,11 @@ export class Hud {
     this.text('train-note', training
       ? `${STAGE_TEXT[policy.stage] || 'Training'}: ${Math.round(progress * 100)}%${loss}.`
       : policy?.error ? policy.error
-        : trained ? `Last run, on ${trained.scenes || 0} new scenes: ${percent(trained.kaiku)} with the echoes, `
-          + `${percent(trained.plain)} with the operator's demonstrations alone.`
+        : trained ? `Last run, from ${trained.humans || 0} demonstrations, on ${trained.scenes || 0} new scenes: `
+          + `${percent(trained.kaiku)} with the echoes, ${percent(trained.plain)} without.`
           + (trained.in_use ? '' : ' The policy that was already here sorts more, so it keeps driving.')
-          : 'Trains two policies on the latest demonstrations of this session, one with the echoes and one without, '
-            + 'then tests both on scenes neither has seen. About four minutes.');
+          : 'Trains two policies on the last 16 demonstrations of this session, one with their echoes and one without, '
+            + 'then tests both on 48 scenes neither has seen. About five minutes.');
   }
 
   renderControls() {

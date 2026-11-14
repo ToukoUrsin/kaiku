@@ -22,11 +22,11 @@ WHICH = ("kaiku", "plain")
 
 class Trainer:
     def __init__(self, data: Path | str | None, out: Path | str, backend: str = "local", steps: int = 30000,
-                 scenes: int = 48, last: int = 48):
+                 scenes: int = 48, last: int = 16):
         self.data = Path(data) if data else None
         self.out = Path(out)
         self.backend, self.steps, self.scenes = backend, steps, scenes
-        self.last = last                     # the operator's latest episodes: what a few minutes can train on
+        self.last = last                     # the operator's latest episodes: few enough that the echoes decide it
         self.proc: subprocess.Popen | None = None
         self.lock = threading.Lock()
         self.jobs: dict[str, dict] = {}

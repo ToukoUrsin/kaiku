@@ -7,3 +7,5 @@ __pycache__/
 runs/
 *.rgmp
 node_modules/
+*.egg-info/
+uv.lock

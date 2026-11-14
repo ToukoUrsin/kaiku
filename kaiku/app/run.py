@@ -256,8 +256,8 @@ class Runner:
                 keep = new + 0.02 >= old
                 self.trained = {"kaiku": new, "plain": p.get("success", 0.0), "humans": k.get("humans"),
                                 "demos": k.get("demos"), "scenes": k.get("scenes"), "in_use": keep}
-                text = (f"Trained. With the echoes it sorts {new:.0%} of new scenes, "
-                        f"with the operator's demonstrations alone {p.get('success', 0.0):.0%}.")
+                text = (f"Trained on the last {k.get('humans') or 0} demonstrations. With their echoes the policy "
+                        f"sorts {new:.0%} of new scenes, without them {p.get('success', 0.0):.0%}.")
                 if keep:
                     self.loading = self.pool.submit(self._load, self.trainer.out / "kaiku.pt")
                 else:

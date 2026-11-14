@@ -29,13 +29,14 @@ _GREETING_TIMEOUT_S = 1.0
 """How long a new client may take to accept the definitions, which can exceed an empty send buffer."""
 
 
-def _defined_device(frame: bytes) -> int:
-    """device_id of a definition frame. Deliberately not validated further: a replay must be able
-    to serve whatever a real driver sent, including definitions our own parser would reject."""
+def _defined_device(frame: bytes) -> int | None:
+    """device_id of a definition frame, or None when it names none. Deliberately not validated
+    further: a replay must be able to serve whatever a real driver sent, including definitions
+    our own parser would reject."""
     try:
-        return json.loads(frame[FRAME_HEADER.size:])["device_id"]
-    except (ValueError, KeyError, TypeError) as error:
-        raise ProtocolError(f"definition frame without a device_id: {error!r}") from error
+        return int(json.loads(frame[FRAME_HEADER.size:])["device_id"])
+    except (ValueError, KeyError, TypeError):
+        return None
 
 
 class RgmpServer:
@@ -108,9 +109,14 @@ class RgmpServer:
         prefix = FRAME_HEADER.unpack_from(frame)[0]
         with self._lock:
             if prefix == PREFIX_DEFINITION:
-                self._definitions[_defined_device(frame)] = frame
+                device = _defined_device(frame)
+                if device is not None:                      # one without a device still goes out, once
+                    self._definitions[device] = frame
             elif prefix == PREFIX_DISCONNECT:
-                self._definitions.pop(decode_disconnect(frame[FRAME_HEADER.size:]), None)
+                try:
+                    self._definitions.pop(decode_disconnect(frame[FRAME_HEADER.size:]), None)
+                except ProtocolError:                       # names no device: nothing to forget
+                    pass
             for client in self._clients:
                 try:
                     client.sendall(frame)

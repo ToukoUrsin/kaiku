@@ -4,9 +4,9 @@
   "scenes": 96,
   "runs": 3,
   "steps": 30000,
-  "operator": "stand-in (emulated Smartgloves II)",
+  "operator": "stand-in (emulated Smartgloves II), recorded live at real time on the hosted demo",
   "measure": "share of 96 scenes nobody had seen in which every part ended in its own bin and the safety filter clipped nothing",
-  "how": "tools/modal_policy.py --humans 1,2,4,8,16,32,64 --seeds 0,1,2 --steps 30000"
+  "how": "tools/modal_policy.py --humans 1,2,4,8,16,32,64,128 --seeds 0,1,2 --steps 30000 --data /data/live1 --skip 45"
  },
  "curve": [
   {
@@ -18,13 +18,13 @@
     0.0
    ],
    "plain_parts": 0.0,
-   "kaiku": 0.0035,
+   "kaiku": 0.0,
    "kaiku_runs": [
     0.0,
     0.0,
-    0.0104
+    0.0
    ],
-   "kaiku_parts": 0.0072,
+   "kaiku_parts": 0.0081,
    "echoes": 47
   },
   {
@@ -36,13 +36,13 @@
     0.0
    ],
    "plain_parts": 0.0,
-   "kaiku": 0.0139,
+   "kaiku": 0.0069,
    "kaiku_runs": [
     0.0104,
-    0.0104,
-    0.0208
+    0.0,
+    0.0104
    ],
-   "kaiku_parts": 0.045,
+   "kaiku_parts": 0.0243,
    "echoes": 94
   },
   {
@@ -54,13 +54,13 @@
     0.0
    ],
    "plain_parts": 0.0,
-   "kaiku": 0.1111,
+   "kaiku": 0.2257,
    "kaiku_runs": [
-    0.1042,
-    0.125,
-    0.1042
+    0.2396,
+    0.2292,
+    0.2083
    ],
-   "kaiku_parts": 0.2297,
+   "kaiku_parts": 0.3135,
    "echoes": 188
   },
   {
@@ -71,69 +71,87 @@
     0.0,
     0.0
    ],
-   "plain_parts": 0.0369,
-   "kaiku": 0.5173,
+   "plain_parts": 0.0018,
+   "kaiku": 0.3611,
    "kaiku_runs": [
-    0.5729,
-    0.5729,
-    0.4062
+    0.4062,
+    0.3646,
+    0.3125
    ],
-   "kaiku_parts": 0.6622,
-   "echoes": 363
+   "kaiku_parts": 0.4261,
+   "echoes": 376
   },
   {
    "demos": 16,
-   "plain": 0.1354,
+   "plain": 0.0035,
    "plain_runs": [
-    0.1771,
-    0.1979,
-    0.0312
+    0.0,
+    0.0104,
+    0.0
    ],
-   "plain_parts": 0.3802,
-   "kaiku": 0.8611,
+   "plain_parts": 0.0748,
+   "kaiku": 0.8091,
    "kaiku_runs": [
-    0.875,
-    0.8542,
-    0.8542
-   ],
-   "kaiku_parts": 0.8883,
-   "echoes": 735
-  },
-  {
-   "demos": 32,
-   "plain": 0.7569,
-   "plain_runs": [
-    0.8229,
-    0.6979,
-    0.75
-   ],
-   "plain_parts": 0.8585,
-   "kaiku": 0.9618,
-   "kaiku_runs": [
-    0.9583,
-    0.9583,
-    0.9688
-   ],
-   "kaiku_parts": 0.9811,
-   "echoes": 1483
-  },
-  {
-   "demos": 44,
-   "plain": 0.7986,
-   "plain_runs": [
-    0.7604,
+    0.7917,
     0.8438,
     0.7917
    ],
-   "plain_parts": 0.8793,
-   "kaiku": 0.9826,
+   "kaiku_parts": 0.7937,
+   "echoes": 751
+  },
+  {
+   "demos": 32,
+   "plain": 0.5798,
+   "plain_runs": [
+    0.3958,
+    0.6354,
+    0.7083
+   ],
+   "plain_parts": 0.7306,
+   "kaiku": 0.9514,
    "kaiku_runs": [
+    0.9583,
+    0.9688,
+    0.9271
+   ],
+   "kaiku_parts": 0.9568,
+   "echoes": 1498
+  },
+  {
+   "demos": 64,
+   "plain": 0.8264,
+   "plain_runs": [
+    0.75,
+    0.8646,
+    0.8646
+   ],
+   "plain_parts": 0.8883,
+   "kaiku": 0.9827,
+   "kaiku_runs": [
+    0.9792,
     1.0,
+    0.9688
+   ],
+   "kaiku_parts": 0.9892,
+   "echoes": 2981
+  },
+  {
+   "demos": 128,
+   "plain": 0.9236,
+   "plain_runs": [
+    0.9062,
+    0.9167,
+    0.9479
+   ],
+   "plain_parts": 0.9631,
+   "kaiku": 0.9896,
+   "kaiku_runs": [
+    0.9792,
     0.9896,
-    0.9583
+    1.0
    ],
    "kaiku_parts": 0.9937,
-   "echoes": 2043
+   "echoes": 5920
   }
  ]
 }
