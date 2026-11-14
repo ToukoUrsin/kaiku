@@ -16,14 +16,28 @@ The same operator, the same model, the same training, the same test. The only di
 |---:|---:|---:|
 | 4 | 0% | 23% |
 | 8 | 0% | 36% |
-| 16 | 0% | 81% |
+| 16 | 0.35% (0%, 1.04%, 0%) | 81% |
 | 32 | 58% | 95% |
 | 64 | 83% | 98% |
 | 128 | 92% | 99% |
 
-From 16 demonstrations a policy sorts nothing on its own and 81% of new scenes with echoes. 32 demonstrations with echoes beat 128 without, so the operator wears the gloves a quarter of the time.
+For the original fixed 16-demo set, the three plain runs averaged 0.35% (0%, 1.04%, 0%) and the echo runs averaged 81%. Other 16-demo sets varied much more: the live page recorded 31%, 0%, 23% and 0% alone. The old single-set “0%” headline was therefore too strong. 32 demonstrations with echoes beat 128 without, so the operator wears the gloves a quarter of the time.
 
 Each number is the mean of 3 training runs, each tested on 96 scenes neither policy had seen. A scene counts only when every part rests in its own bin and the safety filter clipped no command. The numbers are in [`study.json`](kaiku/policy/pretrained/study.json) and all 48 runs, with every count behind them, in [`study_runs.jsonl`](kaiku/policy/pretrained/study_runs.jsonl). The Train button in the demo repeats the comparison on the last 16 demonstrations of the session while you watch.
+
+## Against MimicGen, and how sure the numbers are
+
+MimicGen's published recipe splits a demonstration into object-centred pieces, moves each piece into the new object's pose, joins pieces, executes the result, and keeps only clean runs. We implemented that rule in [`baseline.py`](kaiku/policy/baseline.py), using the same inverse kinematics, shaping, safety filter and MuJoCo verdict as Kaiku. The carry and drop pieces use the bin frame. DexMimicGen's extra coordination subtasks do not arise here because the two hands never hold one part together.
+
+The requested full 32 lead scenes × 47 tables and five 16-demo policy sets are not complete in this checkout. The host was overloaded and Modal was over its spend limit, so we ran the fast geometry tests and one lead × three-table simulator smoke test instead. All three smoke attempts were rejected as clean demonstrations (0/3, 0%); each took 33.4 seconds. That is a generator smoke measurement, not a claim about the full baseline. The complete audit record, including the older policy runs that must not be mixed into this comparison, is [`baselines.json`](kaiku/policy/pretrained/baselines.json).
+
+| source | clean demonstrations | attempts | yield | when it can run |
+|---|---:|---:|---:|---|
+| Kaiku echo recording | 13,092 saved | denominator not recorded | — | live, while the operator drives |
+| MimicGen re-implementation smoke | 0 | 3 | 0% | after the lead episode |
+| copy | not run | — | — | after the lead episode |
+
+Kaiku can follow a part that slides and show a failing table while the operator is still driving because the anchors are live. The offline baseline cannot provide that timing. We do not claim a policy advantage from the smoke result, and no matched MimicGen policy number is reported until the requested Fly run is completed. These are our simulator results and our re-implementation, not the MimicGen or DexMimicGen code, datasets or benchmarks.
 
 ## What is new
 
