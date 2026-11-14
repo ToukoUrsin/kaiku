@@ -7,8 +7,9 @@ const LEFT = 36, RIGHT = 306, TOP = 10, BOTTOM = 168;
 /**
  * @param {SVGSVGElement} svg
  * @param {{demos: number, plain: number, kaiku: number}[]} curve  success as 0..1; empty draws the bare axes
+ * @param {number} [mark]  demonstrations to mark: the gap between the two lines there is labelled
  */
-export function drawChart(svg, curve) {
+export function drawChart(svg, curve, mark) {
   svg.replaceChildren();
   const points = curve.filter((p) => Number.isFinite(p?.demos)).sort((a, b) => a.demos - b.demos);
 
@@ -26,6 +27,16 @@ export function drawChart(svg, curve) {
     svg.append(node('text', { x: xOf(i), y: BOTTOM + 14, 'text-anchor': 'middle' }, String(p.demos)));
   });
 
+  // the gap that matters, marked where it is widest
+  const at = points.findIndex((p) => p.demos === mark);
+  const marked = points[at];
+  if (marked && Number.isFinite(marked.kaiku) && Number.isFinite(marked.plain)) {
+    const x = xOf(at);
+    svg.append(node('line', { class: 'gap', x1: x, x2: x, y1: yOf(marked.plain), y2: yOf(marked.kaiku) }));
+    svg.append(node('text', { class: 'gap-kaiku', x: x - 8, y: yOf(marked.kaiku) - 6, 'text-anchor': 'end' }, `${Math.round(marked.kaiku * 100)}%`));
+    svg.append(node('text', { class: 'gap-plain', x: x - 8, y: yOf(marked.plain) - 6, 'text-anchor': 'end' }, `${Math.round(marked.plain * 100)}%`));
+  }
+
   for (const series of ['plain', 'kaiku']) {
     const path = points
       .map((p, i) => (Number.isFinite(p[series]) ? `${i === 0 ? 'M' : 'L'}${xOf(i).toFixed(1)} ${yOf(p[series]).toFixed(1)}` : ''))
@@ -34,7 +45,7 @@ export function drawChart(svg, curve) {
     if (path.trim()) svg.append(node('path', { class: `series series-${series}`, d: path }));
     points.forEach((p, i) => {
       if (!Number.isFinite(p[series])) return;
-      const dot = node('circle', { class: `dot-${series}`, cx: xOf(i), cy: yOf(p[series]), r: 2.6 });
+      const dot = node('circle', { class: `dot-${series}`, cx: xOf(i), cy: yOf(p[series]), r: i === at ? 3.6 : 2.6 });
       dot.append(node('title', {}, `${p.demos} demonstrations: ${Math.round(p[series] * 100)}%`));
       svg.append(dot);
     });

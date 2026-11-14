@@ -205,6 +205,7 @@ export class Hud {
 
   setHud(hud) {
     this.hud = hud || {};
+    if (!('ready' in this.app.dataset)) this.app.dataset.ready = '';
     this.renderTopbar();
     this.renderStory();
     this.renderOperator();
@@ -289,9 +290,11 @@ export class Hud {
     const who = operator.source === 'autopilot'
       ? 'Autopilot drives one robot.'
       : operator.source === 'gloves' ? 'One operator in Smartgloves II.' : 'Stand-in operator in emulated Smartgloves II.';
+    // ?clean=1 keeps the film's caption as it was; the page adds where the runs go
     this.text('caption', alone
       ? `Nobody is driving. A policy trained on the demonstrations sorts ${robots} scenes it has never seen.`
-      : `${who} ${robots} robots repeat every motion, each in its own scene.`);
+      : `${who} ${robots} robots repeat every motion, each in its own scene.`
+        + (this.flags.clean ? '' : ' The clean runs train a policy.'));
   }
 
   renderOperator() {
@@ -449,17 +452,18 @@ export class Hud {
     const key = `${state}:${curve.length}:${curve[curve.length - 1]?.kaiku}`;
     if (key !== this.chartKey) {
       this.chartKey = key;
-      drawChart(this.el.chart, curve);
-      this.show('chart-empty', curve.length === 0);
-      const best = curve[curve.length - 1];
-      this.text('policy-kaiku', Number.isFinite(best?.kaiku) ? percent(best.kaiku) : '');
-      this.text('policy-plain', Number.isFinite(best?.plain) ? percent(best.plain) : '');
       // the point where the echoes change the most
       let widest = null;
       for (const point of curve) {
         if (!Number.isFinite(point.kaiku) || !Number.isFinite(point.plain)) continue;
         if (!widest || point.kaiku - point.plain > widest.kaiku - widest.plain) widest = point;
       }
+      drawChart(this.el.chart, curve, widest?.demos);
+      this.show('chart-empty', curve.length === 0);
+      const best = curve[curve.length - 1];
+      const at = Number.isFinite(best?.demos) && curve.length > 1 ? ` at ${best.demos}` : '';
+      this.text('policy-kaiku', Number.isFinite(best?.kaiku) ? `${percent(best.kaiku)}${at}` : '');
+      this.text('policy-plain', Number.isFinite(best?.plain) ? `${percent(best.plain)}${at}` : '');
       this.show('finding', Boolean(widest));
       if (widest) {
         // ... and the fewest demonstrations that, echoed, beat the most the operator gave alone

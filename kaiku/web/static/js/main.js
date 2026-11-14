@@ -166,6 +166,7 @@ async function boot() {
   const tag = { x: 0, y: 0, visible: false };
   let last = performance.now();
   let ripple = 0;
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)');     // no rings for those who asked
 
   function frame(now) {
     requestAnimationFrame(frame);
@@ -185,7 +186,7 @@ async function boot() {
     markers.update(stream.state, lag, seconds, dt);
 
     // the echo rings run while motion is flowing and rest when it is not
-    ripple += ((flowing && running && !alone ? 1 : 0) - ripple) * (1 - Math.exp(-dt * 3));
+    ripple += ((flowing && running && !alone && !still.matches ? 1 : 0) - ripple) * (1 - Math.exp(-dt * 3));
     stage.ring.uRipple.value = ripple;
 
     stage.aimShadow(rig.target(target), rig.distance);

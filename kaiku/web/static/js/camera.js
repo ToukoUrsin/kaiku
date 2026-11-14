@@ -32,8 +32,8 @@ export class CameraRig {
     this.shots = {
       lead: { target: [0.25, 0.0, 0.38], azimuth: -30 * DEG, polar: 76 * DEG, frame: [2.1, 1.9] },
       overview: {
-        target: [-0.42 * depth, 0, 0.3 + 0.05 * depth], azimuth: -16 * DEG, polar: 58 * DEG,
-        frame: [width * 1.02 + 1.2, depth * 0.62 + 3.4],
+        target: [-0.5 * depth, 0, 0.45 + 0.05 * depth], azimuth: -12 * DEG, polar: 64 * DEG,
+        frame: [width * 0.95 + 1.0, depth * 0.5 + 2.6],
       },
       top: { target: [-0.5 * depth + 0.4, 0, 0], azimuth: 0, polar: MIN_POLAR, frame: [width + 2.8, depth + 3.6] },
     };

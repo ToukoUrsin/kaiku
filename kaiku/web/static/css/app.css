@@ -788,6 +788,15 @@ kbd {
   display: none;
 }
 
+/* until the runner has said anything, the panel holds placeholders: keep them quiet */
+.panes {
+  transition: opacity var(--medium) ease-out;
+}
+
+.app:not([data-ready]) .panes {
+  opacity: 0.45;
+}
+
 .tabs {
   display: flex;
   gap: var(--s-1);
@@ -1211,6 +1220,27 @@ kbd {
   fill: var(--text-3);
 }
 
+.chart .gap {
+  stroke: var(--ok);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.7;
+}
+
+.chart .gap-kaiku,
+.chart .gap-plain {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.chart .gap-kaiku {
+  fill: var(--ok);
+}
+
+.chart .gap-plain {
+  fill: var(--text-2);
+}
+
 .chart-empty {
   position: absolute;
   inset: 0 0 28px 36px;
@@ -1340,6 +1370,27 @@ kbd {
 
 .app[data-clean] .view {
   cursor: default;
+}
+
+/* ---------------------------------------------------------------- laptop, wide: say what this is */
+
+@media (min-width: 1180px) {
+  .app:not([data-clean]) .caption {
+    display: block;
+    right: auto;
+    left: var(--s-6);
+    bottom: var(--s-6);
+    max-width: 380px;
+    color: var(--text-3);
+    font-size: var(--t-12);
+    text-align: left;
+    text-wrap: pretty;
+    pointer-events: none;
+  }
+
+  .app:not([data-clean]) .story {
+    bottom: calc(var(--s-6) + 52px);
+  }
 }
 
 /* ---------------------------------------------------------------- laptop, short */
