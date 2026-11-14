@@ -1,0 +1,139 @@
+{
+ "about": {
+  "date": "2026-11-14",
+  "scenes": 96,
+  "runs": 3,
+  "steps": 30000,
+  "operator": "stand-in (emulated Smartgloves II)",
+  "measure": "share of 96 scenes nobody had seen in which every part ended in its own bin and the safety filter clipped nothing",
+  "how": "tools/modal_policy.py --humans 1,2,4,8,16,32,64 --seeds 0,1,2 --steps 30000"
+ },
+ "curve": [
+  {
+   "demos": 1,
+   "plain": 0.0,
+   "plain_runs": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "plain_parts": 0.0,
+   "kaiku": 0.0035,
+   "kaiku_runs": [
+    0.0,
+    0.0,
+    0.0104
+   ],
+   "kaiku_parts": 0.0072,
+   "echoes": 47
+  },
+  {
+   "demos": 2,
+   "plain": 0.0,
+   "plain_runs": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "plain_parts": 0.0,
+   "kaiku": 0.0139,
+   "kaiku_runs": [
+    0.0104,
+    0.0104,
+    0.0208
+   ],
+   "kaiku_parts": 0.045,
+   "echoes": 94
+  },
+  {
+   "demos": 4,
+   "plain": 0.0,
+   "plain_runs": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "plain_parts": 0.0,
+   "kaiku": 0.1111,
+   "kaiku_runs": [
+    0.1042,
+    0.125,
+    0.1042
+   ],
+   "kaiku_parts": 0.2297,
+   "echoes": 188
+  },
+  {
+   "demos": 8,
+   "plain": 0.0,
+   "plain_runs": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "plain_parts": 0.0369,
+   "kaiku": 0.5173,
+   "kaiku_runs": [
+    0.5729,
+    0.5729,
+    0.4062
+   ],
+   "kaiku_parts": 0.6622,
+   "echoes": 363
+  },
+  {
+   "demos": 16,
+   "plain": 0.1354,
+   "plain_runs": [
+    0.1771,
+    0.1979,
+    0.0312
+   ],
+   "plain_parts": 0.3802,
+   "kaiku": 0.8611,
+   "kaiku_runs": [
+    0.875,
+    0.8542,
+    0.8542
+   ],
+   "kaiku_parts": 0.8883,
+   "echoes": 735
+  },
+  {
+   "demos": 32,
+   "plain": 0.7569,
+   "plain_runs": [
+    0.8229,
+    0.6979,
+    0.75
+   ],
+   "plain_parts": 0.8585,
+   "kaiku": 0.9618,
+   "kaiku_runs": [
+    0.9583,
+    0.9583,
+    0.9688
+   ],
+   "kaiku_parts": 0.9811,
+   "echoes": 1483
+  },
+  {
+   "demos": 44,
+   "plain": 0.7986,
+   "plain_runs": [
+    0.7604,
+    0.8438,
+    0.7917
+   ],
+   "plain_parts": 0.8793,
+   "kaiku": 0.9826,
+   "kaiku_runs": [
+    1.0,
+    0.9896,
+    0.9583
+   ],
+   "kaiku_parts": 0.9937,
+   "echoes": 2043
+  }
+ ]
+}

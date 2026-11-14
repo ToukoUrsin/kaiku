@@ -117,8 +117,9 @@ class Runner:
         from kaiku.policy.model import Policy             # torch: only when there is a policy to run
         from kaiku.policy.rollout import Pilot
         policy = Policy.load(path)
-        plain = path.with_name("plain.pt")
-        return policy, Pilot(self.s, policy), (Policy.load(plain).info if plain.exists() else {})
+        plain = path.with_name("plain.pt")       # trained beside it on the operator's demonstrations alone
+        other = Policy.load(plain).info if plain.exists() else {"success": policy.info.get("plain_success")}
+        return policy, Pilot(self.s, policy), other
 
     def _ready(self) -> bool:
         """The next scene has been drawn (and, for the policy, the policy is in)."""
