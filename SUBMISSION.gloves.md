@@ -24,7 +24,7 @@ Redoing demonstrations in new scenes is known from MimicGen and DexMimicGen, whe
 
 ## How we used Modal
 
-The policy study and the matched comparison were trained and tested on Modal. Each run got a container of its own with a T4 and 16 cores: the policy trains on the GPU and is then rolled out on the cores, over scenes it had not seen. That is 48 runs for the study (8 demonstration counts, with and without echoes, 3 seeds each) plus the comparison against our MimicGen-style replay. The camera export of the dataset runs on a Modal GPU, and the demonstrations sit on a Modal Volume.
+The policy study and the matched comparison were trained and tested on Modal. Each run got a container of its own with a T4 and 16 cores: the policy trains on the GPU and is then rolled out on the cores, over scenes it had not seen. That is 48 runs for the study (8 demonstration counts, with and without echoes, 3 seeds each) plus the comparison against our MimicGen-style replay. The Train button on the live page trains its two policies on Modal while you watch, about four minutes from the click to the result. The camera export of the dataset runs on a Modal GPU, and the demonstrations sit on a Modal Volume.
 
 ## Deck line
 

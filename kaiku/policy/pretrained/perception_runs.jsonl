@@ -1,0 +1,4 @@
+{"after_fix": false, "arm": "simulator", "clipped_commands": 0, "clipped_scenes": 0, "parts": 370, "run": "perception_simulator_100", "scenes": 96, "seed": 100, "sorted": 370, "success": 96}
+{"after_fix": false, "arm": "camera-clean", "clipped_commands": 0, "clipped_scenes": 0, "parts": 370, "run": "perception_camera_clean_100", "scenes": 96, "seed": 100, "sorted": 19, "success": 0}
+{"after_fix": false, "arm": "camera-noisy", "clipped_commands": 0, "clipped_scenes": 0, "parts": 370, "run": "perception_camera_noisy_100_before", "scenes": 96, "seed": 100, "sorted": 21, "success": 0}
+{"after_fix": true, "arm": "camera-noisy", "clipped_commands": 0, "clipped_scenes": 0, "parts": 370, "run": "perception_camera_noisy_100_after", "scenes": 96, "seed": 100, "sorted": 16, "success": 0}
