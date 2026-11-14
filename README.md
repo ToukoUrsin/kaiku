@@ -1,8 +1,8 @@
 # Kaiku
 
-One pair of Rokoko gloves drives 48 robots at once.
+One hand drives 48 robots at once.
 
-Kaiku is Finnish for echo. You sort parts with one Unitree G1 through Smartgloves, and 47 more G1s do the same job at the same moment, each in a scene of its own: the parts lie elsewhere, are turned differently, sometimes have another shape. Physics and the challenge's safety filter check every robot, and the ones that sorted their scene are saved as demonstrations in the challenge's dataset format. A policy trained on them then sorts scenes it has never seen, with nobody driving.
+Kaiku is Finnish for echo. One person's hand sorts parts with one Unitree G1, and 47 more G1s do the same job at the same moment, each in a scene of its own: the parts lie elsewhere, are turned differently, sometimes have another shape. Physics and the challenge's safety filter check every robot, and the ones that sorted their scene are saved as demonstrations in the challenge's dataset format. A policy trained on them then sorts scenes it has never seen, with nobody driving.
 
 **Live demo, nothing to install:** https://kaiku-echo.fly.dev
 
@@ -21,7 +21,7 @@ The same operator, the same model, the same training, the same test. The only di
 | 64 | 83% | 98% |
 | 128 | 92% | 99% |
 
-For the original fixed 16-demo set, the three plain runs averaged 0.35% (0%, 1.04%, 0%) and the echo runs averaged 81%. Other 16-demo sets varied much more: the live page recorded 31%, 0%, 23% and 0% alone. The old single-set “0%” headline was therefore too strong. 32 demonstrations with echoes beat 128 without, so the operator wears the gloves a quarter of the time.
+For the original fixed 16-demo set, the three plain runs averaged 0.35% (0%, 1.04%, 0%) and the echo runs averaged 81%. Other 16-demo sets varied much more: the live page recorded 31%, 0%, 23% and 0% alone. The old single-set “0%” headline was therefore too strong. 32 demonstrations with echoes beat 128 without, so the operator drives a quarter of the time.
 
 Each number is the mean of 3 training runs, each tested on 96 scenes neither policy had seen. A scene counts only when every part rests in its own bin and the safety filter clipped no command. The numbers are in [`study.json`](kaiku/policy/pretrained/study.json) and all 48 runs, with every count behind them, in [`study_runs.jsonl`](kaiku/policy/pretrained/study_runs.jsonl). The Train button in the demo repeats the comparison on the last 16 demonstrations of the session while you watch.
 
@@ -39,13 +39,24 @@ The requested full 32 lead scenes × 47 tables and five 16-demo policy sets are 
 
 Kaiku can follow a part that slides and show a failing table while the operator is still driving because the anchors are live. The offline baseline cannot provide that timing. We do not claim a policy advantage from the smoke result, and no matched MimicGen policy number is reported until the requested Fly run is completed. These are our simulator results and our re-implementation, not the MimicGen or DexMimicGen code, datasets or benchmarks.
 
+## Who drives
+
+Every source goes down one path: a hand solver, retargeting to the Dex3's three fingers, the wrist through arm inverse kinematics. The page always says which one is driving.
+
+- **Your own hand, on the hosted page.** Press Drive it yourself, then Use my hand. Your camera's 21 hand landmarks go down that path and the robot's fingers follow yours. The picture stays in your browser. The grasp is assisted until you press Grasp it myself; then your fingers do it and the robot only turns its wrist and lifts. Without a camera, a pointer works.
+- **One Smartglove.** `--one-glove HOST:12276`. The fingers and the pinch come from the glove and the position from a pointer or a camera. With a Coil Pro the position is the glove's own: hold the hand flat and still for two seconds and the robot's hand goes where yours goes.
+- **A pair of Smartgloves on a Coil Pro.** `--gloves HOST:12276`, both arms.
+- **Nobody.** A scripted hand in emulated Smartgloves II, with tremor and sensor noise, sent through the same socket, solver and retargeting.
+
+Nobody has worn real Smartgloves with Kaiku yet. The glove paths are tested with Rokoko's own driver and hand solver and the driver's emulated Smartgloves II.
+
 ## What is new
 
-Redoing a demonstration around the parts of another scene is known from [MimicGen](https://mimicgen.github.io) and [DexMimicGen](https://dexmimicgen.github.io). There it runs afterwards, on recorded demonstrations. Kaiku does it during teleoperation: the 47 echoes move while the operator moves, from the glove stream itself, so the operator sees at once on which tables the motion works. Every echo passes the challenge's safety filter and physics before it counts, and what is saved is already the challenge's dataset.
+Redoing a demonstration around the parts of another scene is known from [MimicGen](https://mimicgen.github.io) and [DexMimicGen](https://dexmimicgen.github.io). There it runs afterwards, on recorded demonstrations. Kaiku does it during teleoperation: the 47 echoes move while the operator moves, from the operator's hand as it moves, so the operator sees at once on which tables the motion works. Every echo passes the challenge's safety filter and physics before it counts, and what is saved is already the challenge's dataset.
 
 ## How it works
 
-1. **Gloves to robot.** Smartgloves II stream over RGMP (Rokoko's TCP protocol). Kaiku reads the stream, solves both hands, and retargets them to the G1's arms and Dex3 hands: fingers to the three-finger hand, wrists through arm inverse kinematics.
+1. **Hand to robot.** Smartgloves II stream over RGMP (Rokoko's TCP protocol); a camera gives 21 hand landmarks. Kaiku solves the hand from either and retargets it to the G1's arms and Dex3 hands: fingers to the three-finger hand, wrists through arm inverse kinematics.
 2. **Echo.** Copying joint angles only works when every scene is the same. Kaiku copies the motion relative to the things on the table instead. A follower's hand goes where the operator's hand is relative to its own part, using where the parts are right now in both scenes. A follower with further to reach falls a little behind instead of closing its fingers too early.
 3. **Check.** Every command of every robot goes through the challenge's safety filter (arm 1 rad/s, hand 3 rad/s, workspace box, counter keep-out). MuJoCo decides whether the parts really ended in their bins. An echo that drops a part is not saved. Kaiku's filter runs all 48 robots at once, so it is checked against the challenge's own code (unchanged, in `third_party/aaltonomous_safety`): 500 saved demonstrations, 504,817 ticks, went through it with no command changed (`tools/check_safety.py`).
 4. **Dataset.** The recorder writes the challenge's interface: 28 joint targets and 28 joint states at 30 Hz in the pelvis frame. `kaiku.data.export` turns a session into LeRobot v3.0 and GR00T datasets, with the twin's cameras rendered on request.
