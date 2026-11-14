@@ -145,9 +145,9 @@
         </p>
         <p class="story-label" data-ref="demos-label">demonstrations saved</p>
         <dl class="story-stats">
-          <div><dt data-ref="stat1-label">Amplification</dt><dd data-ref="amplification">0</dd></div>
-          <div><dt data-ref="stat2-label">Echo yield</dt><dd data-ref="yield">0%</dd></div>
-          <div><dt data-ref="stat3-label">Per minute</dt><dd data-ref="rate">0</dd></div>
+          <div><dt data-ref="stat1-label">Saved per scene</dt><dd title="Demonstrations saved for each scene the operator did: its own run, and one from every robot that kept up."><span data-ref="amplification">0</span><small data-ref="amplification-of"></small></dd></div>
+          <div><dt data-ref="stat2-label">Echoes that succeed</dt><dd data-ref="yield">0%</dd></div>
+          <div><dt data-ref="stat3-label">Saved per minute</dt><dd data-ref="rate">0</dd></div>
           <div title="Every command of every robot passes the challenge's safety filter. This counts the ones it had to change.">
             <dt>Unsafe commands</dt><dd data-ref="clipped">0</dd>
           </div>
@@ -162,10 +162,16 @@
 
       <div class="veil" data-ref="veil">
         <div class="veil-box">
-          <svg class="icon veil-mark" aria-hidden="true"><use href="#i-mark"/></svg>
+          <svg class="icon veil-mark" viewBox="0 0 20 20" aria-hidden="true">
+            <circle cx="4" cy="10" r="1.7" fill="currentColor" stroke="none"/>
+            <path d="M7.2 6.9a4.4 4.4 0 0 1 0 6.2"/>
+            <path d="M10.3 4.5a7.8 7.8 0 0 1 0 11"/>
+            <path d="M13.4 2.1a11.2 11.2 0 0 1 0 15.8"/>
+          </svg>
           <p class="veil-name">Kaiku</p>
+          <p class="veil-what">One operator drives a simulated robot. The others repeat the job, each on its own table.</p>
           <div class="veil-bar" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" data-ref="veil-bar"><span data-ref="veil-fill"></span></div>
-          <p class="veil-step" data-ref="veil-step">Loading the scene</p>
+          <p class="veil-step"><span data-ref="veil-step">Loading the page</span> <span class="num" data-ref="veil-percent"></span></p>
           <button type="button" class="button veil-retry" data-ref="veil-retry" hidden onclick="location.reload()">Load it again</button>
         </div>
       </div>
@@ -192,16 +198,36 @@
           </button>
 
           <dl class="phone-stats" aria-label="Totals">
-            <div><dt data-ref="stat1-label-2">Amplification</dt><dd data-ref="amplification-2">0</dd></div>
-            <div><dt data-ref="stat2-label-2">Echo yield</dt><dd data-ref="yield-2">0%</dd></div>
+            <div><dt data-ref="stat1-label-2">Per scene</dt><dd><span data-ref="amplification-2">0</span><small data-ref="amplification-2-of"></small></dd></div>
+            <div><dt data-ref="stat2-label-2">Echoes right</dt><dd data-ref="yield-2">0%</dd></div>
             <div><dt data-ref="stat3-label-2">Per minute</dt><dd data-ref="rate-2">0</dd></div>
             <div><dt>Unsafe</dt><dd data-ref="clipped-2">0</dd></div>
           </dl>
 
+          <section class="block compare" data-ref="compare" hidden>
+            <header class="block-head">
+              <h2>The same tables, twice</h2>
+              <span class="dim" data-ref="compare-when"></span>
+            </header>
+            <ul class="bars">
+              <li class="bar">
+                <span class="bar-name">Without Kaiku</span>
+                <b class="num" data-ref="compare-copy"></b>
+                <span class="bar-track"><i data-ref="compare-copy-bar"></i></span>
+              </li>
+              <li class="bar bar-kaiku">
+                <span class="bar-name">With Kaiku</span>
+                <b class="num" data-ref="compare-echo"></b>
+                <span class="bar-track"><i data-ref="compare-echo-bar"></i></span>
+              </li>
+            </ul>
+            <p class="note" data-ref="compare-note"></p>
+          </section>
+
           <section class="block">
             <header class="block-head">
               <h2>Operator</h2>
-              <button type="button" class="button" data-ref="calibrate">Calibrate</button>
+              <button type="button" class="button" data-ref="calibrate" hidden>Calibrate</button>
             </header>
             <p class="source" data-ref="source">
               <span data-ref="source-text">Waiting for the operator</span>
@@ -211,20 +237,7 @@
               <button type="button" class="button button-primary" data-ref="drive-panel">Drive it yourself</button>
               <button type="button" class="button" data-ref="drive-panel-back" hidden>Hand it back</button>
             </div>
-            <dl class="rows">
-              <div class="row">
-                <dt>Left glove</dt>
-                <dd><span class="state-dot" data-ref="left-dot"></span><span data-ref="left-status">No signal</span><span class="num" data-ref="left-hz"></span></dd>
-              </div>
-              <div class="row">
-                <dt>Right glove</dt>
-                <dd><span class="state-dot" data-ref="right-dot"></span><span data-ref="right-status">No signal</span><span class="num" data-ref="right-hz"></span></dd>
-              </div>
-              <div class="row">
-                <dt>Calibration</dt>
-                <dd><span data-ref="calibrated">Not calibrated</span></dd>
-              </div>
-            </dl>
+            <dl class="rows" data-ref="operator-rows"></dl>
           </section>
 
           <section class="block">
@@ -247,7 +260,7 @@
             <p class="step-now" data-ref="step-now"></p>
             <div class="history">
               <div class="history-head">
-                <h3>Last scenes</h3>
+                <h3 data-ref="history-title">Last scenes</h3>
                 <span class="dim" data-ref="history-note"></span>
               </div>
               <div class="history-bars" data-ref="history" role="img" aria-label="Echoes that succeeded in each of the last scenes"></div>
@@ -312,10 +325,10 @@
         <div class="pane" role="tabpanel" id="pane-policy" aria-labelledby="tab-policy" data-pane="policy" hidden>
           <section class="block">
             <header class="block-head">
-              <h2>What the echoes are worth</h2>
+              <h2>The study: what the echoes are worth</h2>
               <span class="badge" data-ref="policy-badge" hidden>Sample data</span>
             </header>
-            <p class="lede">Two policies from the same sessions: one sees only the operator's demonstrations, one also sees the echoes.</p>
+            <p class="lede">Two policies from the same demonstrations: one sees only the operator's, one also sees the echoes.</p>
             <figure class="chart">
               <svg data-ref="chart" viewBox="0 0 320 196" role="img" aria-label="Sorting success against the number of operator demonstrations"></svg>
               <figcaption class="chart-empty" data-ref="chart-empty">
@@ -330,31 +343,43 @@
             <p class="finding" data-ref="finding" hidden></p>
             <p class="note" data-ref="study-note" hidden></p>
           </section>
+          <section class="block" data-ref="baselines" hidden>
+            <header class="block-head">
+              <h2 data-ref="baselines-title">Against replayed demonstrations</h2>
+            </header>
+            <p class="lede" data-ref="baselines-lede"></p>
+            <ul class="bars" data-ref="baselines-bars"></ul>
+            <p class="note" data-ref="baselines-note"></p>
+          </section>
           <section class="block" data-ref="policy-now" hidden>
             <header class="block-head">
-              <h2>The policy in this session</h2>
+              <h2>The policy driving here</h2>
               <button type="button" class="button button-primary" data-ref="drive">Let it drive</button>
             </header>
             <p class="lede" data-ref="drive-note"></p>
             <dl class="rows">
+              <div class="row"><dt>From</dt><dd data-ref="policy-origin"></dd></div>
               <div class="row"><dt>Trained on</dt><dd data-ref="policy-data"></dd></div>
-              <div class="row"><dt>In testing</dt><dd data-ref="policy-test"></dd></div>
-              <div class="row"><dt>Same operator, no echoes</dt><dd class="num" data-ref="policy-alone"></dd></div>
-              <div class="row"><dt>On its own here</dt><dd data-ref="policy-here"></dd></div>
+              <div class="row"><dt>Its own test</dt><dd data-ref="policy-test"></dd></div>
+              <div class="row"><dt>Same test, no echoes</dt><dd data-ref="policy-alone"></dd></div>
+              <div class="row"><dt>Driving here</dt><dd data-ref="policy-here"></dd></div>
             </dl>
+            <p class="note" data-ref="policy-which" hidden></p>
           </section>
           <section class="block">
             <header class="block-head">
-              <h2>Rerun the comparison</h2>
+              <h2>Train on this session</h2>
               <button type="button" class="button" data-ref="train">Train both</button>
             </header>
             <p class="lede" data-ref="train-note">Nothing is training.</p>
             <div class="meter" data-ref="train-meter" hidden><span data-ref="train-fill"></span></div>
+            <p class="note" data-ref="train-last" hidden></p>
           </section>
         </div>
       </div>
 
       <footer class="controls">
+        <p class="held" data-ref="held" role="status" hidden></p>
         <button type="button" class="button" data-ref="pause">
           <svg class="icon" aria-hidden="true"><use href="#i-pause" data-ref="pause-icon"/></svg>
           <span data-ref="pause-text">Pause</span>
