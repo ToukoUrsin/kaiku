@@ -53,6 +53,27 @@ COPY_EVERY_S = 30.0                               # everybody shares the page: t
 HERE = Path(__file__).resolve().parents[1]
 PRETRAINED = HERE / "policy" / "pretrained" / "kaiku.pt"
 STUDY = HERE / "policy" / "pretrained" / "study.json"
+BASELINES = HERE / "policy" / "pretrained" / "baselines.json"
+BASELINE_ARMS = ("plain", "mimicgen", "kaiku")      # what the page compares: the 16 alone, a replay's survivors, the echoes
+
+
+def baselines(path: Path = BASELINES) -> dict | None:
+    """The measured comparison with a MimicGen-style replay, cut down to what the page shows.
+    Read from the file the measurement wrote: no number of it lives in the page."""
+    try:
+        b = json.loads(Path(path).read_text())
+        policy, arms = b["policy"], {}
+        for name in BASELINE_ARMS:
+            a = policy["arms"][name]
+            arms[name] = {"clean": int(a["clean"]), "scenes": int(a["scenes"]), "yield": round(float(a["yield"]), 4),
+                          "interval95": [round(float(v), 4) for v in a["interval95"]],
+                          "low": round(float(a["min_yield"]), 4), "high": round(float(a["max_yield"]), 4)}
+        made = {name: {"clean": int(g["clean"]), "attempts": int(g["attempts"])}
+                for name, g in b.get("generation", {}).items() if name in ("mimicgen", "kaiku")}
+        return {"arms": arms, "tables": int(policy["heldout_scenes"]), "runs": int(policy["seeds_per_arm"]),
+                "demos": int(b["generation"]["kaiku"]["source_scenes"]), "made": made}
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
 
 
 def _has(module: str) -> bool:
@@ -98,6 +119,8 @@ class Runner:
         self.replaying = False                                 # this scene is that second half
         self.copy_at = 0.0                                     # when the last comparison ended
         self.compare: dict | None = None                       # what it came to: without the echo, and with it
+        self.scene_no = 1                                      # the number of the scene on the tables now
+        self.scene_end: str | None = None                      # how it ended: "sorted", "cut" (nobody's result), or not yet
         self.lead = None                                       # kaiku.app.g1.Lead while a challenge runner follows
         self.mode = mode if mode in ("gloves", "autopilot") else "gloves"
         self.want_mode = mode if mode in MODES else "gloves"
@@ -142,6 +165,8 @@ class Runner:
         self.pol = {"rounds": 0, "scenes": 0, "ok": 0, "parts": 0, "sorted": 0, "clipped": 0}
         self.trained: dict | None = None                       # what the last press of Train came to
         self.study = json.loads(STUDY.read_text()) if STUDY.exists() else {}
+        self.baselines = baselines()
+        self.policy_path: Path | None = None                   # the file the policy that drives came from
         out = Path(record) / "policies" if record else None
         self.trainer = Trainer(record, out or "policies", train, train_steps, about_min=train_about)
         try:                                                   # the last result outlives a restart
@@ -193,7 +218,7 @@ class Runner:
         policy = Policy.load(path)
         plain = path.with_name("plain.pt")       # trained beside it on the operator's demonstrations alone
         other = Policy.load(plain).info if plain.exists() else {"success": policy.info.get("plain_success")}
-        return policy, Pilot(self.s, policy), other
+        return policy, Pilot(self.s, policy), other, path
 
     def _ready(self) -> bool:
         """The next scene has been drawn (and, for the policy, the policy is in)."""
@@ -203,6 +228,7 @@ class Runner:
 
     def _begin_episode(self) -> None:
         self._visitor_expired = False
+        self.scene_end = None
         if self.want_mode != self.mode:
             self.mode = self.want_mode
             if self.mode != "policy":
@@ -217,6 +243,7 @@ class Runner:
             self.states[:] = RUNNING
             self.sorted[:] = 0
             self.last_gain = 0
+            self.scene_no = self.pol["rounds"] + 1
             self.phase = "run"
             return
         if self.mode == "visitor":                             # a visitor's turn is not the comparison
@@ -246,6 +273,9 @@ class Runner:
         self.states[0] = LEAD
         self.sorted[:] = 0
         self.done_ticks[:] = 0
+        # The scene's number is given when it starts and kept until the next one starts: the count of
+        # finished scenes moves on the moment one ends, while its result is still what the page shows.
+        self.scene_no = self.tot["episodes"] + 1
         self.phase = "run"
 
     def _end_visitor_turn(self, reason: str = "") -> None:
@@ -325,6 +355,7 @@ class Runner:
                    "info")
         self.copy_at = time.monotonic()
         self.rec.begin()
+        self.scene_end = "cut"                                 # a comparison, not a scene of the session
         self.phase = "hold"
         self.hold_until = time.perf_counter() + self.hold_s + 3.0     # long enough to read the red tables
 
@@ -341,6 +372,7 @@ class Runner:
             self.again, self.replaying = None, False
             self.rec.begin()
             self.states[1:] = IDLE
+            self.scene_end = "cut"                             # the page must not say it was sorted
             self.phase = "hold"
             self.hold_until = time.perf_counter() + self.hold_s
             return
@@ -362,6 +394,7 @@ class Runner:
             if self.target_scenes and t["human"] >= self.target_scenes:
                 self.toast(f"You have {t['human']} of {self.target_scenes} clean scenes. You can stop with Ctrl-C.", "ok")
                 self.stop = True
+        self.scene_end = "sorted"
         self.phase = "hold"
         self.hold_until = time.perf_counter() + self.hold_s
         if self.replaying and self.compare is not None:        # the comparison's second half: the same tables, echoed
@@ -389,6 +422,7 @@ class Runner:
             self.history.append({"episode": p["rounds"], "parts": int(self.want.sum()), "ok": int(clean.sum()),
                                  "robots": self.n, "lead_ok": None, "saved": 0, "policy": True,
                                  "seconds": round(s.tick_no * DT, 1)})
+        self.scene_end = "sorted" if count else "cut"
         self.phase = "hold"
         self.hold_until = time.perf_counter() + self.hold_s + 1.0
 
@@ -418,14 +452,16 @@ class Runner:
         elif not self.rec.demos:
             self.toast("Nothing to train on yet. Let a few scenes finish first.", "warn")
         elif self.trainer.start():
+            about = self.trainer.about_min
             self.toast(f"Training two policies on the last {self.trainer.last} demonstrations: one with their "
-                       "echoes, one without.", "info")
+                       "echoes, one without."
+                       + (f" It takes about {about:.0f} minutes on this machine." if about and about >= 1.5 else ""), "info")
 
     def _policy_news(self) -> None:
         """Pick up a policy that has finished loading, and a training run that has ended."""
         if self.loading is not None and self.loading.done():
             try:
-                self.policy, self.pilot, self.plain = self.loading.result()
+                self.policy, self.pilot, self.plain, self.policy_path = self.loading.result()
                 if self.next_free is None:
                     self.next_free = self.sampler.free(self.parts)
             except Exception as e:                            # a file from another version, a missing torch
@@ -444,6 +480,7 @@ class Runner:
                 keep = new + 0.02 >= old
                 self.trained = {"kaiku": new, "plain": p.get("success", 0.0), "humans": k.get("humans"),
                                 "demos": k.get("demos"), "scenes": k.get("scenes"), "in_use": keep,
+                                "minutes": round(st["took_s"] / 60.0, 1) if st.get("took_s") else None,
                                 "at": round(time.time(), 1)}
                 try:
                     (self.trainer.out / "last.json").write_text(json.dumps(self.trained))
@@ -620,6 +657,20 @@ class Runner:
             self.states[1:] = np.where(s.safety.aborted[1:], FAILED, st)
         self.states[0] = LEAD
 
+    def _drive(self, operator: dict) -> str:
+        """What moves the lead robot right now, as one word the page turns into its own. It is read from
+        what is driving, never from what could be: a pointer is not a glove, a stand-in is not a person."""
+        if self.mode == "policy":
+            return "policy"
+        if self.mode == "autopilot":
+            return "autopilot"
+        if self.mode == "visitor":
+            fingers, position = operator.get("fingers"), operator.get("input")
+            if fingers == "glove":
+                return "glove-coil" if position == "coil" else f"glove-{'camera' if position == 'camera' else 'pointer'}"
+            return "camera" if fingers == "camera" or position == "camera" else "pointer"
+        return str(operator.get("source") or "stand-in")       # stand-in, gloves, emulated, recorded, emulated-recorded
+
     def hud(self) -> dict:
         s, t = self.s, self.tot
         alone = self.mode == "policy"
@@ -636,8 +687,10 @@ class Runner:
         operator = self.op.hud() if (isinstance(self.op, (GloveOperator, ReplayOperator)) or self.mode == "visitor") and not alone else \
             {"left": {"connected": False, "hz": 0.0}, "right": {"connected": False, "hz": 0.0},
              "calibrated": False, "stand_in": not alone, "source": "policy" if alone else "autopilot", "hands": None}
+        operator["drive"] = self._drive(operator)
         if self.driver_client is not None:                     # whose turn it is, and how long it still lasts
             operator["driver"] = self.driver_client
+            operator["starting"] = self.mode != "visitor"      # asked for, and the tables are still being laid
             if not self.glove_fingers:
                 operator["turn_left_s"] = round(max(0.0, TURN_S - (time.monotonic() - self.turn_started)))
         return {
@@ -647,13 +700,15 @@ class Runner:
             "operator": operator,
             # The comparison: is the echo off in this scene, may it be asked for, what the last one came to.
             "copy": {"on": bool(s.copy), "next": self.copy_next, "again": self.replaying, "over": self.phase == "hold",
+                     "busy": self.comparing,                    # other buttons are held until it has finished
                      "free": self.mode in ("gloves", "autopilot") and self.want_mode == self.mode,
                      "last": self.compare and dict(self.compare, age_s=round(time.time() - self.compare.get(
                          "done", self.compare["at"])))},
-            "episode": {"index": self.pol["rounds"] + 1, "parts": int(self.want.sum()), "sorted": int(self.sorted.sum()),
-                        "elapsed_s": round(s.tick_no * DT, 1), "step": "Policy"} if alone else
-            {"index": t["episodes"] + 1, "parts": parts, "sorted": int(self.sorted[0]),
-             "elapsed_s": round(s.tick_no * DT, 1), "step": self.op.label, "target": self.target_scenes},
+            "episode": {"index": self.scene_no, "parts": int(self.want.sum()), "sorted": int(self.sorted.sum()),
+                        "elapsed_s": round(s.tick_no * DT, 1), "step": "Policy", "end": self.scene_end} if alone else
+            {"index": self.scene_no, "parts": parts, "sorted": int(self.sorted[0]),
+             "elapsed_s": round(s.tick_no * DT, 1), "step": self.op.label, "target": self.target_scenes,
+             "end": self.scene_end},
             "echo": {"robots": self.n, "done": int((self.states != RUNNING).sum()),
                      "ok": int((self.states == SUCCESS).sum()), "failed": int((self.states == FAILED).sum()),
                      "lag_s": 0.0, "lag_max_s": 0.0} if alone else
@@ -703,6 +758,10 @@ class Runner:
                "success": info.get("success"), "plain": self.plain.get("success"),
                "humans": info.get("humans"), "demos": info.get("demos"), "tested_on": info.get("scenes"),
                "curve": self.study.get("curve", []), "study": self.study.get("about"), "trained": self.trained,
+               "baselines": self.baselines,
+               # Which policy this is: the one shipped with Kaiku, or the one Train made in this session.
+               "origin": None if self.policy is None else "session" if self.policy_path == self.trainer.out / "kaiku.pt"
+               else "shipped" if self.policy_path == PRETRAINED else "file",
                "error": st.get("error") if st["state"] == "failed" else None,
                "alone": {"rounds": p["rounds"], "scenes": p["scenes"], "ok": p["ok"], "parts": p["parts"],
                          "sorted": p["sorted"], "clipped": p["clipped"]}}

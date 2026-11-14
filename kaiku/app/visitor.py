@@ -484,7 +484,8 @@ class VisitorOperator:
         if self.posture is not None:
             middle, index = closure_of_posture(self.posture)
             closure = {"index": round(float(np.clip(index, 0.0, 1.0)), 2), "middle": round(float(np.clip(middle, 0.0, 1.0)), 2)}
-        return {"calibrated": True, "source": self.source, "stand_in": False, "driving": True, "hands": hands,
+        # No glove rows here: a pointer or a camera is not a glove, and the page must not say it is.
+        return {"source": self.source, "stand_in": False, "driving": True, "hands": hands,
                 # Where each part of the command comes from, for the page to say.
                 "fingers": self.fingers, "own": bool(self.own and self.fingers is not None), "gap_mm": gap,
                 # How far the person's own index and middle finger close the robot's, 0 open to 1 closed.
@@ -495,7 +496,5 @@ class VisitorOperator:
                 "holding": self.held >= 0 and self.phase in ("carry", "release"),
                 "over": self._bin_at(self.command),
                 "want": self.held_bin if held else None,            # the bin the part in the hand belongs in
-                "table": self._table(),
-                "left": {"connected": True, "hz": 30.0, "status": "tracking"},
-                "right": {"connected": True, "hz": 30.0, "status": "tracking"}}
+                "table": self._table()}
 
