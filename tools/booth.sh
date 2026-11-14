@@ -5,6 +5,7 @@
 #   tools/booth.sh start [--emulated one|two] start Rokoko's driver, the hand solver and the recorders
 #   tools/booth.sh status                     which gloves stream, at what rate, with a Coil Pro or not
 #   tools/booth.sh stop                       stop, then pull the session to /bulk3/runs/robotteleop/sessions/
+#   tools/booth.sh check [SESSION]            how the recorded fingers came through: closes counted, fist, flat hand
 set -u
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 MAC="${KAIKU_MAC:-macbook}"
@@ -22,6 +23,11 @@ case "${1:-}" in
     "${SSH[@]}" "bash ~/kaiku/tools/booth_mac.sh stop" || exit 1
     mkdir -p "$OUT"
     rsync -az "$MAC:kaiku-sessions/" "$OUT/" && echo "pulled to $OUT" && ls -dt "$OUT"/booth-* | head -1
+    "$0" check
     ;;
-  *) echo "usage: tools/booth.sh sync | start [--emulated one|two] | status | stop"; exit 2 ;;
+  check)                                       # what the newest recording says about the hand that was in the glove
+    S="${2:-$(ls -dt "$OUT"/booth-* | head -1)}"
+    (cd "$HERE" && MUJOCO_GL=egl nice -n 10 .venv/bin/python tools/booth_check.py "$S" --speed 4 | grep '"said"')
+    ;;
+  *) echo "usage: tools/booth.sh sync | start [--emulated one|two] | status | stop | check [SESSION]"; exit 2 ;;
 esac
