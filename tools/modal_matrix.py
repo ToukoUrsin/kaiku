@@ -45,7 +45,7 @@ def job(cfg: dict) -> dict:
     t0 = time.time()
     log = lambda m: print(f"[{cfg['arm']} s{cfg['seed']}] {m}", flush=True)      # noqa: E731
     loader = Loader()
-    pairs = loader.load(f"/data/baseline/{cfg['tag']}/{cfg['arm']}", max_episodes=None, echoes=cfg["arm"] != "plain")
+    pairs = loader.load(f"/data/baseline/{cfg['tag']}/{cfg['arm']}", max_episodes=None, echoes=cfg["arm"] != "plain", orphans=True)
     if cfg["arm"] == "plain":
         pairs = pairs.pick(np.unique(pairs.episode), echoes=False)
     policy = train(pairs, loader.feat, steps=cfg["steps"], seed=cfg["seed"], threads=16, log=log)

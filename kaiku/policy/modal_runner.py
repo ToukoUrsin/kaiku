@@ -7,6 +7,7 @@ heartbeats as the normal ``KAIKU {json}`` trainer messages.
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import queue
 import sys
@@ -29,6 +30,8 @@ def main(argv=None) -> int:
     ap.add_argument("--app", default="kaiku-policy")
     ap.add_argument("--function", default="fit_remote_stream")
     ap.add_argument("--volume", default="kaiku-demos")
+    ap.add_argument("--upload", action="store_true",
+                    help="the demonstrations are on this machine, not on the volume: send the latest ones first")
     a = ap.parse_args(argv)
 
     try:
@@ -37,28 +40,68 @@ def main(argv=None) -> int:
         say(stage="error", text=f"Modal client unavailable: {exc}")
         return 1
 
-    # The recorder writes to this mounted volume.  A commit is required before a remote
-    # container can reload the latest episode and npz files.
+    run_id = f"live_{int(time.time() * 1000)}_{threading.get_native_id()}"
+    data, sent = a.data, None
     try:
         volume = modal.Volume.from_name(a.volume)
-        volume.commit()
+        if a.upload:
+            # The demo runs somewhere else: the scenes both policies will use go to the volume, under
+            # a folder of this run's own, which is removed again when the run is over.
+            names, rows = latest(Path(a.data), a.last)
+            if not names:
+                say(stage="error", text="No finished demonstrations to train on yet.")
+                return 1
+            for which in ("kaiku", "plain"):
+                say(which=which, stage="loading", progress=0.0)
+            sent = f"/sent/{run_id}"
+            with volume.batch_upload(force=True) as up:
+                for name in names:
+                    up.put_file(Path(a.data) / name, f"{sent}/{name}")
+                up.put_file(io.BytesIO(("\n".join(json.dumps(r) for r in rows) + "\n").encode()), f"{sent}/episodes.jsonl")
+            data = f"/data{sent}"
+        else:
+            # The recorder writes to this mounted volume.  A commit is required before a remote
+            # container can reload the latest episode and npz files.
+            volume.commit()
     except Exception as exc:
-        say(stage="error", text=f"Could not commit demonstrations: {exc}")
+        say(stage="error", text=f"Could not send the demonstrations: {repr(exc)[:300]}")
         return 1
 
+    try:
+        return train(a, modal, data, run_id)
+    finally:
+        if sent:
+            try:
+                volume.remove_file(sent, recursive=True)
+            except Exception:
+                pass
+
+
+def latest(root: Path, last: int) -> tuple[list[str], list[dict]]:
+    """The files of the operator's latest ``last`` sorted scenes, as the loader picks them, and their rows."""
+    by_file: dict[str, list[dict]] = {}
+    for line in (root / "episodes.jsonl").read_text().splitlines():
+        if line.strip():
+            row = json.loads(line)
+            by_file.setdefault(row["file"], []).append(row)
+    names = [n for n in sorted(by_file) if any(r["source"] == "human" for r in by_file[n]) and (root / n).exists()]
+    names = names[-last:] if last else names
+    return names, [r for n in names for r in by_file[n]]
+
+
+def train(a, modal, data: str, run_id: str) -> int:
     fn = modal.Function.from_name(a.app, a.function)
-    run_id = f"live_{int(time.time() * 1000)}_{threading.get_native_id()}"
     cfgs = {
         which: {
             "which": which,
             "name": f"{run_id}_{which}",
-            "data": a.data,
+            "data": data,
             "steps": a.steps,
             "scenes": a.scenes,
             "last": a.last,
             # rollout uses this value for MuJoCo's batch worker pool; each remote job has
-            # its own 32-CPU container.
-            "threads": 32,
+            # its own 16-CPU container.
+            "threads": 16, "rollout_threads": 16,
         }
         for which in ("kaiku", "plain")
     }

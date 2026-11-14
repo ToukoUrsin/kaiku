@@ -452,10 +452,10 @@ class Runner:
         elif not self.rec.demos:
             self.toast("Nothing to train on yet. Let a few scenes finish first.", "warn")
         elif self.trainer.start():
-            about = self.trainer.about_min
+            about, where = self.trainer.about, "on rented GPUs" if self.trainer.rented else "on this machine"
             self.toast(f"Training two policies on the last {self.trainer.last} demonstrations: one with their "
                        "echoes, one without."
-                       + (f" It takes about {about:.0f} minutes on this machine." if about and about >= 1.5 else ""), "info")
+                       + (f" It takes about {about:.0f} minutes {where}." if about and about >= 1.5 else ""), "info")
 
     def _policy_news(self) -> None:
         """Pick up a policy that has finished loading, and a training run that has ended."""
@@ -767,7 +767,8 @@ class Runner:
                          "sorted": p["sorted"], "clipped": p["clipped"]}}
         if self.trained:                                       # the page says a result out loud while it is news
             out["trained"] = dict(self.trained, age_s=round(time.time() - self.trained["at"], 1))
-        out["about_min"] = self.trainer.about_min
+        out["rented"] = self.trainer.rented                     # where the next run (or the one in hand) trains
+        out["about_min"] = self.trainer.rented_min if out["rented"] else self.trainer.about_min
         if st["state"] == "training":
             out.update(state="training", progress=st["progress"], stage=st["stage"], loss=st["loss"],
                        eta_s=st.get("eta_s"), last=self.trainer.last)

@@ -19,7 +19,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WHICH = ("kaiku", "plain")
-SMOOTH_S = 45.0               # how slowly the time left may change its mind
+SMOOTH_S = 45.0                      # how slowly the time left may change its mind
+MODAL_ABOUT_MIN = 4.0                # what a run on rented GPUs takes, start to result
+MODAL_RUNS = int(os.environ.get("KAIKU_MODAL_RUNS", "40"))     # rented runs a demo may start; after that it trains here
 
 
 class Trainer:
@@ -30,14 +32,18 @@ class Trainer:
         self.backend, self.steps, self.scenes = backend, steps, scenes
         self.last = last                     # the operator's latest episodes: few enough that the echoes decide it
         self.clock = time.monotonic          # a test hands in its own
-        # What the page may say a run takes here: what somebody measured (--train-about), or else what
-        # the last run on this machine took.
+        # What the page may say a run takes: what somebody measured (--train-about), or else what the
+        # last run took. This machine and rented GPUs are timed apart: one is six times the other.
         self.about_min = about_min
-        if about_min is None:
-            try:
-                self.about_min = float(json.loads((self.out / "timing.json").read_text())["minutes"])
-            except (OSError, ValueError, KeyError, TypeError):
-                pass
+        self.rented_min = MODAL_ABOUT_MIN
+        try:
+            timed = json.loads((self.out / "timing.json").read_text())
+            if about_min is None and timed.get("minutes"):
+                self.about_min = float(timed["minutes"])
+            if timed.get("rented_minutes"):
+                self.rented_min = float(timed["rented_minutes"])
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
         self.started = 0.0                   # when the run began
         self.total_s: float | None = None    # how long the whole run looks like taking
         self.total_at = 0.0                  # ... as of when
@@ -48,26 +54,64 @@ class Trainer:
         self.error: str | None = None
         self.finished = False                # the run has ended, well or badly
         self.fresh = False                   # ... and nobody has picked its result up yet
+        self.using = backend                 # where the run in hand trains: a rented run that fails is done again here
+        self.closed = False
 
     @property
     def busy(self) -> bool:
         return self.proc is not None and self.proc.poll() is None
 
+    @property
+    def _count(self) -> Path:
+        return (self.data or self.out) / ".modal_runs"
+
+    def _rented_left(self) -> int:
+        try:
+            return MODAL_RUNS - int(self._count.read_text().strip() or 0)
+        except (OSError, ValueError):
+            return MODAL_RUNS
+
+    @property
+    def rented(self) -> bool:
+        """Whether the next run (or the one in hand) trains on rented GPUs rather than on this machine."""
+        if self.busy or (self.jobs and not self.finished):
+            return self.using == "modal"
+        return self.backend == "modal" and self._rented_left() > 0
+
+    @property
+    def about(self) -> float | None:
+        """Minutes the next run (or the one in hand) takes, for the page to say."""
+        return self.rented_min if self.rented else self.about_min
+
     def start(self) -> bool:
-        if self.busy or self.data is None:
+        if self.busy or self.data is None or (self.jobs and not self.finished):
             return False
         self.out.mkdir(parents=True, exist_ok=True)
+        self.using = "modal" if self.backend == "modal" and self._rented_left() > 0 else "local"
+        if self.using == "modal":
+            try:
+                self._count.write_text(str(MODAL_RUNS - self._rented_left() + 1))
+            except OSError:
+                pass
+        self._launch()
+        return True
+
+    def _cmd(self) -> list[str]:
         common = [str(self.data), "--out", str(self.out), "--steps", str(self.steps), "--scenes", str(self.scenes),
                   "--last", str(self.last)]
-        if self.backend == "modal":
-            # The live image has the Modal client.  Calling the deployed function from a process
-            # inside the container avoids a second ``modal run`` app and lets the runner stream
-            # generator events while both jobs execute.
-            cmd = [sys.executable, "-u", "-m", "kaiku.policy.modal_runner", *common]
+        if self.using == "modal":
+            # The two policies train on rented GPUs, in parallel. In a Modal container the
+            # demonstrations are on the volume already; anywhere else they are sent there first.
+            cmd = [sys.executable, "-u", "-m", "kaiku.policy.modal_runner", *common,
+                   *([] if os.environ.get("MODAL_TASK_ID") or os.environ.get("MODAL_IS_REMOTE") else ["--upload"])]
         else:
             # Below the live demo in the queue for the processor, and on a share of the cores.
             cmd = [*(["nice", "-n", "10"] if shutil.which("nice") else []), sys.executable, "-u", "-m",
                    "kaiku.policy.fit", *common, "--threads", str(max(2, (os.cpu_count() or 4) // 4))]
+        return cmd
+
+    def _launch(self) -> None:
+        cmd = self._cmd()
         with self.lock:
             self.jobs = {w: {"stage": "loading", "progress": 0.0} for w in WHICH}
             self.error, self.finished, self.fresh = None, False, False
@@ -75,7 +119,6 @@ class Trainer:
         self.proc = subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                                      start_new_session=True)
         threading.Thread(target=self._read, args=(self.proc,), daemon=True, name="kaiku-trainer").start()
-        return True
 
     def _read(self, proc: subprocess.Popen) -> None:
         last = ""
@@ -97,6 +140,13 @@ class Trainer:
         code = proc.wait()
         with self.lock:
             done = all(j.get("stage") == "done" for j in self.jobs.values())
+            rented_failed = not done and self.using == "modal" and not self.closed
+        if rented_failed:                    # no credit, no network, no GPU to rent: the same run, here
+            print(f"kaiku trainer: the rented run failed ({self.error or last[-160:] or code}); training here", flush=True)
+            self.using = "local"
+            self._launch()
+            return
+        with self.lock:
             if not done and self.error is None:
                 self.error = f"Training stopped ({last[-160:] or f'exit code {code}'})."
             if done and self.error is None:
@@ -104,25 +154,32 @@ class Trainer:
             self.finished = self.fresh = True
 
     def _measured(self, seconds: float) -> None:
-        """A whole run took this long here: the next visitor is told so before pressing Train."""
+        """A whole run took this long where it ran: the next visitor is told so before pressing Train."""
         self.took_s = seconds
-        self.about_min = round(seconds / 60.0, 1)
+        if seconds < 30.0:                   # nothing trains that fast: not a time to promise anybody
+            return
+        if self.using == "modal":
+            self.rented_min = round(seconds / 60.0, 1)
+        else:
+            self.about_min = round(seconds / 60.0, 1)
         try:
-            (self.out / "timing.json").write_text(json.dumps({"minutes": self.about_min, "steps": self.steps,
-                                                               "backend": self.backend}))
+            (self.out / "timing.json").write_text(json.dumps({"minutes": self.about_min, "rented_minutes": self.rented_min,
+                                                               "steps": self.steps}))
         except OSError:
             pass
 
     def _left(self, progress: float) -> float | None:
         """Seconds still to go, or None while there is nothing honest to say.
 
-        The whole run is taken to last what was measured here before, and the further it gets the more
+        The whole run is taken to last what was measured before where it runs (this machine, or rented
+        GPUs), and the further it gets the more
         its own pace counts instead: elapsed time over the share done. That never jumps the way the
         pace of the last minute does (reading files, training and testing each go at their own). What
         is said then changes its mind slowly, so the time left drifts and does not leap."""
         now = self.clock()
         elapsed = now - self.started
-        prior = self.about_min * 60.0 if self.about_min else None
+        about = self.rented_min if self.using == "modal" else self.about_min
+        prior = about * 60.0 if about else None
         if progress >= 0.05 and elapsed >= 20.0:
             own = elapsed / progress
             if prior is None:
@@ -160,6 +217,7 @@ class Trainer:
                 "progress": round(progress, 4), "jobs": jobs}
 
     def close(self) -> None:
+        self.closed = True
         if self.busy:
             try:
                 os.killpg(self.proc.pid, signal.SIGTERM)       # its own process group, nobody else's

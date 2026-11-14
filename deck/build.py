@@ -15,6 +15,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 STUDY = HERE.parent / "kaiku" / "policy" / "pretrained" / "study.json"
+BASELINES = HERE.parent / "kaiku" / "policy" / "pretrained" / "baselines.json"
 DEMO = "kaiku-echo.fly.dev"
 SOURCE = "github.com/ToukoUrsin/kaiku"
 W, H = 1920, 1080
@@ -44,7 +45,19 @@ WORDS["one-glove"] = {**WORDS["gloves"], "title": "One Rokoko glove,<br>48 robot
 
 
 def pct(share: float) -> str:
-    return f"{round(share * 100)}%"
+    return "under 1%" if 0 < share < 0.01 else f"{round(share * 100)}%"
+
+
+def bars(base: dict) -> str:
+    """The matched comparison: one bar for each thing the same policy was trained on."""
+    arms = base["policy"]["arms"]
+    rows = [("The 16 demonstrations alone", arms["plain"], ""),
+            (f"+ the {base['generation']['mimicgen']['clean']} a MimicGen-style replay kept", arms["mimicgen"], ""),
+            (f"+ the {base['generation']['kaiku']['clean']} Kaiku's echo kept", arms["kaiku"], " kaiku")]
+    return '<div class="bars">' + "".join(
+        f'<div class="bar"><span class="what">{name}</span><span class="track"><i class="fill{kind}" '
+        f'style="width:{100 * arm["yield"]:.1f}%"></i></span><b>{pct(arm["yield"])}</b></div>'
+        for name, arm, kind in rows) + "</div>"
 
 
 def chart(curve: list[dict]) -> str:
@@ -82,7 +95,8 @@ def chart(curve: list[dict]) -> str:
     return "\n".join(out)
 
 
-def slides(study: dict, words: dict) -> list[str]:
+def slides(study: dict, words: dict, base: dict) -> list[str]:
+    gen, arms = base["generation"], base["policy"]["arms"]
     curve = [p for p in study["curve"] if p["demos"] >= 2]
     by = {p["demos"]: p for p in study["curve"]}
     about = study["about"]
@@ -117,7 +131,14 @@ def slides(study: dict, words: dict) -> list[str]:
   <h2>16 demonstrations: {pct(by[16]["plain"])} alone, {pct(by[16]["kaiku"])} with echoes.</h2>
   <p class="lede">32 with echoes beat 128 without. {words["quarter"]}</p>
   {chart(curve)}
-  <p class="note">Share of {about["scenes"]} scenes nobody had seen in which every part ended in its own bin. Mean of {about["runs"]} training runs.</p>
+  <p class="note">Share of {about["scenes"]} scenes nobody had seen in which every part ended in its own bin. Mean of {about["runs"]} training runs. Other sets of 16 gave 0% to 31% alone.</p>
+</section>""",
+        f"""<section class="slide figure">
+  <p class="kicker">Against redoing it afterwards, from recordings</p>
+  <h2>Same 16 demonstrations: {pct(arms["mimicgen"]["yield"])} or {pct(arms["kaiku"]["yield"])}.</h2>
+  <p class="lede">On the same {gen["kaiku"]["attempts"]} new tables a MimicGen-style replay kept {gen["mimicgen"]["clean"]} clean demonstrations. Kaiku's echo kept {gen["kaiku"]["clean"]}.</p>
+  {bars(base)}
+  <p class="note">Share of {arms["kaiku"]["heldout_scenes"]} held-out tables a policy sorted, {arms["kaiku"]["n"]} training runs each, same model and steps. The replay is our own implementation, not MimicGen's code.</p>
 </section>""",
         f"""<section class="slide picture" style="background-image:linear-gradient(180deg,#0c0d10e6 0%,#0c0d1099 16%,#0c0d1000 30%),url(img/policy.jpg)">
   <div class="caption">
@@ -183,6 +204,14 @@ h2 { font-size: 76px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 6
 .chart .value { font-size: 44px; font-weight: 600; fill: #f4f5f7; letter-spacing: -0.02em; }
 .chart .name { font-size: 28px; font-weight: 500; fill: #f4f5f7; }
 .chart .quiet { fill: #9a9da6; }
+.bars { margin-top: 84px; max-width: 1620px; }
+.bar { display: grid; grid-template-columns: 640px 1fr 150px; align-items: center; gap: 36px; padding: 26px 0; border-top: 1px solid #ffffff1f; }
+.bar .what { font-size: 34px; color: #b3b7c0; }
+.bar .track { height: 28px; }
+.bar .fill { display: block; height: 28px; min-width: 6px; border-radius: 0 4px 4px 0; background: #9a9da6; }
+.bar .fill.kaiku { background: oklch(0.82 0.17 152); }
+.bar b { font-size: 48px; font-weight: 600; letter-spacing: -0.02em; text-align: right; }
+.figure .kicker { margin-bottom: 24px; }
 .note { position: absolute; left: 150px; bottom: 60px; font-size: 22px; color: #9a9da6; margin: 0; }
 .link { font-size: 64px; letter-spacing: -0.025em; }
 """
@@ -191,7 +220,7 @@ h2 { font-size: 76px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 6
 def build(variant: str = "none") -> Path:
     study = json.loads(STUDY.read_text())
     html = ("<!doctype html><html lang=en><meta charset=utf-8><title>Kaiku</title>"
-            f"<style>{CSS}</style><body>\n" + "\n".join(slides(study, WORDS[variant])) + "\n</body></html>\n")
+            f"<style>{CSS}</style><body>\n" + "\n".join(slides(study, WORDS[variant], json.loads(BASELINES.read_text()))) + "\n</body></html>\n")
     page = HERE / ("kaiku.html" if variant == "none" else f"kaiku-{variant}.html")
     page.write_text(html)
     return page

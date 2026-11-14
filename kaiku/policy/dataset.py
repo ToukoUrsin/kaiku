@@ -132,7 +132,7 @@ class Loader:
 
     def load(self, root: Path | str, max_episodes: int | None = None, stride: int = 1, log=None,
              echoes: bool = True, progress=None, workers: int | None = None, skip: int = 0,
-             last: int | None = None, context: str = "spawn") -> Pairs:
+             last: int | None = None, context: str = "spawn", orphans: bool = False) -> Pairs:
         """Every demonstration in a recorder folder (of its first ``max_episodes`` operator
         episodes that the operator's own robot completed). Without ``echoes``, the operator's
         own demonstrations only; ``skip`` leaves out that many of the earliest episodes, and
@@ -144,12 +144,10 @@ class Loader:
         for r in rows_of(root):
             by_file.setdefault(r["file"], []).append(r)
         # The operator's own run failed: nothing to compare against. A file still being written: next time.
-        # A generated survivor may be stored in a recorder file with no human row
-        # (the offline baseline batches target tables separately).  Include those
-        # files when echoes are requested; the plain arm still selects human rows
-        # below and therefore keeps its original definition.
+        # ``orphans`` takes files with no operator's row too: the offline baseline stores what a
+        # generator kept in files of their own, beside the demonstrations they were made from.
         names = [n for n in sorted(by_file)
-                 if (echoes or any(r["source"] == "human" for r in by_file[n])) and (root / n).exists()]
+                 if ((orphans and echoes) or any(r["source"] == "human" for r in by_file[n])) and (root / n).exists()]
         names = names[skip:][:max_episodes]
         if last:
             names = names[-last:]
