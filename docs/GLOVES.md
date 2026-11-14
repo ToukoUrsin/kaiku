@@ -59,7 +59,7 @@ Rokoko's driver can emit two still, emulated gloves. With the SDK installed, run
 
 ```bash
 rkk-hand-solver --emit world --driver-arg=--pipeline-source --driver-arg=default-emulated \
-  --driver-arg=--emulated-devices --driver-arg=rig.json
+  --driver-arg=--emulated-devices --driver-arg=docs/emulated-rig.json
 python -m kaiku.app.gloves --check
 ```
 
