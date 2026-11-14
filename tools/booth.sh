@@ -12,15 +12,27 @@ MAC="${KAIKU_MAC:-macbook}"
 OUT=/bulk3/runs/robotteleop/sessions
 SSH=(ssh -o ConnectTimeout=10 "$MAC")
 
+# The Mac drops a connection now and then: a dropped one (ssh's own 255) is tried again, twice.
+mac() {
+  local n=0 rc
+  until "${SSH[@]}" "$@"; do
+    rc=$?
+    [ "$rc" -ne 255 ] && return "$rc"
+    n=$((n + 1))
+    [ "$n" -ge 3 ] && return 255
+    sleep 2
+  done
+}
+
 case "${1:-}" in
   sync)
     rsync -az --exclude .venv --exclude .git --exclude ref --exclude __pycache__ --exclude '*.egg-info' \
       --exclude .pytest_cache --exclude MORNING.md "$HERE/" "$MAC:kaiku/" && echo "synced to $MAC:~/kaiku"
     ;;
-  start) "${SSH[@]}" "bash ~/kaiku/tools/booth_mac.sh start ${2:-} ${3:-}" ;;
-  status) "${SSH[@]}" "bash ~/kaiku/tools/booth_mac.sh status" ;;
+  start) mac "bash ~/kaiku/tools/booth_mac.sh start ${2:-} ${3:-}" ;;
+  status) mac "bash ~/kaiku/tools/booth_mac.sh status" ;;
   stop)
-    "${SSH[@]}" "bash ~/kaiku/tools/booth_mac.sh stop" || exit 1
+    mac "bash ~/kaiku/tools/booth_mac.sh stop" || exit 1
     mkdir -p "$OUT"
     rsync -az "$MAC:kaiku-sessions/" "$OUT/" && echo "pulled to $OUT" && ls -d "$OUT"/booth-* | sort | tail -1
     "$0" check
