@@ -197,13 +197,15 @@ def test_rented_gpus_and_this_machine_are_timed_apart(tmp_path):
     trainer.clock = clock
     assert trainer.rented and trainer.about == trainer_module.MODAL_ABOUT_MIN
     trainer.using, trainer.started = "modal", clock()
-    trainer._measured(300.0)                                   # the rented run took five minutes
-    assert trainer.about == 5.0 and trainer.about_min == 25.0
+    trainer._measured(300.0)                                   # a rented run on warm machines: five minutes
+    assert trainer.about == trainer_module.MODAL_ABOUT_MIN and trainer.about_min == 25.0   # the slowest still holds
+    trainer._measured(390.0)                                   # and a slower one
+    assert trainer.about == 6.5 and trainer.about_min == 25.0
     trainer._measured(2.0)                                     # a run that did nothing is not a measurement
-    assert trainer.about == 5.0
+    assert trainer.about == 6.5
 
     # Rented, the time left starts from the rented minutes; done again here, from this machine's.
-    for using, total in (("modal", 300.0), ("local", 1500.0)):
+    for using, total in (("modal", 390.0), ("local", 1500.0)):
         trainer.using = using
         said = _run(trainer, clock, [(1.0, total)], about=25.0)
         assert abs(said[0][2] - (total - 10.0)) <= 30.0, (using, said[0])
