@@ -1,0 +1,44 @@
+{
+  "perception": {
+    "camera": "head_rgb",
+    "resolution": [320, 240],
+    "parts": 200,
+    "clean": {
+      "position_error_mm_mean": 4.12,
+      "position_error_mm_p95": 15.87,
+      "yaw_error_deg_mean_symmetry_aware": 20.89,
+      "shape_accuracy": 0.89,
+      "colour_accuracy": 1.0
+    },
+    "depth_noise": {
+      "depth_noise_mm": 3.0,
+      "edge_noise_px": 1.0,
+      "position_error_mm_mean": 5.74,
+      "position_error_mm_p95": 15.35,
+      "yaw_error_deg_mean_symmetry_aware": 17.35,
+      "shape_accuracy": 0.43,
+      "colour_accuracy": 1.0
+    }
+  },
+  "policy": {
+    "seed": 100,
+    "scenes": 96,
+    "robots_at_once": 16,
+    "episodes": 6,
+    "sim_seconds_cap": 1.0,
+    "simulator_state": {
+      "success": 0,
+      "success_rate": 0.0,
+      "parts": 370,
+      "sorted": 0,
+      "parts_rate": 0.0
+    },
+    "camera": {
+      "success": 0,
+      "success_rate": 0.0,
+      "parts": 371,
+      "sorted": 0,
+      "parts_rate": 0.0
+    }
+  }
+}
