@@ -22,11 +22,11 @@ case "${1:-}" in
   stop)
     "${SSH[@]}" "bash ~/kaiku/tools/booth_mac.sh stop" || exit 1
     mkdir -p "$OUT"
-    rsync -az "$MAC:kaiku-sessions/" "$OUT/" && echo "pulled to $OUT" && ls -dt "$OUT"/booth-* | head -1
+    rsync -az "$MAC:kaiku-sessions/" "$OUT/" && echo "pulled to $OUT" && ls -d "$OUT"/booth-* | sort | tail -1
     "$0" check
     ;;
   check)                                       # what the newest recording says about the hand that was in the glove
-    S="${2:-$(ls -dt "$OUT"/booth-* | head -1)}"
+    S="${2:-$(ls -d "$OUT"/booth-* | sort | tail -1)}"
     (cd "$HERE" && MUJOCO_GL=egl nice -n 10 .venv/bin/python tools/booth_check.py "$S" --speed 4 | grep '"said"')
     ;;
   *) echo "usage: tools/booth.sh sync | start [--emulated one|two] | status | stop | check [SESSION]"; exit 2 ;;
