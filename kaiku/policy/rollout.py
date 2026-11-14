@@ -163,19 +163,23 @@ class Pilot:
 def run(policy: Policy, n: int = 48, episodes: int = 2, seed: int = 100, parts: int | None = None,
         max_s: float = 80.0, threads: int | None = None, session: Session | None = None, log=None,
         every: int = EVERY, blend: int = BLEND, progress=None, perception: str | None = None,
-        depth_noise_mm: float = 0.0, edge_noise_px: float = 0.0) -> dict:
+        depth_noise_mm: float = 0.0, edge_noise_px: float = 0.0, layouts: list[Layout] | None = None) -> dict:
     """Roll the policy out on ``n * episodes`` fresh scenes. Returns success rates and counts.
     ``progress(fraction)`` is called twice a second of robot time."""
+    if layouts is not None:
+        if len(layouts) != n * episodes:
+            raise ValueError("layouts must contain exactly n * episodes held-out tables")
     s = session or Session(n, seed=seed, threads=threads)
     rng = np.random.default_rng(seed)
     pilot = Pilot(s, policy, every, blend, perception, depth_noise_mm, edge_noise_px)
     tot = {"scenes": 0, "success": 0, "parts": 0, "sorted": 0, "clean": 0, "clipped": 0, "aborted": 0, "seconds": [],
            "outcomes": {}, "by_parts": {}, "untouched": 0, "in_hand": 0}
     for ep in range(episodes):
-        layouts = [s.sample_lead(parts if parts else int(rng.choice([3, 4, 5], p=[0.35, 0.40, 0.25])), rng)
-                   for _ in range(s.n)]
-        s.free_episode(layouts)
-        pilot.begin(layouts)
+        ep_layouts = (layouts[ep * s.n:(ep + 1) * s.n] if layouts is not None else
+                      [s.sample_lead(parts if parts else int(rng.choice([3, 4, 5], p=[0.35, 0.40, 0.25])), rng)
+                       for _ in range(s.n)])
+        s.free_episode(ep_layouts)
+        pilot.begin(ep_layouts)
         want = pilot.present.sum(axis=1)
         calm = 0
         t0 = time.time()
@@ -217,7 +221,7 @@ def run(policy: Policy, n: int = 48, episodes: int = 2, seed: int = 100, parts: 
             start = pos.copy()
         else:
             start = np.zeros_like(pos)
-            for i, lay in enumerate(layouts):
+            for i, lay in enumerate(ep_layouts):
                 byname = {p.name: p.pos for p in lay.placements}
                 for j in range(int(want[i])):
                     start[i, j] = byname[s.scene.objects[pilot.idx[i, j]].name]

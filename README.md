@@ -25,19 +25,33 @@ For the original fixed 16-demo set, the three plain runs averaged 0.35% (0%, 1.0
 
 Each number is the mean of 3 training runs, each tested on 96 scenes neither policy had seen. A scene counts only when every part rests in its own bin and the safety filter clipped no command. The numbers are in [`study.json`](kaiku/policy/pretrained/study.json) and all 48 runs, with every count behind them, in [`study_runs.jsonl`](kaiku/policy/pretrained/study_runs.jsonl). The Train button in the demo repeats the comparison on the last 16 demonstrations of the session while you watch.
 
-## Against MimicGen, and how sure the numbers are
+## Against MimicGen, and what this measurement says
 
-MimicGen's published recipe splits a demonstration into object-centred pieces, moves each piece into the new object's pose, joins pieces, executes the result, and keeps only clean runs. We implemented that rule in [`baseline.py`](kaiku/policy/baseline.py), using the same inverse kinematics, shaping, safety filter and MuJoCo verdict as Kaiku. The carry and drop pieces use the bin frame. DexMimicGen's extra coordination subtasks do not arise here because the two hands never hold one part together.
+On the same 16 source scenes and the same 47 target tables per scene (752 attempts), the production Echo replay kept 214 clean demonstrations (28.46%, Wilson 95% interval 25.35–31.79%). The MimicGen-style replay kept 5 (0.6648%, 0.284–1.547%), and naive joint copy kept 0 (0%, 0–0.508%). The full attempt JSONL, including every failure, is in [`/bulk3/runs/robotteleop/baseline/measurement`](/bulk3/runs/robotteleop/baseline/measurement); checked-in summaries and the policy runs are in [`baselines.json`](kaiku/policy/pretrained/baselines.json) and [`baseline_runs.jsonl`](kaiku/policy/pretrained/baseline_runs.jsonl).
 
-The requested full 32 lead scenes × 47 tables and five 16-demo policy sets are not complete in this checkout. The host was overloaded and Modal was over its spend limit, so we ran the fast geometry tests and one lead × three-table simulator smoke test instead. All three smoke attempts were rejected as clean demonstrations (0/3, 0%); each took 33.4 seconds. That is a generator smoke measurement, not a claim about the full baseline. The complete audit record, including the older policy runs that must not be mixed into this comparison, is [`baselines.json`](kaiku/policy/pretrained/baselines.json).
+| method | clean / attempts | yield (95% interval) | 3 parts | 4 parts | 5 parts |
+|---|---:|---:|---:|---:|---:|
+| Kaiku Echo replay | 214 / 752 | 28.46% (25.35–31.79%) | 47.52% | 31.38% | 12.34% |
+| MimicGen-style re-implementation | 5 / 752 | 0.6648% (0.284–1.547%) | 2.13% | 0.532% | 0% |
+| naive joint copy | 0 / 752 | 0% (0–0.508%) | 0% | 0% | 0% |
 
-| source | clean demonstrations | attempts | yield | when it can run |
-|---|---:|---:|---:|---|
-| Kaiku echo recording | 13,092 saved | denominator not recorded | — | live, while the operator drives |
-| MimicGen re-implementation smoke | 0 | 3 | 0% | after the lead episode |
-| copy | not run | — | — | after the lead episode |
+The target distribution was intentionally broad: 8 near tables (<5 cm mean object displacement), 107 mid tables (5–10 cm), and 637 far tables (≥10 cm). Echo yields were 50.0%, 36.45% and 26.84%; MimicGen-style yields were 25.0%, 0.9346% and 0.3140%. MimicGen-style is cheaper as an offline batch (1,199 s for the run versus 1,503 s for Echo), but each of its five survivors cost 239.69 s of batch time; Echo cost 7.01 s per clean survivor. This is where Kaiku does not win: the offline generator has lower total wall time, and both methods can succeed on a table close to the source.
 
-Kaiku can follow a part that slides and show a failing table while the operator is still driving because the anchors are live. The offline baseline cannot provide that timing. We do not claim a policy advantage from the smoke result, and no matched MimicGen policy number is reported until the requested Fly run is completed. These are our simulator results and our re-implementation, not the MimicGen or DexMimicGen code, datasets or benchmarks.
+The implementation in [`baseline.py`](kaiku/policy/baseline.py) is ours. It detects reach/grasp and carry/drop segments from measured lift and rest-in-bin times, transforms the hand path in the paired object's XY/yaw frame (with shape symmetry), uses the fixed bin frame for carry/drop, replays open loop through the same IK, shaper, safety filter and MuJoCo, and keeps only clean runs. It does not use MimicGen or DexMimicGen code, their annotations, learned placement or recovery policies, or their benchmarks. DexMimicGen's coordination subtasks do not occur because this task never has two hands holding one part together.
+
+The matched policy matrix used the same 16 human rows, 24 held-out tables, three seeds per arm and 10,000 training steps for every arm. At this CPU budget every arm scored 0/24 clean scenes: 16 alone, 16 plus copy survivors (there were none), 16 plus five MimicGen survivors, 16 plus 214 Echo survivors, and the size-matched five-Echo-survivor arm. Kaiku moved more individual parts in one seed (23.81% part yield) but completed no held-out table. This reduced budget is why the earlier 30,000-step study remains a separate historical reference; it is not mixed into this matched baseline comparison.
+
+| policy arm | training pairs | clean scenes (mean, min–max over 3 seeds) |
+|---|---:|---:|
+| 16 human demos | 16,401 | 0% (0–0%) |
+| + copy survivors | 16,401 | 0% (0–0%) |
+| + MimicGen survivors | 17,180 | 0% (0–0%) |
+| + Kaiku Echo survivors | 226,789 | 0% (0–0%) |
+| + five Echo survivors (size matched) | 21,296 | 0% (0–0%) |
+
+To reproduce the generation numbers, run `python tools/run_baseline_measure.py manifest ...` once and then run it with `--method echo`, `mimicgen` and `copy` against the same manifest. The policy one-liner is `python tools/run_policy_matrix.py DATA OUT --arm ARM --heldout HELDOUT --steps 10000 --seed SEED`; the assembled datasets and held-out manifest used here are under `/bulk3/runs/robotteleop/baseline`.
+
+The three generation sandboxes took 3,449.7 seconds of simulator wall time in total. The 15 final policy seeds used 9,092.2 seconds of measured CPU training time, plus rollout and setup; drun does not expose a metered dollar cost, and no spend was recorded.
 
 ## What is new
 
