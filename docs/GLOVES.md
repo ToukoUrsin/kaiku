@@ -8,24 +8,24 @@ turn), and the Rokoko Device SDK on the machine the gloves are plugged into.
 On the machine with the gloves:
 
 ```bash
-rkk-hand-solver --emit world --driver-arg=--auto-stream-usb
+rkk-hand-solver --emit world
 ```
 
-That starts Rokoko's driver (`rokoko-sdk`, RGMP on port 12276) and Rokoko's own hand solver (port 12277).
-`--auto-stream-usb` matters: without it the driver accepts connections and sends nothing from gloves on USB.
-`--emit world` is what Kaiku reads the fingers from.
+That starts Rokoko's driver (`rokoko-sdk`, RGMP on port 12276, streaming gloves on USB) and Rokoko's own
+hand solver (port 12277). `--emit world` is what Kaiku reads the fingers from.
 
-If the driver is already running, add `--no-driver`.
+If you start the driver yourself, give it `--auto-stream-usb` (without it the driver accepts connections
+and sends nothing from gloves on USB) and add `--no-driver` to the line above.
 
 ## 2. Kaiku
 
-Same machine (a laptop does 16 robots):
+Same machine (an 18-core Apple M5 Pro runs all 48 robots in real time; use `--n 16` on something smaller):
 
 ```bash
-python -m kaiku.app.run --n 16 --gloves 127.0.0.1 --record demos      # then open http://localhost:8651
+python -m kaiku.app.run --gloves 127.0.0.1 --record demos      # then open http://localhost:8651
 ```
 
-Or all 48 robots on a bigger machine, with the gloves' two ports forwarded to it:
+Or Kaiku on another machine, with the gloves' two ports forwarded to it:
 
 ```bash
 ssh -N -L 12276:127.0.0.1:12276 -L 12277:127.0.0.1:12277 GLOVE_MACHINE &

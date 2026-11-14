@@ -41,7 +41,7 @@ python -m venv .venv && .venv/bin/pip install -e ".[policy,export,dev]"
 .venv/bin/python -m kaiku.app.run          # then open http://localhost:8651
 ```
 
-The first run fetches the G1 model from MuJoCo Menagerie (39 MB). 48 robots at 30 Hz want about 32 cores; `--n 8` runs on a laptop.
+The first run fetches the G1 model from MuJoCo Menagerie (39 MB). 48 robots at 30 Hz run in real time on an 18-core Apple M5 Pro; `--n 8` runs on a small laptop.
 
 With Smartgloves, point Kaiku at the machine where the Rokoko driver (Device SDK) runs. It streams RGMP on port 12276:
 
