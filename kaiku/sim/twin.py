@@ -127,7 +127,28 @@ def build_spec(scene: Scene | None = None, with_scene: bool = True) -> mujoco.Mj
     spec.option.impratio = 10.0
     if with_scene:
         _add_scene(spec, scene)
+    _add_cameras(spec)
     return spec
+
+
+def _add_cameras(spec: mujoco.MjSpec) -> None:
+    """Add the three challenge cameras without changing joints, actuators, or physics."""
+    # The head transform is the calibrated optical pose from the challenge bundle. MuJoCo
+    # cameras use x-right, y-up, z-back; optical cameras use x-right, y-down, z-forward.
+    head_r = np.array([[0.0, -0.738455, 0.674302], [-1.0, 0.0, 0.0], [0.0, -0.674302, -0.738455]])
+    head_p = [0.053660, 0.017530, 0.473870]
+    flip = np.diag([1.0, -1.0, -1.0])
+    hx, hy = head_r @ flip[:, 0], head_r @ flip[:, 1]
+    spec.worldbody.add_camera(name="head_rgb", pos=head_p, xyaxes=np.r_[hx, hy], fovy=43.4)
+    # Wrist extrinsics are still marked as defaults in calibration.yaml. These mounts point
+    # back toward the work surface and are kept as child cameras so they follow wrist FK.
+    for side, sy in (("left", 1.0), ("right", -1.0)):
+        body = spec.body(f"{side}_wrist_yaw_link")
+        # The axes are expressed in wrist-link coordinates at the calibrated home pose and
+        # point from each mount toward the centre of the counter. They follow the wrist as it moves.
+        axes = ([-0.696, -0.444, 0.565, 0.716, -0.483, 0.503] if side == "left" else
+                [0.696, -0.444, -0.565, 0.716, 0.483, 0.503])
+        body.add_camera(name=f"{side}_wrist_rgb", pos=[0.08, -0.055 * sy, 0.025], xyaxes=axes, fovy=53.1)
 
 
 def _add_scene(spec: mujoco.MjSpec, sc: Scene) -> None:
