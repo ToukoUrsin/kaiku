@@ -178,6 +178,47 @@ def _load_rows(src: Path, limit: int | None = None) -> list[dict]:
     return rows[:limit] if limit else rows
 
 
+def latest_rows(recorder_dir: str | Path, scenes: int = 1) -> list[dict]:
+    """The rows of the last ``scenes`` scenes a recorder saved, read from the end of its list."""
+    side = Path(recorder_dir) / "episodes.jsonl"
+    if not side.exists():
+        return []
+    with open(side, "rb") as f:
+        f.seek(0, 2)
+        size = f.tell()
+        f.seek(max(0, size - 400_000 * scenes))                       # a scene's rows are about 60 kB
+        tail = f.read().decode("utf-8", "replace").splitlines()
+    if size > 400_000 * scenes:
+        tail = tail[1:]                                               # the first line is cut
+    rows = []
+    for line in tail:
+        try:
+            rows.append(json.loads(line))
+        except ValueError:                                            # a row being written
+            continue
+    files = list(dict.fromkeys(r["file"] for r in rows))[-scenes:]
+    return [r for r in rows if r["file"] in files]
+
+
+def bundle(recorder_dir: str | Path, zip_path: str | Path, *, rows: list[dict] | None = None, scenes: int = 1) -> dict:
+    """One zip with the last scenes as ``lerobot/`` and ``groot/``, for a download."""
+    import tempfile
+    import zipfile
+    rows = rows if rows is not None else latest_rows(recorder_dir, scenes)
+    zip_path = Path(zip_path)
+    zip_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="kaiku-export-") as tmp:
+        out = Path(tmp) / "kaiku-demonstrations"
+        got = export(recorder_dir, out, rows=rows)
+        part = zip_path.with_suffix(".part")
+        with zipfile.ZipFile(part, "w", zipfile.ZIP_DEFLATED, compresslevel=3) as z:
+            for f in sorted(out.rglob("*")):
+                if f.is_file():
+                    z.write(f, f.relative_to(tmp))
+        part.replace(zip_path)
+    return {"episodes": got["episodes"], "frames": got["frames"], "zip": zip_path, "bytes": zip_path.stat().st_size}
+
+
 def _prepare_episode(src: Path, row: dict):
     z = np.load(src / row["file"])
     k = int(row.get("row", 0))
@@ -211,10 +252,13 @@ written without the optional `lerobot` package. Depth is {depth_note}
 
 def export(recorder_dir: str | Path, out_dir: str | Path, *, limit: int | None = None,
            render_cameras: bool = False, include_depth: bool = False, overwrite: bool = False,
-           operator_first: bool = False) -> dict:
-    """Write ``out_dir/groot`` and ``out_dir/lerobot`` and return episode/frame counts."""
+           operator_first: bool = False, rows: list[dict] | None = None) -> dict:
+    """Write ``out_dir/groot`` and ``out_dir/lerobot`` and return episode/frame counts.
+
+    ``rows`` are the recorder rows to write; without them, all of ``episodes.jsonl`` (up to ``limit``)."""
     src, out = Path(recorder_dir), Path(out_dir)
-    rows = _load_rows(src, None if operator_first else limit)
+    if rows is None:
+        rows = _load_rows(src, None if operator_first else limit)
     if operator_first:
         rows = sorted(rows, key=lambda row: (row.get("source") != "human", int(row.get("demo", 0))))
         if limit:

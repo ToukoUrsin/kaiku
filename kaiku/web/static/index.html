@@ -236,14 +236,21 @@
               <h2>Recording</h2>
               <button type="button" class="switch" role="switch" aria-checked="false" data-ref="record" aria-label="Save demonstrations"><span></span></button>
             </header>
-            <p class="lede" data-ref="record-note">Every robot that sorts its whole scene without a clipped command is saved as one demonstration.</p>
+            <p class="lede" data-ref="record-note">Every robot that sorts its whole scene with no unsafe command is saved as one demonstration.</p>
             <dl class="figures">
               <div><dt>Demonstrations</dt><dd data-ref="ds-episodes">0</dd></div>
               <div><dt>Frames</dt><dd data-ref="ds-frames">0</dd></div>
               <div><dt>Robot time</dt><dd data-ref="ds-time">0 min</dd></div>
             </dl>
           </section>
-          <section class="block">
+          <section class="block" data-ref="ds-get" hidden>
+            <header class="block-head">
+              <h2>The last scene</h2>
+              <a class="button" href="/api/dataset.zip" download data-ref="ds-download">Download</a>
+            </header>
+            <p class="lede">One demonstration from every robot that sorted it, as LeRobot v3.0 and GR00T. About 30 MB.</p>
+          </section>
+          <section class="block" data-ref="ds-where">
             <header class="block-head"><h2>Saved to</h2></header>
             <div class="path">
               <code data-ref="ds-path">Not recording to disk</code>

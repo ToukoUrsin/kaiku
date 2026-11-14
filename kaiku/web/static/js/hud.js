@@ -223,6 +223,23 @@ export class Hud {
     this.renderControls();
     this.renderBanner();
     this.renderFocus();
+    this.renderResult();
+  }
+
+  /** A Train run that just ended is said once over the scene, where everybody looks. */
+  renderResult() {
+    const trained = this.hud.policy?.trained;
+    if (!trained || !(trained.age_s < 20) || this.resultSaid === trained.at || 'opening' in this.app.dataset) return;
+    this.resultSaid = trained.at;
+    const line = this.el.opening;
+    line.textContent = `Trained on ${trained.humans || 0} demonstrations.\n${percent(trained.plain)} alone, ${percent(trained.kaiku)} with echoes.`;
+    line.setAttribute('data-show', '');
+    this.app.dataset.saying = '';                                     // the tools and the banner make room
+    clearTimeout(this.resultTimer);
+    this.resultTimer = setTimeout(() => {
+      line.removeAttribute('data-show');
+      delete this.app.dataset.saying;
+    }, 9000);
   }
 
   renderTopbar() {
@@ -448,12 +465,14 @@ export class Hud {
     this.attr('record', 'aria-checked', String(recording));
     this.attr('record', 'disabled', Boolean(this.hud.shared));       // one session for everybody: it stays on
     this.text('record-note', recording
-      ? 'Every robot that sorts its whole scene without a clipped command is saved as one demonstration.'
+      ? 'Every robot that sorts its whole scene with no unsafe command is saved as one demonstration.'
       : 'Recording is off. Robots still sort, and nothing is written to disk.');
     this.text('ds-episodes', count(dataset.episodes || 0));
     this.text('ds-frames', count(dataset.frames || 0));
     const minutes = (dataset.frames || 0) / 30 / 60;
     this.text('ds-time', minutes >= 90 ? `${(minutes / 60).toFixed(1)} h` : `${Math.round(minutes)} min`);
+    this.show('ds-get', Boolean(dataset.download));
+    this.show('ds-where', !this.hud.shared);                          // a path on the server says nothing to a visitor
     this.text('ds-path', dataset.path || 'Not recording to disk');
     this.show('ds-copy', Boolean(dataset.path));
   }

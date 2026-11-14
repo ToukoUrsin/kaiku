@@ -20,6 +20,8 @@ import json
 import queue
 import signal
 import sys
+import tempfile
+import threading
 import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
@@ -44,6 +46,11 @@ MODES = ("gloves", "autopilot", "policy")
 HERE = Path(__file__).resolve().parents[1]
 PRETRAINED = HERE / "policy" / "pretrained" / "kaiku.pt"
 STUDY = HERE / "policy" / "pretrained" / "study.json"
+
+
+def _has(module: str) -> bool:
+    from importlib.util import find_spec
+    return find_spec(module) is not None
 
 
 class Runner:
@@ -76,6 +83,10 @@ class Runner:
         self.rec = Recorder(self.s, record, operator=self._who())
         self.paused = False
         self.shared = shared                                   # one session for everybody who opens the page
+        self._zip, self._zip_lock = None, threading.Lock()     # (scene file, zip) of the last download built
+        self.download = self.rec.root is not None and _has("pyarrow")
+        if self.download:
+            self.viewer.dataset = self._dataset_zip
         self.resume_at: float | None = None
         self.stop = False
         self.phase = "run"                                     # run -> hold -> run ...
@@ -267,7 +278,8 @@ class Runner:
                 # worse than the policy that was already here; then that one stays.
                 keep = new + 0.02 >= old
                 self.trained = {"kaiku": new, "plain": p.get("success", 0.0), "humans": k.get("humans"),
-                                "demos": k.get("demos"), "scenes": k.get("scenes"), "in_use": keep}
+                                "demos": k.get("demos"), "scenes": k.get("scenes"), "in_use": keep,
+                                "at": round(time.time(), 1)}
                 text = (f"Trained on the last {k.get('humans') or 0} demonstrations. With their echoes the policy "
                         f"sorts {new:.0%} of new scenes, without them {p.get('success', 0.0):.0%}.")
                 if keep:
@@ -429,11 +441,29 @@ class Runner:
                        "clipped_steps": t["clipped"], "minutes": round(minutes, 2)},
             "history": list(self.history),
             "dataset": {"episodes": self.rec.demos, "frames": self.rec.frames,
-                        "path": str(self.rec.root) if self.rec.root else None, "recording": self.rec.enabled},
+                        "path": str(self.rec.root) if self.rec.root else None, "recording": self.rec.enabled,
+                        "download": self.download and self.rec.demos > 0},
             "policy": self._policy_hud(),
             "perf": {"realtime": round(hz / CONTROL_HZ, 2), "tick_ms": round(float(np.mean(self.tick_ms)), 1)
                      if self.tick_ms else 0.0, "hz": CONTROL_HZ},
         }
+
+    def _dataset_zip(self) -> tuple[Path, str]:
+        """The last saved scene as LeRobot and GR00T, zipped; built once a scene, on the server's thread pool."""
+        from kaiku.data.export import bundle, latest_rows
+        with self._zip_lock:
+            rows = latest_rows(self.rec.root)
+            if not rows:
+                raise FileNotFoundError("no scene saved yet")
+            scene = Path(rows[-1]["file"]).stem
+            name = f"kaiku-{scene}-{len(rows)}-demonstrations.zip"
+            if self._zip is None or self._zip[0] != scene or not self._zip[1].exists():
+                out = Path(tempfile.gettempdir()) / f"kaiku-download-{self.viewer.port}" / f"{scene}.zip"
+                bundle(self.rec.root, out, rows=rows)
+                if self._zip is not None and self._zip[1] != out:
+                    self._zip[1].unlink(missing_ok=True)
+                self._zip = (scene, out)
+            return self._zip[1], name
 
     def _policy_hud(self) -> dict:
         st, p = self.trainer.status(), self.pol
@@ -445,6 +475,8 @@ class Runner:
                "error": st.get("error") if st["state"] == "failed" else None,
                "alone": {"rounds": p["rounds"], "scenes": p["scenes"], "ok": p["ok"], "parts": p["parts"],
                          "sorted": p["sorted"], "clipped": p["clipped"]}}
+        if self.trained:                                       # the page says a result out loud while it is news
+            out["trained"] = dict(self.trained, age_s=round(time.time() - self.trained["at"], 1))
         out["about_min"] = self.trainer.about_min
         if st["state"] == "training":
             out.update(state="training", progress=st["progress"], stage=st["stage"], loss=st["loss"],

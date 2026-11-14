@@ -4,7 +4,7 @@ One pair of Rokoko gloves drives 48 robots at once.
 
 Kaiku is Finnish for echo. You sort parts with one Unitree G1 through Smartgloves, and 47 more G1s do the same job at the same moment, each in a scene of its own: the parts lie elsewhere, are turned differently, sometimes have another shape. Physics and the challenge's safety filter check every robot, and the ones that sorted their scene are saved as demonstrations in the challenge's dataset format. A policy trained on them then sorts scenes it has never seen, with nobody driving.
 
-**Live demo, nothing to install:** https://touko-ursin--kaiku.us-east.modal.run
+**Live demo, nothing to install:** https://kaiku-echo.fly.dev
 
 Built at Junction 2026 for the Robot Teleoperation Challenge by Rokoko.
 
@@ -35,7 +35,7 @@ Redoing a demonstration around the parts of another scene is known from [MimicGe
 2. **Echo.** Copying joint angles only works when every scene is the same. Kaiku copies the motion relative to the things on the table instead. A follower's hand goes where the operator's hand is relative to its own part, using where the parts are right now in both scenes. A follower with further to reach falls a little behind instead of closing its fingers too early.
 3. **Check.** Every command of every robot goes through the challenge's safety filter (arm 1 rad/s, hand 3 rad/s, workspace box, counter keep-out). MuJoCo decides whether the parts really ended in their bins. An echo that drops a part is not saved. Kaiku's filter runs all 48 robots at once, so it is checked against the challenge's own code (unchanged, in `third_party/aaltonomous_safety`): 500 saved demonstrations, 504,817 ticks, went through it with no command changed (`tools/check_safety.py`).
 4. **Dataset.** The recorder writes the challenge's interface: 28 joint targets and 28 joint states at 30 Hz in the pelvis frame. `kaiku.data.export` turns a session into LeRobot v3.0 and GR00T datasets, with the twin's cameras rendered on request.
-5. **Policy.** A small network (4 residual layers, 512 wide) reads the robot and the parts and plans the next half second. It is trained in two minutes on a T4 and drives the robots through the same safety filter.
+5. **Policy.** A small network (4 residual layers, 512 wide) reads the robot and the parts and plans the next half second. It trains in two and a half minutes on an A100 and drives the robots through the same safety filter.
 
 ## Run it
 
@@ -62,7 +62,7 @@ python -m kaiku.rgmp.record --host HOST --out session.rgmp    # keep a real glov
 python -m kaiku.rgmp.replay session.rgmp                      # and serve it again, byte for byte
 python -m kaiku.policy.fit demos --out policies               # train with and without echoes, test both
 python -m kaiku.policy.rollout policies/kaiku.pt              # 48 robots, 48 new scenes, no operator
-python -m kaiku.data.export demos out --limit 20              # LeRobot v3.0 and GR00T
+python -m kaiku.data.export demos out --limit 20              # LeRobot v3.0 and GR00T (the page's Dataset tab downloads the last scene)
 pytest                                                        # 108 tests
 ```
 
@@ -85,7 +85,8 @@ kaiku/data      recorder, LeRobot and GR00T export
 kaiku/policy    features, training, rollout, the shipped policy and study
 kaiku/app       the 30 Hz runner behind the demo, the lead robot as a policy server for a real G1
 kaiku/web       the page
-tools/          Modal jobs: the hosted demo, the study, the camera export
+tools/          the study and training on Modal, the camera export, the safety check, film capture
+deploy/fly      the hosted demo
 ```
 
 MIT license. The G1 model is from [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie) (BSD-3-Clause).

@@ -133,6 +133,7 @@ class ViewerServer:
         self._hud_json = ""
         self._hud_version = 0
         self._callbacks: list[Callable[[dict], Any]] = []
+        self.dataset: Callable[[], tuple[Any, str]] | None = None    # -> (zip on disk, its name) for /api/dataset.zip
         self._clients: dict[int, _Client] = {}
         self._next_cid = 1
         self._static_cache: dict[str, tuple[float, int, bytes, bytes | None]] = {}
@@ -300,6 +301,7 @@ class ViewerServer:
         app.router.add_get("/api/tex/{name}", self._h_tex)
         app.router.add_get("/api/ws", self._h_ws)
         app.router.add_get("/api/stats", self._h_stats)
+        app.router.add_get("/api/dataset.zip", self._h_dataset)
         app.router.add_get("/{path:.*}", self._h_static)
         runner = web.AppRunner(app, handle_signals=False, access_log=None, shutdown_timeout=1.0)
         await runner.setup()
@@ -495,6 +497,17 @@ class ViewerServer:
 
     async def _h_stats(self, request: web.Request) -> web.Response:
         return web.json_response(self.stats())
+
+    async def _h_dataset(self, request: web.Request) -> web.StreamResponse:
+        if self.dataset is None:
+            raise web.HTTPNotFound()
+        try:
+            path, name = await asyncio.get_running_loop().run_in_executor(None, self.dataset)
+        except Exception as e:  # noqa: BLE001
+            log.warning("no dataset to download: %s", e)
+            raise web.HTTPServiceUnavailable(text="No finished scene to download yet. Try again in a minute.") from e
+        return web.FileResponse(path, headers={"Content-Disposition": f'attachment; filename="{name}"',
+                                               "Content-Type": "application/zip", "Cache-Control": "no-store"})
 
     async def _h_pack(self, request: web.Request) -> web.StreamResponse:
         lod = int(request.match_info["lod"])

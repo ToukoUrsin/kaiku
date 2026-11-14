@@ -260,6 +260,10 @@ kbd {
   transition: background var(--fast), transform var(--fast);
 }
 
+a.button {
+  text-decoration: none;
+}
+
 .button:hover {
   background: var(--surface-hover);
 }
@@ -530,6 +534,7 @@ kbd {
   letter-spacing: -0.03em;
   text-align: center;
   text-wrap: balance;
+  white-space: pre-line;
   opacity: 0;
   transform: translateY(6px);
   transition: opacity 0.26s var(--ease-out), transform 0.26s var(--ease-out);
@@ -548,6 +553,13 @@ kbd {
 .stage > .stage-scrim,
 .stage > .toasts {
   transition: opacity 0.5s var(--ease-out);
+}
+
+.app[data-saying] .stage-tools,
+.app[data-saying] .banner,
+.app[data-saying] .tag {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .app[data-opening] .story,

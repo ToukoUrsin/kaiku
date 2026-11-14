@@ -4,7 +4,7 @@ Record the hosted stream (HTTP assets, HUD/events, binary deltas, and ACKs):
 
 ```bash
 mkdir -p /bulk2/runs/robotteleop/film
-.venv/bin/python tools/film/record.py https://touko-ursin--kaiku.us-east.modal.run /bulk2/runs/robotteleop/film/kaiku-150s --seconds 150 --at '60:mode:"policy"' --at '120:mode:"gloves"'
+.venv/bin/python tools/film/record.py https://kaiku-echo.fly.dev /bulk2/runs/robotteleop/film/kaiku-150s --seconds 150 --at '60:mode:"policy"' --at '120:mode:"gloves"'
 .venv/bin/python tools/film/capture.py /bulk2/runs/robotteleop/film/kaiku-150s --out /bulk2/runs/robotteleop/film/proof/gloves-overview.mp4 --start 20 --end 30 --fps 30 --size 1920x1080 --query 'clean=1&shot=overview&quality=high' --jobs 16
 .venv/bin/python tools/film/capture.py /bulk2/runs/robotteleop/film/kaiku-150s --out /bulk2/runs/robotteleop/film/proof/gloves-lead.mp4 --start 30 --end 40 --fps 30 --size 1920x1080 --query 'clean=1&shot=lead&quality=high' --jobs 8
 .venv/bin/python tools/film/capture.py /bulk2/runs/robotteleop/film/kaiku-150s --out /bulk2/runs/robotteleop/film/proof/switch-policy.mp4 --start 55 --end 65 --fps 30 --size 1920x1080 --query 'shot=overview&quality=high' --jobs 8

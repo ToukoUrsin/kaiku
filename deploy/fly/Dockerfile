@@ -3,7 +3,7 @@
 FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 RUN pip install --index-url https://download.pytorch.org/whl/cpu torch \
- && pip install numpy==2.5.4 mujoco==4.0.1 pyyaml scipy mink==1.4.0 "qpsolvers[daqp]" aiohttp websockets msgpack
+ && pip install numpy==2.5.4 mujoco==4.0.1 pyyaml scipy mink==1.4.0 "qpsolvers[daqp]" aiohttp websockets msgpack pyarrow==26.0.1
 WORKDIR /app
 COPY kaiku ./kaiku
 COPY third_party/mujoco_menagerie/unitree_g1 ./third_party/mujoco_menagerie/unitree_g1

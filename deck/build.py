@@ -11,7 +11,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 STUDY = HERE.parent / "kaiku" / "policy" / "pretrained" / "study.json"
-DEMO = "touko-ursin--kaiku.us-east.modal.run"
+DEMO = "kaiku-echo.fly.dev"
 SOURCE = "github.com/ToukoUrsin/kaiku"
 W, H = 1920, 1080
 
@@ -103,7 +103,7 @@ def slides(study: dict) -> list[str]:
   <h2>Built on the challenge's own parts.</h2>
   <ol class="points">
     <li><b>Rokoko's driver and hand solver</b> read the gloves. Kaiku takes their stream as it is.</li>
-    <li><b>The G1 gets its real commands:</b> 28 joint targets, 30 times a second, inside its safety limits.</li>
+    <li><b>The G1 gets its real commands.</b> The challenge's own runner took 1,800 in a row through its safety filter, none clipped.</li>
     <li><b>The data is the challenge's format,</b> LeRobot v3.0 and GR00T, ready to train on.</li>
     <li class="quiet"><b>Not yet: a real G1.</b> Everything runs in a physics twin of the sorting station.</li>
   </ol>
@@ -111,7 +111,7 @@ def slides(study: dict) -> list[str]:
         f"""<section class="slide text last">
   <p class="kicker">Try it now</p>
   <h2 class="link">{DEMO}</h2>
-  <p class="lede">Press Train. Five minutes later the page shows the comparison again, on demonstrations it just recorded.</p>
+  <p class="lede">Press Train and the page runs the comparison again, on demonstrations it just recorded.<br>Or download the scene that just finished as a dataset.</p>
   <p class="foot">{SOURCE} · MIT</p>
 </section>""",
     ]
