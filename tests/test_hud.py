@@ -208,3 +208,80 @@ def test_rented_gpus_and_this_machine_are_timed_apart(tmp_path):
         said = _run(trainer, clock, [(1.0, total)], about=25.0)
         assert abs(said[0][2] - (total - 10.0)) <= 30.0, (using, said[0])
         assert max(b[2] - a[2] for a, b in zip(said, said[1:])) <= 45.0
+
+
+def test_the_next_visitor_waits_in_line_and_each_page_hears_only_about_its_own_turn():
+    r = Runner(n=2, port=0, seed=7, threads=1)
+    said = []
+    r.viewer.send_event = said.append
+    try:
+        say = lambda client, name, value=None: r.commands.put({"type": "cmd", "name": name, "value": value, "client": client})
+        say(5, "drive_start")
+        say(6, "drive_start")                                  # somebody already drives: 6 is next
+        say(6, "drive_start")                                  # asking twice is still once
+        r._commands()
+        operator = r.hud()["operator"]
+        assert operator["driver"] == 5 and operator["queue"] == [6] and operator["turn_left_s"] > 0
+        assert [e["to"] for e in said] == [5] and all(e["key"] == "turn" for e in said)   # nobody else is told "your turn"
+
+        say(5, "drive_end")                                    # handed back: 6 has the robots, and one word each
+        r._commands()
+        operator = r.hud()["operator"]
+        assert operator["driver"] == 6 and operator["queue"] == []
+        assert [(e["to"], "ended" in e["text"]) for e in said[1:]] == [(5, True), (6, False)]
+
+        say(7, "drive_start")
+        r.commands.put({"type": "disconnect", "client": 7})   # a page that closes leaves the line
+        r._commands()
+        assert r.hud()["operator"]["queue"] == []
+    finally:
+        r.close()
+
+
+def test_a_visitor_is_told_before_and_after_the_scene_is_replaced(monkeypatch):
+    monkeypatch.setattr(run_module, "VISITOR_SCENE_S", 1.0)   # a short scene, so the test does not wait 150 s
+    r = Runner(n=2, port=0, seed=7, threads=1, hold_s=0.0)
+    try:
+        r.commands.put({"type": "cmd", "name": "drive_start", "client": 5})
+        r._commands()
+        _step(r, lambda: r.mode == "visitor" and r.phase == "run")
+        operator = r.hud()["operator"]
+        assert 0 < operator["scene_left_s"] and not operator["expired"] and not operator["dealt"]
+        r.last_visitor_command = time.monotonic() + 1e6       # the visitor is still there
+        _step(r, lambda: r._visitor_expired)
+        assert r.hud()["operator"]["expired"]
+        _step(r, lambda: r.phase == "run" and not r._visitor_expired)
+        operator = r.hud()["operator"]
+        assert operator["dealt"] and not operator["expired"] and operator["driver"] == 5
+    finally:
+        r.close()
+
+
+def test_a_pinch_over_nothing_is_said_and_nothing_moves_for_it():
+    from kaiku.app.session import Session
+    from kaiku.app.visitor import VisitorOperator
+    s = Session(1, seed=7, reachable_only=True)
+    v = VisitorOperator(s)
+    try:
+        lo, _ = v.reach
+        v.set_command({"x": float(lo[0]), "y": float(lo[1]), "grip": True})    # a corner with no part in it
+        for _ in range(10):
+            s.tick(v.update(s.observe()))
+        hud = v.hud()
+        assert hud["missed"] and not hud["dropped"] and v.phase == "idle"
+        v.set_command({"x": float(lo[0]), "y": float(lo[1]), "grip": False})
+        v.missed_at -= 10.0                                    # a while later it is no longer news
+        s.tick(v.update(s.observe()))
+        assert not v.hud()["missed"]
+    finally:
+        s.close()
+
+
+def test_the_page_carries_no_training_time_of_its_own():
+    """The runner says what a run takes (policy.about_min, policy.eta_s). A number typed into the page could disagree."""
+    import re
+    static = run_module.HERE / "web" / "static" / "js"
+    for name in ("hud.js", "sample.js"):
+        text = (static / name).read_text()
+        assert not re.search(r"about_min\s*(\?\?|:|\|\|)\s*\d", text), name
+        assert not re.search(r"eta_s\s*(\?\?|:|\|\|)\s*\d", text), name

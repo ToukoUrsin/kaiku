@@ -40,6 +40,8 @@ DEPTH_FULL = 0.30             # ln of how much larger the hand is in the picture
 TURN = 2.5                    # rad/s the palm may turn after the part it is over
 PINCH_ON, PINCH_OFF = 0.045, 0.065   # m between a gloved thumb and index finger: a pinch, and open again
 LIFT_AFTER = 0.3              # s the fingers stay closed before the hand lifts what they hold
+MISSED_S = 1.5                # s the page says a pinch took nothing, after the pinch
+DROPPED_S = 4.0               # s it says a part fell out of the hand
 ANCHOR_S = 1.5                # s a gloved hand is held flat and still before where it is counts as the middle
 ABOVE = 0.10                  # m over the hover height a hand on a Coil Pro may rise
 
@@ -121,6 +123,10 @@ class VisitorOperator:
         self.was_own = False
         self.drove = None                                     # whose fingers drove in this scene, for its label
         self.grasped_own = False                              # and whether a grasp in it was the visitor's own
+        # What the page tells the visitor and nothing else reads: a pinch with no part under it, a part that fell.
+        self.missed_at = -1e9
+        self.dropped_at = -1e9
+        self.held_since = None                                # since when their own fingers have held a part
 
     def _toward(self, s: int, target: np.ndarray) -> None:
         """Move one hand's target after ``target`` at a hand's pace, not a pointer's."""
@@ -383,6 +389,7 @@ class VisitorOperator:
         self.rot[s] = palm_rotation(name, self.dir[s])
         self.hand[s] = posture
         # What the page says next: is a part in the hand, and which.
+        was = self.held
         self.held, self.phase = -1, "idle"
         idx = self.s.echo.lead_idx
         if not free and len(idx):
@@ -394,6 +401,20 @@ class VisitorOperator:
                 self.held, self.phase = int(idx[k]), "carry"
                 self.grasped_own = True
                 self.held_shape, self.held_bin = ob.shape, self.s.layouts[0].mapping[ob.color]
+        self._own_news(obs, was, now)
+
+    def _own_news(self, obs: Observation, was: int, now: float) -> None:
+        """Their own grasp, for the page only: fingers closed a while on nothing, or a part that left the hand
+        anywhere but over a bin. Nothing here moves the robot."""
+        if self.held >= 0:
+            self.held_since = self.held_since or now
+            return
+        if was >= 0 and self.held_since is not None and now - self.held_since > 0.3 \
+                and self._bin_at(obs.obj_pos[0, was, :2]) is None:
+            self.dropped_at = now
+        self.held_since = None
+        if self.closed_at is not None and now - self.closed_at > 1.2 and now - self.dropped_at > DROPPED_S:
+            self.missed_at = now
 
     def update(self, obs: Observation) -> LeadCommand:
         s = self.side
@@ -423,8 +444,8 @@ class VisitorOperator:
             self.dir[s] = 0.0
             # The robot's fingers already follow the visitor's while the hand is free.
             self.hand[s] = HAND_OPEN.copy() if posture is None else posture
-            if grip:
-                self._start_pick(obs)
+            if grip and not self._start_pick(obs):
+                self.missed_at = now                           # nothing under the hand: the page says so
         if self.phase == "pick" and self.job is not None:
             st = self.job.update(DT, obs.pinch[0, self.side], obs.rot[0, self.side])
             self.pinch[self.side], self.rot[self.side], self.hand[self.side] = st.point, st.rot, st.hand
@@ -434,6 +455,8 @@ class VisitorOperator:
         elif self.phase == "carry":
             self._toward(self.side, np.r_[self.command, self.carry_z])
             self.hand[self.side] = HAND_CLOSED.copy()
+            if self.held >= 0 and np.linalg.norm(obs.obj_pos[0, self.held] - obs.pinch[0, self.side]) > 0.08:
+                self.dropped_at = now                          # it slipped out: the page says so
             if not grip:
                 self._start_release()
         elif self.phase == "release" and self.job is not None:
@@ -493,6 +516,9 @@ class VisitorOperator:
                 "glove": self.glove.hud() if self.glove is not None else None,
                 "placed": self.anchor is not None, "flat_s": round(float(self.flat_s), 2),
                 "input": self.input, "points": self.points, "phase": self.phase,
+                # A pinch that took nothing, a part that fell out of the hand: just now, for the page to say.
+                "missed": time.monotonic() - self.missed_at < MISSED_S and not held,
+                "dropped": time.monotonic() - self.dropped_at < DROPPED_S and not held,
                 "holding": self.held >= 0 and self.phase in ("carry", "release"),
                 "over": self._bin_at(self.command),
                 "want": self.held_bin if held else None,            # the bin the part in the hand belongs in

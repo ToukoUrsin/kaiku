@@ -80,7 +80,7 @@ async function boot() {
   let alone = false;              // the policy is driving: no operator, so no echo to draw
   let comparing = null;           // the shot to go back to after the scene without Kaiku and its second half
   stream.onHud = (message) => {
-    const data = flags.preview ? previewHud(message, flags.preview) : message;
+    const data = flags.preview ? previewHud(message, flags.preview, stream.client) : message;
     lag = Array.isArray(data.envs?.lag_s) ? data.envs.lag_s : null;
     running = data.status === 'running';
     if ((data.mode === 'policy') !== alone) {
@@ -103,10 +103,12 @@ async function boot() {
     const driver = data.operator?.driver;
     drive.follow(driver != null && driver === stream.client, data.mode === 'visitor' ? data.operator : null);
     hud.setDrive(drive);
+    hud.client = stream.client;
     hud.setHud(data);
   };
   stream.onEvent = (event) => {
-    if (event.type === 'toast') hud.toast(event.text, event.level);
+    // A word about one page's turn is for that page only, and replaces the last word about it.
+    if (event.type === 'toast' && (event.to == null || event.to === stream.client)) hud.toast(event.text, event.level, event.key);
   };
   stream.onStatus = (status) => {
     if (flags.preview !== 'reconnecting' && flags.preview !== 'connecting') hud.setConnection(status);

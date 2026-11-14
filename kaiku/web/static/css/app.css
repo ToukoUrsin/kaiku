@@ -256,9 +256,14 @@ kbd {
 }
 
 .segmented button:disabled {
-  opacity: 0.45;
+  color: var(--text-off);
+  cursor: not-allowed;
+}
+
+.segmented button[aria-checked="true"]:disabled {
+  background: transparent;
   color: var(--text-2);
-  cursor: default;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
 }
 
 .segmented button[data-pending] {
@@ -312,9 +317,17 @@ a.button {
 }
 
 .button:disabled,
+.button-primary:disabled {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--text-off);
+  cursor: not-allowed;
+  transform: none;
+}
+
 .switch:disabled {
-  opacity: 0.45;
-  cursor: default;
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .button-primary {
@@ -479,75 +492,96 @@ a.button {
   margin-top: var(--s-3);
 }
 
-/* What the driver is told, a step at a time, over the table they drive. */
-.drive-card {
+/* The top of the stage while somebody drives: what to do next, on a surface of its own, and the camera
+   inset beside it. The table they drive is low on the stage; nothing here may cover it. */
+.drive-top {
   position: absolute;
-  top: var(--s-5);
-  left: 50%;
+  top: var(--s-4);
+  right: var(--s-4);
+  left: var(--s-4);
   z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--s-2);
-  width: max-content;
-  max-width: calc(100% - 32px);
-  text-align: center;
-  transform: translateX(-50%);
+  gap: var(--s-3);
   pointer-events: none;
 }
 
-/* the words sit on the robots behind the table: a shade under them keeps them readable */
-.drive-card::before {
-  content: '';
-  position: absolute;
-  inset: -24px -120px -28px;
-  z-index: -1;
-  background: radial-gradient(closest-side, rgba(8, 9, 12, 0.78), rgba(8, 9, 12, 0));
-  pointer-events: none;
+.drive-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  max-width: min(100%, 560px);
+  padding: var(--s-4) var(--s-5) var(--s-3);
+  border-radius: 14px;
+  background: oklch(0.185 0.006 264 / 0.94);
+  box-shadow: 0 0 0 1px var(--line-strong), var(--shadow-pop);
+  text-align: center;
+}
+
+.drive-card[hidden] {
+  display: none;
+}
+
+/* the camera inset takes the top right corner: the words keep clear of it */
+.drive-top:has(.hand-cam:not([hidden])) .drive-card {
+  max-width: min(560px, calc(100% - 2 * (200px + var(--s-4))));
 }
 
 .drive-say {
   color: var(--text);
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.02em;
-  line-height: 1.15;
-  text-shadow: 0 1px 18px rgba(0, 0, 0, 0.7);
+  line-height: 1.2;
+  text-wrap: balance;
 }
 
 .drive-more {
-  max-width: 44ch;
+  max-width: 46ch;
   font-variant-numeric: tabular-nums;
   color: var(--text-2);
-  font-size: var(--t-13);
-  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.8);
+  font-size: var(--t-14);
+  line-height: 1.4;
+  text-wrap: pretty;
 }
 
 .drive-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: var(--s-2);
-  margin-top: var(--s-2);
+  margin-top: 6px;
   pointer-events: auto;
 }
 
 .drive-left {
-  margin-left: var(--s-2);
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(8, 9, 12, 0.62);      /* the tables behind it are white */
-  color: var(--text);
-  font-size: var(--t-12);
+  margin-left: var(--s-1);
+  color: var(--text-2);
+  font-size: var(--t-13);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
+.drive-left:empty {
+  display: none;
+}
+
+/* the scene is about to be replaced: said in the one colour that asks to be read */
+.drive-left[data-warn] {
+  color: var(--warn);
+  font-weight: 600;
+}
+
 .hand-cam {
   position: absolute;
-  right: var(--s-4);
-  bottom: var(--s-4);
+  top: 0;
+  right: 0;
   z-index: 3;
-  width: 220px;
+  width: 200px;
   overflow: hidden;
   border-radius: var(--radius-l);
   box-shadow: 0 0 0 1px var(--line-strong), var(--shadow-pop);
@@ -573,9 +607,13 @@ a.button {
   pointer-events: none;
 }
 
+.hand-cam[hidden] {
+  display: none;
+}
+
 .hand-cam p {
   padding: var(--s-2) var(--s-3);
-  color: var(--text-3);
+  color: var(--text-2);
   font-size: var(--t-11);
 }
 
@@ -650,6 +688,23 @@ a.button {
   line-height: 1;
   letter-spacing: -0.035em;
   transition: color 900ms ease-out;
+}
+
+.story-number[data-none] {
+  display: none;
+}
+
+/* With nothing to count yet, the words take the number's place. */
+.story-count:has(> [data-none]) {
+  display: none;
+}
+
+.story-count:has(> [data-none]) + .story-label {
+  margin-top: 10px;
+  color: var(--text);
+  font-size: var(--t-20);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .story-number[data-tick] {
@@ -794,6 +849,11 @@ a.button {
   white-space: nowrap;
   transform: translateX(-50%);
   animation: drop var(--medium) var(--ease-out);
+}
+
+/* clear of the camera buttons when it is too long to sit between them and the edge */
+.banner[data-low] {
+  top: calc(var(--s-4) + 44px);
 }
 
 .banner[data-level="warn"] .banner-dot {
@@ -1109,8 +1169,18 @@ a.button {
   transition: opacity var(--medium) ease-out;
 }
 
-.app:not([data-ready]) .panes {
-  opacity: 0.45;
+.app:not([data-ready]) .panes > .pane,
+.app:not([data-ready]) .story,
+.app:not([data-ready]) .controls {
+  visibility: hidden;
+}
+
+.app:not([data-ready]) .panes::before {
+  content: "Waiting for the robots";
+  display: block;
+  padding: var(--s-6) var(--s-4);
+  color: var(--text-3);
+  font-size: var(--t-13);
 }
 
 .tabs {
@@ -1188,6 +1258,15 @@ a.button {
   font-weight: 600;
   letter-spacing: -0.005em;
   font-variant-numeric: tabular-nums;
+}
+
+.headline-tail {
+  color: var(--text-2);
+  font-size: var(--t-12);
+}
+
+.headline-tail:empty {
+  display: none;
 }
 
 .headline-spark {
@@ -1693,17 +1772,99 @@ a.button {
   border-radius: 1px;
 }
 
-.finding {
-  margin-top: var(--s-4);
+/* The Policy tab's one headline: the study's result, said before the chart that shows it. */
+.claim {
+  margin-bottom: var(--s-3);
+}
+
+.claim-top {
+  color: var(--text-2);
+  font-size: var(--t-13);
+}
+
+.claim-main {
+  margin-top: 2px;
+  color: var(--text);
+  font-size: var(--t-20);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.claim-more {
+  margin-top: 4px;
   color: var(--text);
   font-size: var(--t-14);
   font-weight: 500;
-  line-height: 1.45;
-  text-wrap: pretty;
 }
 
-.finding + .note {
-  margin-top: 6px;
+.claim-more:empty {
+  display: none;
+}
+
+/* the second measurement, a tap away: the study stays one claim */
+.more {
+  margin-top: var(--s-4);
+  border-top: 1px solid var(--line);
+}
+
+.more summary {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 40px;
+  color: var(--text-2);
+  font-size: var(--t-13);
+  cursor: pointer;
+  list-style: none;
+}
+
+.more summary::-webkit-details-marker {
+  display: none;
+}
+
+.more summary::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform var(--fast);
+}
+
+.more[open] summary::after {
+  transform: rotate(-135deg) translateY(-1px);
+}
+
+.more summary:hover {
+  color: var(--text);
+}
+
+.more[open] summary {
+  margin-bottom: var(--s-2);
+}
+
+/* What is not the headline is smaller and says what it is: the policy driving here, this session's training. */
+.block-minor {
+  padding-block: var(--s-3) var(--s-4);
+}
+
+.block-minor .block-head h2 {
+  color: var(--text-2);
+  font-size: var(--t-12);
+  font-weight: 500;
+}
+
+.block-minor .lede {
+  font-size: var(--t-12);
+}
+
+.block-minor .rows .row {
+  min-height: 30px;
+  font-size: var(--t-12);
 }
 
 .swatch-kaiku {
@@ -1817,8 +1978,9 @@ a.button {
   align-items: center;
   gap: var(--s-2);
   flex-basis: 100%;
-  color: var(--text-2);
+  color: var(--text);
   font-size: var(--t-12);
+  font-weight: 500;
 }
 
 .held::before {
@@ -1878,7 +2040,7 @@ a.button {
     right: auto;
     left: var(--s-6);
     bottom: var(--s-6);
-    max-width: 380px;
+    max-width: 480px;
     color: var(--text-3);
     font-size: var(--t-12);
     text-align: left;
@@ -2013,12 +2175,28 @@ a.button {
     bottom: var(--s-5);
   }
 
+  .drive-top {
+    top: var(--s-2);
+    right: var(--s-2);
+    left: var(--s-2);
+    gap: var(--s-2);
+  }
+
   .drive-card {
-    top: var(--s-3);
+    width: 100%;
+    padding: var(--s-3) var(--s-3) var(--s-2);
+  }
+
+  .drive-top:has(.hand-cam:not([hidden])) .drive-card {
+    max-width: 100%;
   }
 
   .drive-say {
-    font-size: 22px;
+    font-size: 18px;
+  }
+
+  .drive-more {
+    font-size: var(--t-13);
   }
 
   /* three buttons and the clock do not fit across a phone: the clock goes under them */
@@ -2036,22 +2214,20 @@ a.button {
     margin-left: 0;
   }
 
+  /* on a phone the inset sits under the words, on the robots behind the table, never on the table */
   .hand-cam {
-    right: var(--s-3);
-    bottom: var(--s-3);
-    width: 132px;
+    position: relative;
+    align-self: flex-end;
+    width: 104px;
   }
 
   .hand-cam p {
     display: none;
   }
 
-  /* driving on a phone: what else there is to say sits in the corner the camera inset leaves free */
+  /* driving on a phone: what else there is to say sits at the foot of the stage */
   .app[data-driving] .banner {
-    left: var(--s-3);
     bottom: var(--s-3);
-    max-width: calc(100% - 132px - 3 * var(--s-3));
-    transform: none;
   }
 
   .app[data-driving] .toasts {

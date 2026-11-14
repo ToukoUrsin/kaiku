@@ -69,21 +69,23 @@
         <button type="button" class="button button-primary button-large drive-ask" data-ref="drive-stage">Drive it yourself</button>
       </div>
 
-      <div class="drive-card" data-ref="drive-card" role="status" hidden>
-        <p class="drive-say" data-ref="drive-say"></p>
-        <p class="drive-more" data-ref="drive-more"></p>
-        <div class="drive-row">
-          <button type="button" class="button" data-ref="drive-camera">Use my hand</button>
-          <button type="button" class="button" data-ref="drive-own" aria-pressed="false" hidden>Grasp it myself</button>
-          <button type="button" class="button" data-ref="drive-back">Hand it back</button>
-          <span class="drive-left num" data-ref="drive-left"></span>
+      <div class="drive-top">
+        <div class="drive-card" data-ref="drive-card" hidden>
+          <p class="drive-say" data-ref="drive-say" role="status"></p>
+          <p class="drive-more" data-ref="drive-more"></p>
+          <div class="drive-row">
+            <button type="button" class="button" data-ref="drive-camera">Use my hand</button>
+            <button type="button" class="button" data-ref="drive-own" aria-pressed="false" hidden>Grasp it myself</button>
+            <button type="button" class="button" data-ref="drive-back">Hand it back</button>
+            <span class="drive-left num" data-ref="drive-left"></span>
+          </div>
         </div>
-      </div>
 
-      <div class="hand-cam" data-ref="hand-cam" hidden>
-        <video playsinline muted></video>
-        <canvas></canvas>
-        <p>Your hand. The picture stays on this device.</p>
+        <div class="hand-cam" data-ref="hand-cam" hidden>
+          <video playsinline muted></video>
+          <canvas></canvas>
+          <p>Your hand. The picture stays on this device.</p>
+        </div>
       </div>
 
       <div class="banner" data-ref="banner" role="status" hidden>
@@ -135,9 +137,9 @@
 
       <section class="story" aria-label="Demonstrations">
         <p class="story-chain">
-          <b data-ref="chain-count">1</b> <span data-ref="chain-who">operator</span>
+          <b data-ref="chain-count">1</b> <span data-ref="chain-who">robot driven</span>
           <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
-          <b data-ref="robots">47</b> robots
+          <b data-ref="robots">47</b> <span data-ref="chain-them">echoes</span>
         </p>
         <p class="story-count">
           <span class="story-number" data-ref="demos">0</span>
@@ -145,7 +147,7 @@
         </p>
         <p class="story-label" data-ref="demos-label">demonstrations saved</p>
         <dl class="story-stats">
-          <div><dt data-ref="stat1-label">Saved per scene</dt><dd title="Demonstrations saved for each scene the operator did: its own run, and one from every robot that kept up."><span data-ref="amplification">0</span><small data-ref="amplification-of"></small></dd></div>
+          <div><dt data-ref="stat1-label">Saved per scene</dt><dd title="Demonstrations saved for each scene the operator did: its own run, and one from every echo that kept up."><span data-ref="amplification">0</span><small data-ref="amplification-of"></small></dd></div>
           <div><dt data-ref="stat2-label">Echoes that succeed</dt><dd data-ref="yield">0%</dd></div>
           <div><dt data-ref="stat3-label">Saved per minute</dt><dd data-ref="rate">0</dd></div>
           <div title="Every command of every robot passes the challenge's safety filter. This counts the ones it had to change.">
@@ -192,6 +194,7 @@
             <span class="headline-words">
               <span class="headline-top" data-ref="headline-top"></span>
               <span class="headline-main" data-ref="headline-main"></span>
+              <span class="headline-tail" data-ref="headline-tail"></span>
             </span>
             <svg class="headline-spark" data-ref="headline-spark" viewBox="0 0 72 34" aria-hidden="true"></svg>
             <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
@@ -328,7 +331,11 @@
               <h2>The study: what the echoes are worth</h2>
               <span class="badge" data-ref="policy-badge" hidden>Sample data</span>
             </header>
-            <p class="lede">Two policies from the same demonstrations: one sees only the operator's, one also sees the echoes.</p>
+            <div class="claim" data-ref="claim" hidden>
+              <p class="claim-top" data-ref="claim-top"></p>
+              <p class="claim-main" data-ref="claim-main"></p>
+              <p class="claim-more" data-ref="claim-more"></p>
+            </div>
             <figure class="chart">
               <svg data-ref="chart" viewBox="0 0 320 196" role="img" aria-label="Sorting success against the number of operator demonstrations"></svg>
               <figcaption class="chart-empty" data-ref="chart-empty">
@@ -337,36 +344,30 @@
               </figcaption>
             </figure>
             <ul class="legend">
-              <li><span class="swatch swatch-kaiku"></span>With Kaiku's echoes<b class="num" data-ref="policy-kaiku"></b></li>
-              <li><span class="swatch swatch-plain"></span>Operator's demonstrations alone<b class="num" data-ref="policy-plain"></b></li>
+              <li><span class="swatch swatch-kaiku"></span>With the echoes</li>
+              <li><span class="swatch swatch-plain"></span>The operator's alone</li>
             </ul>
-            <p class="finding" data-ref="finding" hidden></p>
             <p class="note" data-ref="study-note" hidden></p>
+            <details class="more" data-ref="baselines" hidden>
+              <summary data-ref="baselines-title">Against replayed demonstrations</summary>
+              <p class="lede" data-ref="baselines-lede"></p>
+              <ul class="bars" data-ref="baselines-bars"></ul>
+              <p class="note" data-ref="baselines-note"></p>
+            </details>
           </section>
-          <section class="block" data-ref="baselines" hidden>
+          <section class="block block-minor" data-ref="policy-now" hidden>
             <header class="block-head">
-              <h2 data-ref="baselines-title">Against replayed demonstrations</h2>
-            </header>
-            <p class="lede" data-ref="baselines-lede"></p>
-            <ul class="bars" data-ref="baselines-bars"></ul>
-            <p class="note" data-ref="baselines-note"></p>
-          </section>
-          <section class="block" data-ref="policy-now" hidden>
-            <header class="block-head">
-              <h2>The policy driving here</h2>
+              <h2>The policy here</h2>
               <button type="button" class="button button-primary" data-ref="drive">Let it drive</button>
             </header>
-            <p class="lede" data-ref="drive-note"></p>
+            <p class="lede" data-ref="policy-about"></p>
             <dl class="rows">
-              <div class="row"><dt>From</dt><dd data-ref="policy-origin"></dd></div>
-              <div class="row"><dt>Trained on</dt><dd data-ref="policy-data"></dd></div>
               <div class="row"><dt>Its own test</dt><dd data-ref="policy-test"></dd></div>
-              <div class="row"><dt>Same test, no echoes</dt><dd data-ref="policy-alone"></dd></div>
               <div class="row"><dt>Driving here</dt><dd data-ref="policy-here"></dd></div>
             </dl>
-            <p class="note" data-ref="policy-which" hidden></p>
+            <p class="note" data-ref="drive-note" hidden></p>
           </section>
-          <section class="block">
+          <section class="block block-minor">
             <header class="block-head">
               <h2>Train on this session</h2>
               <button type="button" class="button" data-ref="train">Train both</button>
