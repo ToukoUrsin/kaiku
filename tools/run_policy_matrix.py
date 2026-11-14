@@ -39,7 +39,7 @@ def main() -> None:
     ap.add_argument("--heldout", type=Path, required=True); ap.add_argument("--steps", type=int, default=2000)
     ap.add_argument("--seed", type=int, required=True); ap.add_argument("--threads", type=int, default=4)
     a = ap.parse_args()
-    loader = Loader(); pairs = loader.load(a.data, max_episodes=None, echoes=a.arm != "plain", workers=1, context="fork")
+    loader = Loader(); pairs = loader.load(a.data, max_episodes=None, echoes=a.arm != "plain", workers=1, context="fork", orphans=True)
     if a.arm == "plain":
         pairs = pairs.pick(np.unique(pairs.episode), echoes=False)
     policy = train(pairs, loader.feat, steps=a.steps, seed=a.seed, threads=a.threads, log=None, every=a.steps)

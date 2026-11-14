@@ -708,7 +708,7 @@ class Runner:
                          "sorted": p["sorted"], "clipped": p["clipped"]}}
         if self.trained:                                       # the page says a result out loud while it is news
             out["trained"] = dict(self.trained, age_s=round(time.time() - self.trained["at"], 1))
-        out["about_min"] = self.trainer.about_min
+        out["about_min"] = self.trainer.about
         if st["state"] == "training":
             out.update(state="training", progress=st["progress"], stage=st["stage"], loss=st["loss"],
                        eta_s=st.get("eta_s"), last=self.trainer.last)

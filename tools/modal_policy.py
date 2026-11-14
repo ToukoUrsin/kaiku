@@ -8,7 +8,7 @@ Each job trains one policy on the operator's first K episodes (with their echoes
 and rolls it out on fresh scenes. Results come back as JSON lines in ``--out``; the policies
 stay on the volume under /policies.
 
-The live demo uses ``fit_remote_stream``: one A100 container per policy, in parallel, with
+The live demo uses ``fit_remote_stream``: one T4 container per policy, in parallel, with
 status events returned to the live trainer.
 """
 from __future__ import annotations
@@ -100,7 +100,7 @@ def fit_remote(cfg: dict) -> dict:
     return policy.info
 
 
-@app.function(gpu="A100", cpu=32, memory=49152, timeout=3 * 3600, volumes={"/data": vol})
+@app.function(gpu="T4", cpu=16, memory=32768, timeout=1800, volumes={"/data": vol})
 def fit_remote_stream(cfg: dict):
     """Train one policy and stream fit stages while the live app remains responsive.
 
@@ -129,10 +129,10 @@ def fit_remote_stream(cfg: dict):
         try:
             policy = fit(cfg["data"], cfg["which"], f"/data/policies/{cfg['name']}.pt",
                          cfg.get("steps", 30000), cfg.get("scenes", 48),
-                         threads=cfg.get("threads", 32), train_threads=cfg.get("train_threads", 8),
-                         rollout_threads=cfg.get("rollout_threads", 32), last=cfg.get("last"), report=report,
+                         threads=cfg.get("threads", 16), train_threads=cfg.get("train_threads", 8),
+                         rollout_threads=cfg.get("rollout_threads", 16), last=cfg.get("last"), report=report,
                          loader_workers=cfg.get("loader_workers", 16), loader_context="spawn",
-                         compile=cfg.get("compile", True))
+                         compile=cfg.get("compile", False))      # a container that is used again trains very slowly compiled
             result["policy"] = policy
         except Exception as exc:
             result["error"] = repr(exc)[:500]
