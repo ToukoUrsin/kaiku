@@ -233,8 +233,8 @@ class Runner:
         elif not self.rec.demos:
             self.toast("Nothing to train on yet. Let a few scenes finish first.", "warn")
         elif self.trainer.start():
-            self.toast(f"Training two policies on {self.rec.demos} demonstrations: one with the echoes, "
-                       "one with the operator's own alone.", "info")
+            self.toast(f"Training two policies on the last {self.trainer.last} demonstrations: one with their "
+                       "echoes, one without.", "info")
 
     def _policy_news(self) -> None:
         """Pick up a policy that has finished loading, and a training run that has ended."""

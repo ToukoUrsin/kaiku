@@ -223,6 +223,8 @@ export class Hud {
     const { mode, perf } = this.hud;
     for (const button of this.el.mode.children) {
       const checked = button.dataset.mode === mode;
+      // Autopilot is a fallback for a glove session that lost its gloves, not a choice to offer.
+      if (button.dataset.mode === 'autopilot') button.hidden = !checked;
       if (checked) delete button.dataset.pending;
       if (button.getAttribute('aria-checked') !== String(checked)) button.setAttribute('aria-checked', String(checked));
     }
@@ -255,14 +257,16 @@ export class Hud {
     } else if (demos > counter.goal) {
       const now = performance.now();
       counter.tickUntil = now + 900;
-      counter.gainUntil = now + 2600;
-      this.text('gain', `+${demos - counter.goal}`);
+      if (!alone) {                   // "30 +47 scenes sorted" reads as two numbers; a saved-count gain does not
+        counter.gainUntil = now + 2600;
+        this.text('gain', `+${demos - counter.goal}`);
+      }
     }
     counter.goal = demos;
     this.text('demos-label', alone ? 'new scenes sorted with nobody driving'
       : dataset.recording ? 'demonstrations saved' : 'demonstrations');
 
-    const labels = alone ? ['Success', 'Operator demos', 'With echoes'] : ['Amplification', 'Echo yield', 'Per minute'];
+    const labels = alone ? ['Success', 'By the operator', 'Echoes'] : ['Amplification', 'Echo yield', 'Per minute'];
     labels.forEach((label, i) => {
       this.text(`stat${i + 1}-label`, label);
       this.text(`stat${i + 1}-label-2`, label);
@@ -272,7 +276,7 @@ export class Hud {
       : Number.isFinite(totals.amplification) ? `${trim(totals.amplification)}×` : '0×';
     const yieldText = alone ? count(policy.humans || 0)
       : Number.isFinite(totals.yield) ? `${Math.round(totals.yield * 100)}%` : '0%';
-    const rate = alone ? count(policy.demos || 0)
+    const rate = alone ? count(Math.max(0, (policy.demos || 0) - (policy.humans || 0)))
       : Number.isFinite(totals.demos_per_min) ? String(Math.round(totals.demos_per_min)) : '0';
     const clippedSteps = alone ? tally.clipped || 0 : totals.clipped_steps || 0;
     const clipped = count(clippedSteps);
