@@ -3,6 +3,7 @@
 
 import * as THREE from '../vendor/three/three.module.min.js';
 import { CameraRig } from './camera.js';
+import { CalibrationCard } from './calibrate.js';
 import { Fleet } from './fleet.js';
 import { readFlags } from './flags.js';
 import { Hands } from './hands.js';
@@ -25,6 +26,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // `send` is filled in once the stream exists; until then commands report "not connected".
 const link = { send: () => false };
 const hud = new Hud({ app, flags, send: (message) => link.send(message) });
+const calibration = new CalibrationCard({ app, send: (message) => link.send(message) });
 
 boot().catch((error) => {
   console.error(error);
@@ -93,6 +95,7 @@ async function boot() {
       comparing = null;
     }
     hands.setHands(data.operator?.hands || null, performance.now());
+    calibration.update(data);
     // the runner says whose turn it is: this page drives only while it is named
     const driver = data.operator?.driver;
     drive.follow(driver != null && driver === stream.client, data.mode === 'visitor' ? data.operator : null);
@@ -178,6 +181,7 @@ async function boot() {
     else if (event.key === 'ArrowRight' && rig.focus >= 0 && onPage) focusOn(rig.focus + 1);
     else if (event.key === 'ArrowLeft' && rig.focus >= 0 && onPage) focusOn(rig.focus - 1);
     else if (event.key === ' ' && onPage) hud.togglePause();
+    else if (event.key.toLowerCase() === 'c' && onPage) link.send({ type: 'cmd', name: 'calibrate' });
     else if ((event.key === 'n' || event.key === 'N') && onPage) stream.send({ type: 'cmd', name: 'next_scene' });
     else return;
     event.preventDefault();

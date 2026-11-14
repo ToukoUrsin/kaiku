@@ -1,83 +1,67 @@
-# Real Smartgloves II
+# Smartgloves II: five minutes to the robot
 
-What you need: both Smartgloves II, a Coil Pro (it gives the hands their position; without it they only
-turn), and the Rokoko Device SDK on the machine the gloves are plugged into.
+You need two Smartgloves II, one Coil Pro, and the Rokoko Device SDK on the Mac. Keep the gloves and Coil
+Pro within the SDK receiver's range.
 
-## 1. Rokoko's driver and hand solver
+## Plug in and start
 
-On the machine with the gloves:
+1. Plug the receiver and Coil Pro into the Mac. Put on both gloves and turn them on. Wait about 20 seconds.
+2. In Kaiku's checkout, run one command:
+
+   ```bash
+   python -m kaiku.app.gloves
+   ```
+
+   It starts Rokoko's driver and hand solver when they are not already running, then prints a checklist. It
+   never opens a window. The default page is `http://127.0.0.1:8651/`.
+3. Wait for each line to tick. A glove line shows its rate (normally about 100 Hz). The Coil Pro line means
+   both wrists have a position; without it the hands can turn but cannot move the robot.
+
+The command saves a session in `~/kaiku-sessions/YYYYMMDD-HHMM/`. The raw stream is
+`kaiku.rgmp.record` in that folder, beside the demonstrations. Use `--session-dir DIR` to choose another
+folder, `--n 8` on a small machine, or `--check` to run only the checklist. Ctrl-C stops only programs this
+command started.
+
+## Calibrate without a mouse
+
+When both gloves and the Coil Pro are ready, hold both hands flat and still above the Coil Pro, palms down,
+for about 1.5 seconds. The page shows a dot for each hand and a ring for the hold. Then close the left hand
+once and the right hand once. It says **Calibrated. The robot follows your hands.** The button in the Operator
+panel remains available. Press `C` on the page, or the button, to calibrate again; holding still while already
+calibrated does not start a new capture.
+
+## Save and replay
+
+Every clean lead scene is saved with its table, command stream, and drawn hand points. The 47 echoes are saved
+as demonstrations too. To replay the recorded human scenes on a new set of follower tables:
 
 ```bash
-rkk-hand-solver --emit world
+python -m kaiku.app.run --n 8 --session ~/kaiku-sessions/20261114-1040
 ```
 
-That starts Rokoko's driver (`rokoko-sdk`, RGMP on port 12276, streaming gloves on USB) and Rokoko's own
-hand solver (port 12277). `--emit world` is what Kaiku reads the fingers from.
+The page labels the source **Recorded session** and draws the recorded hands. A lead scene that did not finish
+cleanly is not saved and is skipped.
 
-If you start the driver yourself, give it `--auto-stream-usb` (without it the driver accepts connections
-and sends nothing from gloves on USB) and add `--no-driver` to the line above.
+## If it does not work
 
-## 2. Kaiku
+| What you see | Do this |
+|---|---|
+| SDK is not found or licensed | Install the Device SDK and sign in once. |
+| Driver or solver is not answering | Run `rkk-hand-solver --emit world` and run the command again. |
+| One glove is missing | Wake it, check its receiver, and check the USB cable. |
+| No position from the Coil Pro | Plug it in, keep it near the gloves, and wait for its line to tick. |
+| Hand rate is low | Move closer to the receiver and remove other 2.4 GHz interference. |
+| Hardware still fails | Stop the command and run `kaiku.app.run --session DIR` from the last clean session. |
 
-Same machine (an 18-core Apple M5 Pro runs all 48 robots in real time; use `--n 16` on something smaller):
+## Check without hardware
 
-```bash
-python -m kaiku.app.run --gloves 127.0.0.1 --record demos      # then open http://localhost:8651
-```
-
-Or Kaiku on another machine, with the gloves' two ports forwarded to it:
-
-```bash
-ssh -N -L 12276:127.0.0.1:12276 -L 12277:127.0.0.1:12277 GLOVE_MACHINE &
-python -m kaiku.app.run --gloves 127.0.0.1 --record demos
-```
-
-The Operator panel on the page shows both gloves and their rate (about 100 Hz) once they stream.
-
-## 3. Calibrate
-
-1. Sit so that your hands rest comfortably above the Coil Pro, where you want the robot's hands to be at home.
-2. Hold both hands flat, palms down, fingers together and pointing away from you.
-3. Press **Calibrate** in the Operator panel.
-4. Close each hand once, thumb to fingers. Kaiku learns how small your gloves read a closed hand.
-
-From then on your hands move the lead robot's hands about that home pose, and closing thumb and fingers
-around a part grips it.
-
-Kaiku refuses to calibrate when the hands are not flat. It also finds out by itself which way up the Coil
-Pro's frame is, from the backs of your flat hands.
-
-## What comes from where
-
-- Wrist position and rotation: the driver's stream (hub and arm sensors against the Coil Pro), solved by Kaiku.
-- Fingers: Rokoko's hand solver whenever it runs; Kaiku's own solver otherwise (`--hand-solver off` forces
-  that).
-- How far the robot's fingers close: the distance between thumb tip and fingertips, scaled to your hands
-  from the flat pose and your tightest pinch.
-
-## Keep the session
+Rokoko's driver can emit two still, emulated gloves. With the SDK installed, run:
 
 ```bash
-python -m kaiku.rgmp.record --host 127.0.0.1 --out session.rgmp     # the raw glove stream, until Ctrl-C
-python -m kaiku.rgmp.replay session.rgmp                            # serves it again, byte for byte
-python -m kaiku.app.run --gloves 127.0.0.1:12276 --hand-solver off  # and Kaiku runs on the replay
-```
-
-## Checked without hardware
-
-Rokoko's driver can emulate gloves. This is how the glove path was tested against the real driver
-(Device SDK 2026.10.20, driver 1.9.7) before any hardware was at hand:
-
-```bash
-cat > rig.json <<'EOF'
-[{"type": "smartglove", "hub_addr": 11, "hw_ver": {"major": 3, "minor": 0}, "fw_ver": {"major": 3, "minor": 4, "patch": 0}, "is_left": true},
- {"type": "smartglove", "hub_addr": 12, "hw_ver": {"major": 3, "minor": 0}, "fw_ver": {"major": 3, "minor": 4, "patch": 0}, "is_left": false}]
-EOF
 rkk-hand-solver --emit world --driver-arg=--pipeline-source --driver-arg=default-emulated \
-                --driver-arg=--emulated-devices --driver-arg=rig.json
-python -m kaiku.app.run --n 8 --gloves 127.0.0.1
+  --driver-arg=--emulated-devices --driver-arg=rig.json
+python -m kaiku.app.gloves --check
 ```
 
-Both gloves connect at about 100 Hz and the fingers come from Rokoko's solver. The emulated gloves do not
-move and have no Coil Pro, so this checks the wire format, the decoding and the finger path, not a full
-teleoperation session.
+The emulated gloves check the SDK, wire format, solver, and finger path. They have no Coil Pro and do not move,
+so the position line correctly stays unticked.

@@ -106,6 +106,33 @@ kbd {
   color: var(--warn);
 }
 
+/* ---------------------------------------------------------------- glove calibration */
+
+.calibrate-card {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 12;
+  width: min(330px, calc(100% - 32px));
+  padding: var(--s-4);
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-m);
+  background: oklch(0.13 0.006 264 / 0.96);
+  box-shadow: 0 18px 50px oklch(0 0 0 / 0.38);
+  text-align: center;
+}
+.calibrate-kicker { color: var(--text-3); font-size: var(--t-11); text-transform: uppercase; letter-spacing: .08em; }
+.calibrate-title { margin-top: var(--s-2); font-size: var(--t-14); }
+.calibrate-hands { display: flex; justify-content: center; gap: var(--s-4); margin-top: var(--s-3); color: var(--text-2); font-size: var(--t-12); }
+.calibrate-hands span { display: inline-flex; align-items: center; gap: 6px; }
+.calibrate-hands i { width: 7px; height: 7px; border-radius: 50%; background: var(--idle); }
+.calibrate-hands span[data-state="ok"] i { background: var(--ok); }
+.calibrate-hands span[data-state="bad"] i { background: var(--warn); }
+.calibrate-ring { width: 58px; height: 58px; margin: var(--s-4) auto var(--s-2); border: 1px solid var(--line-strong); border-radius: 50%; }
+.calibrate-ring span { display: block; width: 100%; height: 100%; border-radius: inherit; background: conic-gradient(var(--text) calc(var(--hold, 0) * 1%), transparent 0); -webkit-mask: radial-gradient(transparent 54%, #000 56%); mask: radial-gradient(transparent 54%, #000 56%); }
+.calibrate-note { color: var(--text-3); font-size: var(--t-12); }
+
 /* ---------------------------------------------------------------- frame */
 
 .app {

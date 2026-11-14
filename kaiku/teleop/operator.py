@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import threading
 import time
+import json
 from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 
@@ -27,6 +29,7 @@ from kaiku.rgmp.solved import SOLVED_PORT, SolvedStream
 from kaiku.sim.grasp import HAND_OPEN, hand14
 from kaiku.teleop.retarget import Retarget
 from kaiku.types import SIDES, GloveFrame
+from kaiku.sim.scene import Layout, Placement
 
 
 class StandIn:
@@ -120,6 +123,11 @@ class GloveOperator:
         self.settle = 0
         self.label = "connecting"
         self._lock = threading.Lock()
+        self._flat_since: float | None = None
+        self._still_since: float | None = None
+        self._last_pose: dict[str, tuple[np.ndarray, np.ndarray] | None] = {side: None for side in SIDES}
+        self._closed = {side: False for side in SIDES}
+        self._capture_at = 1.5
 
     # ------------------------------------------------------------------ operator interface
     def begin(self) -> None:
@@ -139,11 +147,9 @@ class GloveOperator:
         left, right = self.hands["left"], self.hands["right"]
         if left is None or right is None or not (left.has_position and right.has_position):
             return False
-        if self.person is None:
-            # The palms face down in this pose. Backs of both hands pointing down in the tracking frame
-            # means the Coil Pro's Z is the other way up than assumed: turn the frame over and solve again.
-            back = [quat_rotate(hand.wrist_quat, (0.0, 0.0, 1.0))[2] for hand in (left, right)]
-            if max(back) < -0.3:
+        if not all(self._is_flat(hand) for hand in (left, right)):
+            backs = [quat_rotate(hand.wrist_quat, (0.0, 0.0, 1.0))[2] for hand in (left, right)]
+            if self.person is None and max(backs) < -0.3:
                 frames = {side: self.stream.latest(side) for side in SIDES}
                 if None in frames.values():
                     return False
@@ -151,7 +157,13 @@ class GloveOperator:
                     self.solvers[side].flip_vertical()
                     self.hands[side] = self._solve(side, frames[side])
                 left, right = self.hands["left"], self.hands["right"]
-            elif min(back) < 0.3:
+            if not all(self._is_flat(hand) for hand in (left, right)):
+                return False
+        if self.person is None:
+            # The palms face down in this pose. Backs of both hands pointing down in the tracking frame
+            # means the Coil Pro's Z is the other way up than assumed: turn the frame over and solve again.
+            back = [quat_rotate(hand.wrist_quat, (0.0, 0.0, 1.0))[2] for hand in (left, right)]
+            if min(back) < 0.3:
                 return False                                  # not flat, or the two hands disagree
         try:
             cal = Calibration.capture(left, right, robot_home=self.rt.ready(), reach_scale=self.rt.scale)
@@ -162,6 +174,41 @@ class GloveOperator:
             for side, hand in (("left", left), ("right", right)):
                 self.ranges[side].open(hand.pinch)
         return True
+
+    @staticmethod
+    def _is_flat(hand) -> bool:
+        """A level hand has its dorsal axis up in the tracking frame."""
+        if hand is None or not hand.has_position:
+            return False
+        dorsal = quat_rotate(hand.wrist_quat, (0.0, 0.0, 1.0))
+        return bool(dorsal[2] > 0.3 and abs(float(dorsal[0])) < 0.45 and abs(float(dorsal[1])) < 0.45)
+
+    def _calibration_state(self, now: float) -> tuple[bool, float]:
+        hands = [self.hands[side] for side in SIDES]
+        flat = all(self._is_flat(hand) for hand in hands)
+        still = flat
+        for side, hand in zip(SIDES, hands):
+            previous = self._last_pose[side]
+            if hand is None or not hand.has_position or previous is None:
+                still = False
+            else:
+                p, q = previous
+                still &= np.linalg.norm(hand.wrist_pos - p) < 0.006
+                still &= abs(float(np.dot(hand.wrist_quat, q))) > 0.999
+            if hand is not None and hand.has_position:
+                self._last_pose[side] = (hand.wrist_pos.copy(), hand.wrist_quat.copy())
+            else:
+                self._last_pose[side] = None
+        if flat and self._flat_since is None:
+            self._flat_since = now
+        if not flat:
+            self._flat_since = self._still_since = None
+        elif still and self._still_since is None:
+            self._still_since = now
+        elif not still:
+            self._still_since = None
+        held = 0.0 if self._still_since is None else max(0.0, now - self._still_since)
+        return flat and still, held
 
     def _solve(self, side: str, frame: GloveFrame | None):
         """One glove frame to a hand: the wrist from the driver, the fingers from Rokoko's solver when it runs."""
@@ -176,9 +223,13 @@ class GloveOperator:
     def update(self, obs: Observation) -> LeadCommand:
         for side in SIDES:
             self.hands[side] = self._solve(side, self.stream.latest(side))
+        now = time.monotonic()
+        ready, held = self._calibration_state(now)
         if self.teleop is None:
             self.label = "calibrating" if self.stream.connected else "connecting"
             if self.person and self.stream.rate_hz("left") > 40 and self.stream.rate_hz("right") > 40:
+                self.calibrate()
+            elif ready and held >= self._capture_at:
                 self.calibrate()
             return self.s.home_command()
         if self.person:
@@ -197,23 +248,36 @@ class GloveOperator:
                 self.person.want(side, want.pinch[s], want.rot[s], posture[s], self.teleop.calibration)
         else:
             self.label = "teleop"
-        cmd = self.teleop.update(self.hands, time.monotonic())
+        cmd = self.teleop.update(self.hands, now)
         if self.ranges:
             for side in SIDES:
                 hand = cmd.hands[side]
                 if hand is not None:
                     cmd.hands[side] = replace(hand, pinch=self.ranges[side](hand.pinch))
         self.pinch, self.rot, self.posture = self.rt.command(cmd, (self.pinch, self.rot, self.posture))
+        for side in SIDES:
+            hand = self.hands[side]
+            if hand is not None and float(np.mean(hand.curl)) > 0.62:
+                self._closed[side] = True
         return LeadCommand(self.pinch.copy(), self.rot.copy(), hand14(self.posture[0], self.posture[1]))
 
     # ------------------------------------------------------------------ for the viewer
     def hud(self) -> dict:
         out = {"calibrated": self.teleop is not None, "source": self.source, "stand_in": self.person is not None}
+        out["flat_s"] = 0.0 if self._flat_since is None else round(max(0.0, time.monotonic() - self._flat_since), 2)
+        out["still_s"] = 0.0 if self._still_since is None else round(max(0.0, time.monotonic() - self._still_since), 2)
         pts = {}
         for side in SIDES:
             hz = self.stream.rate_hz(side)
+            hand = self.hands[side]
+            flat = self._is_flat(hand)
+            position = bool(hand is not None and hand.has_position)
+            still_s = 0.0 if self._still_since is None else max(0.0, time.monotonic() - self._still_since)
             out[side] = {"connected": hz > 1.0, "hz": round(hz, 1), "fingers": self.fingers[side],
-                         "status": self.teleop.status[side] if self.teleop else "uncalibrated"}
+                         "status": self.teleop.status[side] if self.teleop else "uncalibrated",
+                         "seen": hand is not None, "position": position, "has_position": position,
+                         "flat": flat, "is_flat": flat, "still": flat and still_s > 0,
+                         "still_s": round(still_s, 2), "closed": self._closed[side]}
             hand = self.hands[side]
             if hand is not None:
                 p = self.rt.models[side].points(hand.joints).reshape(20, 3)
@@ -221,9 +285,99 @@ class GloveOperator:
         out["hands"] = pts or None
         return out
 
+    def hand_points(self) -> np.ndarray:
+        """The same wrist-relative points sent to the viewer, for a replay."""
+        points = np.full((2, 21, 3), np.nan, dtype=np.float32)
+        for s, side in enumerate(SIDES):
+            hand = self.hands[side]
+            if hand is not None:
+                points[s, 0] = 0.0
+                points[s, 1:] = self.rt.models[side].points(hand.joints).reshape(20, 3)
+        return points
+
     def close(self) -> None:
         self.stream.stop()
         if self.solved:
             self.solved.stop()
         if self.emulator:
             self.emulator.stop()
+
+
+class ReplayOperator:
+    """Drive the lead from command arrays saved by ``Recorder``."""
+
+    def __init__(self, session: Session, root: str | Path):
+        self.s = session
+        self.root = Path(root)
+        self.rows = []
+        side = self.root / "episodes.jsonl"
+        if side.exists():
+            for line in side.read_text().splitlines():
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                if row.get("env") == 0 and row.get("source") == "human":
+                    self.rows.append(row)
+        self.index = -1
+        self.current = None
+        self.tick = 0
+        self.label = "replay"
+        self.source = "recorded"
+        self.person = None
+        self.hands = {side: None for side in SIDES}
+        self.calibrated = True
+
+    @property
+    def done(self) -> bool:
+        return self.current is not None and self.tick >= len(self.current["lead_pinch"])
+
+    def begin(self) -> None:
+        if not self.rows:
+            self.current = None
+            return
+        self.index = (self.index + 1) % len(self.rows)
+        row = self.rows[self.index]
+        data = np.load(self.root / row["file"])
+        self.current = {k: data[k] for k in ("lead_pinch", "lead_rot", "lead_hand") if k in data}
+        self._points = None
+        if "hands" in data:
+            self.current["hands"] = data["hands"]
+        if "lead_pinch" not in self.current and "lead_command" in data:
+            packed = data["lead_command"]
+            self.current.update({"lead_pinch": packed[:, :6].reshape(-1, 2, 3),
+                                 "lead_rot": packed[:, 6:24].reshape(-1, 2, 3, 3),
+                                 "lead_hand": packed[:, 24:38]})
+        if "lead_pinch" not in self.current:
+            i = int(row.get("row", 0))
+            self.current = {"lead_pinch": np.tile(self.s.home_pinch, (len(data["action"][i]), 1, 1)),
+                            "lead_rot": np.tile(self.s.home_rot, (len(data["action"][i]), 1, 1)),
+                            "lead_hand": data["action"][i, :, 14:]}
+        self.tick = 0
+
+    def scene(self) -> Layout:
+        if not self.rows:
+            return self.s.sample_lead()
+        row = self.rows[(self.index + 1) % len(self.rows)]
+        return Layout([Placement(p["name"], np.asarray(p["pos"], float), float(p["yaw"])) for p in row.get("layout", [])],
+                      dict(row.get("mapping") or {}))
+
+    def update(self, obs: Observation) -> LeadCommand:
+        if self.current is None:
+            return self.s.home_command()
+        k = min(self.tick, len(self.current["lead_pinch"]) - 1)
+        self.tick += 1
+        if "hands" in self.current:
+            self._points = self.current["hands"][k]
+        return LeadCommand(np.array(self.current["lead_pinch"][k]), np.array(self.current["lead_rot"][k]),
+                           np.array(self.current["lead_hand"][k]))
+
+    def hud(self) -> dict:
+        row = self.rows[self.index] if self.rows and self.index >= 0 else {}
+        points = getattr(self, "_points", None)
+        return {"calibrated": True, "source": "recorded", "stand_in": False, "date": row.get("time"),
+                "left": {"connected": True, "hz": 0.0, "status": "recorded"},
+                "right": {"connected": True, "hz": 0.0, "status": "recorded"},
+                "hands": None if points is None else np.asarray(points).tolist()}
+
+    def close(self) -> None:
+        pass

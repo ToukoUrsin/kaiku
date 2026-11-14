@@ -26,8 +26,9 @@ const SOURCE_TEXT = {
   autopilot: 'Autopilot · scripted motion',
   policy: 'Trained policy · nobody is driving',
   visitor: 'A visitor is driving',
+  recorded: 'Recorded session · replay',
 };
-const TAG_TEXT = { 'stand-in': 'Scripted hand, emulated gloves', gloves: 'Operator in Rokoko gloves', autopilot: 'Autopilot', policy: 'Policy', visitor: 'A visitor is driving' };
+const TAG_TEXT = { 'stand-in': 'Scripted hand, emulated gloves', gloves: 'Operator in Rokoko gloves', autopilot: 'Autopilot', policy: 'Policy', visitor: 'A visitor is driving', recorded: 'Recorded session' };
 const STAGE_TEXT = { loading: 'Reading the demonstrations', training: 'Training', testing: 'Testing on scenes it has not seen', done: 'Finishing' };
 const TOAST_MS = 4200;
 
@@ -350,7 +351,9 @@ export class Hud {
     this.attr('clipped', 'data-alert', clippedSteps > 0);
     this.attr('clipped-2', 'data-alert', clippedSteps > 0);
 
-    const who = operator.source === 'autopilot'
+    const who = operator.source === 'recorded'
+      ? 'A recorded human session drives this robot.'
+      : operator.source === 'autopilot'
       ? 'Autopilot drives one robot.'
       : operator.source === 'gloves' ? 'One operator in Smartgloves II.' : 'A scripted hand in emulated Smartgloves II drives one robot.';
     // ?clean=1 keeps the film's caption as it was; the page adds where the runs go
@@ -366,7 +369,10 @@ export class Hud {
     const operator = this.hud.operator || {};
     const source = operator.source;
     const linked = Boolean(operator.left?.connected && operator.right?.connected);
-    const sourceText = source === 'gloves' && !linked ? 'Smartgloves II · not connected' : SOURCE_TEXT[source];
+    const sourceText = source === 'gloves' && !linked ? 'Smartgloves II · not connected'
+      : source === 'recorded' && Number.isFinite(operator.date)
+        ? `Recorded session · ${new Date(operator.date * 1000).toLocaleDateString()}`
+        : SOURCE_TEXT[source];
     this.text('source-text', sourceText || 'Waiting for the operator');
     this.attr('source', 'data-live', source === 'gloves' && linked);
     this.attr('source', 'data-standin', source === 'stand-in' || source === 'autopilot');
@@ -382,7 +388,7 @@ export class Hud {
     this.text('calibrated', operator.calibrated ? 'Calibrated' : source === 'policy' ? 'Not needed' : 'Not calibrated');
     const calibrating = this.hud.episode?.step === 'calibrating';
     this.text('calibrate', calibrating ? 'Calibrating' : operator.calibrated ? 'Recalibrate' : 'Calibrate');
-    this.attr('calibrate', 'disabled', calibrating || source === 'autopilot' || source === 'policy');
+    this.attr('calibrate', 'disabled', calibrating || source === 'autopilot' || source === 'policy' || source === 'recorded');
     this.renderDrive();
   }
 

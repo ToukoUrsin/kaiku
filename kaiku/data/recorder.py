@@ -56,8 +56,12 @@ class Recorder:
         self._state: list[np.ndarray] = []
         self._action: list[np.ndarray] = []
         self._parts: list[np.ndarray] = []
+        self._lead_pinch: list[np.ndarray] = []
+        self._lead_rot: list[np.ndarray] = []
+        self._lead_hand: list[np.ndarray] = []
+        self._hands: list[np.ndarray] = []
 
-    def add(self, obs, arm: np.ndarray, hand: np.ndarray) -> None:
+    def add(self, obs, arm: np.ndarray, hand: np.ndarray, command=None, hands=None) -> None:
         """One tick: the observation it started from and the command that was sent."""
         if not self.enabled:
             return
@@ -66,6 +70,14 @@ class Recorder:
         self._state.append(np.concatenate([obs.arm_q, obs.hand_q], axis=1).astype(np.float32))
         self._action.append(np.concatenate([arm, hand], axis=1).astype(np.float32))
         self._parts.append(np.concatenate([obs.obj_pos[rows, idx], obs.obj_quat[rows, idx]], axis=-1).astype(np.float32))
+        if command is not None:
+            self._lead_pinch.append(np.asarray(command.pinch, dtype=np.float32).copy())
+            self._lead_rot.append(np.asarray(command.rot, dtype=np.float32).copy())
+            self._lead_hand.append(np.asarray(command.hand, dtype=np.float32).copy())
+        if hands is not None:
+            points = np.asarray(hands, dtype=np.float32)
+            if points.shape == (2, 21, 3):
+                self._hands.append(points.copy())
 
     def end(self, result, source: str | None = None) -> dict:
         """Close the episode: write the robots that made a clean demonstration. Returns counts."""
@@ -75,6 +87,16 @@ class Recorder:
             return out
         sc = self.s.scene
         state, action, parts = np.stack(self._state, 1), np.stack(self._action, 1), np.stack(self._parts, 1)
+        lead_extra = {
+            "lead_pinch": np.stack(self._lead_pinch).astype(np.float32),
+            "lead_rot": np.stack(self._lead_rot).astype(np.float32),
+            "lead_hand": np.stack(self._lead_hand).astype(np.float32),
+        } if len(self._lead_pinch) == state.shape[1] else {}
+        if lead_extra:
+            lead_extra["lead_command"] = np.concatenate(
+                [lead_extra["lead_pinch"].reshape(state.shape[1], -1),
+                 lead_extra["lead_rot"].reshape(state.shape[1], -1), lead_extra["lead_hand"]], axis=1)
+        hands_extra = {"hands": np.stack(self._hands).astype(np.float32)} if len(self._hands) == state.shape[1] else {}
         self.begin()
         good = result.success & (result.clipped == 0) & ~result.aborted
         keep = np.flatnonzero(good)
@@ -92,7 +114,9 @@ class Recorder:
         span = np.stack([np.maximum(first - LEAD_IN, 0), np.minimum(last + LEAD_OUT, T)], axis=1)
         ep = self.episodes
         name = f"ep{ep:06d}.npz"
-        np.savez_compressed(self.root / name, state=state[keep], action=action[keep], parts=parts[keep], span=span)
+        extra = lead_extra | hands_extra
+        np.savez_compressed(self.root / name, state=state[keep], action=action[keep], parts=parts[keep], span=span,
+                            **extra)
         lead = result.layouts[0]
         with open(self.root / "episodes.jsonl", "a") as f:
             for row, i in enumerate(keep):

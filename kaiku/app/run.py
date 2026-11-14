@@ -37,7 +37,8 @@ from kaiku.app.visitor import VisitorOperator
 from kaiku.data.recorder import Recorder
 from kaiku.sim.fetch import ensure
 from kaiku.sim.twin import CONTROL_HZ
-from kaiku.teleop.operator import GloveOperator
+from kaiku.teleop.operator import GloveOperator, ReplayOperator
+from kaiku.fanout.echo import sample_followers
 from kaiku.web.server import ViewerServer
 
 DT = 1.0 / CONTROL_HZ
@@ -77,6 +78,7 @@ class Runner:
         self.commands: queue.Queue = queue.Queue()
         self.viewer.on_message(self.commands.put)
         self.gloves = gloves                                   # HOST[:PORT] of a Rokoko driver, or None: the stand-in
+        self.session_dir = None
         self.hand_solver = hand_solver                         # HOST:PORT of rkk-hand-solver, "off", or None: the default
         self.ops: dict = {}
         self.visitor: VisitorOperator | None = None
@@ -149,9 +151,12 @@ class Runner:
                 self.ops[mode] = VisitorOperator(self.s)
                 self.visitor = self.ops[mode]
             else:
-                host, _, port = (self.gloves or "").partition(":")
-                self.ops[mode] = GloveOperator(self.s, host or None, int(port) if port else None,
-                                               solver=self.hand_solver)
+                if self.session_dir:
+                    self.ops[mode] = ReplayOperator(self.s, self.session_dir)
+                else:
+                    host, _, port = (self.gloves or "").partition(":")
+                    self.ops[mode] = GloveOperator(self.s, host or None, int(port) if port else None,
+                                                   solver=self.hand_solver)
         return self.ops[mode]
 
     def _who(self) -> str:
@@ -174,7 +179,7 @@ class Runner:
         """The next scene has been drawn (and, for the policy, the policy is in)."""
         if self.want_mode == "policy":
             return self.pilot is not None and self.next_free is not None and self.next_free.done()
-        return self.next.done()
+        return self.next.done() if not isinstance(self.op, ReplayOperator) else bool(self.op.rows)
 
     def _begin_episode(self) -> None:
         self._visitor_expired = False
@@ -199,6 +204,12 @@ class Runner:
         self.replaying = self.again is not None
         if self.replaying:                                     # the same tables as the scene without the echo
             (lead, followers), copy, self.again = self.again, False, None
+        elif isinstance(self.op, ReplayOperator):              # a recorded person leads: their scene, new tables around it
+            lead = self.op.scene()
+            followers = sample_followers(self.s.scene, lead, self.s.rng, self.n - 1, self.s.spread,
+                                         self.s.vary_shape, self.s.reach)
+            copy, self.copy_next = self.copy_next, False
+            self.again = (lead, followers) if copy else None
         else:
             lead, followers = self.next.result()
             self.next = self.sampler.scene(self.parts)
@@ -528,7 +539,8 @@ class Runner:
             s.finish_lead()
         s.tick(cmd)
         if not s.copy:
-            self.rec.add(obs, *s.last_action)
+            points = self.op.hand_points() if hasattr(self.op, "hand_points") else None
+            self.rec.add(obs, *s.last_action, command=cmd, hands=points)
         self._publish()
         if s.tick_no % 6 == 0:
             self._refresh()
@@ -572,7 +584,7 @@ class Runner:
         hz = 0.0
         if len(self.walls) > 1 and self.walls[-1] > self.walls[0]:
             hz = (len(self.walls) - 1) / (self.walls[-1] - self.walls[0])
-        operator = self.op.hud() if (isinstance(self.op, GloveOperator) or self.mode == "visitor") and not alone else \
+        operator = self.op.hud() if (isinstance(self.op, (GloveOperator, ReplayOperator)) or self.mode == "visitor") and not alone else \
             {"left": {"connected": False, "hz": 0.0}, "right": {"connected": False, "hz": 0.0},
              "calibrated": False, "stand_in": not alone, "source": "policy" if alone else "autopilot", "hands": None}
         if self.driver_client is not None:                     # whose turn it is, and how long it still lasts
@@ -715,6 +727,7 @@ def main(argv=None) -> None:
     ap.add_argument("--hand-solver", default=None, metavar="HOST:PORT|off",
                     help="where rkk-hand-solver serves solved hands (default: port 12277 on the gloves' host); "
                          "the fingers come from it while it runs, from kaiku's own solver otherwise")
+    ap.add_argument("--session", default=None, metavar="DIR", help="replay a recorded human session")
     ap.add_argument("--g1", type=int, default=None, metavar="PORT",
                     help="serve the lead robot's commands to the humanoid challenge's runner (its policy-server "
                          "protocol, port 8000 there), so a real G1 follows the operator; see kaiku/app/g1.py")
@@ -723,6 +736,13 @@ def main(argv=None) -> None:
     r = Runner(a.n, a.port, a.host, a.seed, a.parts if a.parts == "auto" else int(a.parts), a.record,
                threads=a.threads, mode=a.mode, gloves=a.gloves, hand_solver=a.hand_solver, policy=a.policy, train=a.train,
                train_steps=a.train_steps, shared=a.shared, train_about=a.train_about)
+    if a.session:
+        r.session_dir = Path(a.session)
+        r.mode = r.want_mode = "gloves"
+        old = r.ops.pop("gloves", None)
+        if old is not None:
+            old.close()
+        r.op = r._operator("gloves")
     if a.g1:
         from kaiku.app import g1
         r.lead = g1.Lead()
