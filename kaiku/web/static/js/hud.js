@@ -422,9 +422,13 @@ export class Hud {
     const camera = Boolean(this.driving?.camera);
     this.text('drive-camera', camera ? 'Use the pointer' : 'Use my hand');
     // Their own grasp needs their fingers: a camera that sees the hand, or a glove on it.
-    const fingers = operator.fingers || null;
+    // A slow device's hand tracking skips a beat now and then: the words wait two seconds before they change.
+    if (operator.fingers) this.fingersSeen = { value: operator.fingers, closure: operator.closure, at: performance.now() };
+    const kept = this.fingersSeen && performance.now() - this.fingersSeen.at < 2000 ? this.fingersSeen : null;
+    const fingers = operator.fingers || (camera && kept ? kept.value : null);
+    const closure = operator.closure || (fingers && kept ? kept.closure : null);
     const own = Boolean(operator.own);
-    this.show('drive-own', Boolean(fingers) || Boolean(this.driving?.own));
+    this.show('drive-own', Boolean(fingers) || camera || Boolean(this.driving?.own));
     this.text('drive-own', this.driving?.own ? 'Help me grasp' : 'Grasp it myself');
     this.attr('drive-own', 'aria-pressed', this.driving?.own ? 'true' : 'false');
     this.text('drive-left', turn ? `${turn} left` : '');
@@ -437,8 +441,10 @@ export class Hud {
     let say;
     const whose = fingers === 'glove' ? 'The glove' : 'Your fingers';
     const coil = operator.input === 'coil' || (fingers === 'glove' && Boolean(operator.glove?.coil));
-    let more = own ? `${fingers === 'glove' ? 'The glove does' : 'Your fingers do'} the grasp. The robot only turns its wrist${coil ? '' : ' and lifts'}.`
-      : fingers ? `${whose} move${fingers === 'glove' ? 's' : ''} the robot's fingers. The grasp itself is assisted.`
+    // The robot's two fingers, as the person's own index and middle finger close them right now.
+    const now = closure ? `: index ${Math.round(closure.index * 10) * 10}% closed, middle ${Math.round(closure.middle * 10) * 10}%` : '';
+    let more = own ? `${fingers === 'glove' ? 'The glove does' : 'Your fingers do'} the grasp${now}. The robot only turns its wrist${coil ? '' : ' and lifts'}.`
+      : fingers ? `${whose} move${fingers === 'glove' ? 's' : ''} the robot's${now ? '' : ' fingers'}${now}. The grasp is assisted.`
         : `${robots} robots redo every move on their own tables.`;
     if (phase === 'wait' || !table) {
       say = 'Your turn starts with the next scene';

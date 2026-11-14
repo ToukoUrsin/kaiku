@@ -511,6 +511,7 @@ a.button {
 
 .drive-more {
   max-width: 44ch;
+  font-variant-numeric: tabular-nums;
   color: var(--text-2);
   font-size: var(--t-13);
   text-shadow: 0 1px 12px rgba(0, 0, 0, 0.8);

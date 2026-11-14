@@ -43,12 +43,12 @@ Kaiku can follow a part that slides and show a failing table while the operator 
 
 Every source goes down one path: a hand solver, retargeting to the Dex3's three fingers, the wrist through arm inverse kinematics. The page always says which one is driving.
 
-- **Your own hand, on the hosted page.** Press Drive it yourself, then Use my hand. Your camera's 21 hand landmarks go down that path and the robot's fingers follow yours. The picture stays in your browser. The grasp is assisted until you press Grasp it myself; then your fingers do it and the robot only turns its wrist and lifts. Without a camera, a pointer works.
+- **Your own hand, on the hosted page.** Press Drive it yourself, then Use my hand. Your camera's 21 hand landmarks go down that path and the robot's fingers follow yours, each finger its own: curl your index finger and the robot's index finger closes, touch thumb to middle finger and its middle finger closes, make a fist and the hand closes. The page shows how far each is closed. The picture stays in your browser. The grasp is assisted until you press Grasp it myself; then your fingers do it and the robot only turns its wrist and lifts. Without a camera, a pointer works.
 - **One Smartglove.** `--one-glove HOST:12276`. The fingers and the pinch come from the glove and the position from a pointer or a camera. With a Coil Pro the position is the glove's own: hold the hand flat and still for two seconds and the robot's hand goes where yours goes.
 - **A pair of Smartgloves on a Coil Pro.** `--gloves HOST:12276`, both arms.
 - **Nobody.** A scripted hand in emulated Smartgloves II, with tremor and sensor noise, sent through the same socket, solver and retargeting.
 
-Nobody has worn real Smartgloves with Kaiku yet. The glove paths are tested with Rokoko's own driver and hand solver and the driver's emulated Smartgloves II.
+The camera path is checked on film of real hands that are not ours: a fist opening one finger at a time, filmed from above (its landmarks are in `tests/fixtures/real_hand`, two tests run on them), and a hand held up to a camera touching thumb to each fingertip, played into the page as its camera. Nobody has worn real Smartgloves with Kaiku yet. The glove paths are tested with Rokoko's own driver and hand solver and the driver's emulated Smartgloves II.
 
 ## What is new
 
@@ -88,7 +88,7 @@ python -m kaiku.rgmp.replay session.rgmp                      # and serve it aga
 python -m kaiku.policy.fit demos --out policies               # train with and without echoes, test both
 python -m kaiku.policy.rollout policies/kaiku.pt              # 48 robots, 48 new scenes, no operator
 python -m kaiku.data.export demos out --limit 20              # LeRobot v3.0 and GR00T (the page's Dataset tab downloads the last scene)
-pytest                                                        # 127 tests
+pytest                                                        # 129 tests
 ```
 
 ## What is real and what is not

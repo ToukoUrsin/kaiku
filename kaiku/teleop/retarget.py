@@ -33,6 +33,9 @@ from kaiku.types import SIDES, HumanHand, TeleopCommand
 GAP_KNOTS = np.array([0.012, 0.035, 0.080, 0.125])
 U_KNOTS = np.array([1.2, 1.0, 0.0, -1.0])
 HOLD_GAP = 0.035
+# A finger's own curl (``HandModel.curl``, 0 straight to 1 fully curled), measured on real hands seen by
+# a camera: a flat or relaxed hand reads up to 0.25, a fingertip on the thumb 0.45, a fist 0.6 and more.
+CURL_BENT, CURL_OPEN, CURL_CLOSED = 0.25, 0.30, 0.60
 READY_PINCH = {"left": np.array([0.28, 0.14, 0.17]), "right": np.array([0.28, -0.14, 0.17])}
 """Where the robot's pinch points go when the operator calibrates (flat hands, pointing ahead):
 level, above the mat, in reach of every part."""
@@ -126,11 +129,28 @@ class Retarget:
         closed, flat = np.column_stack([ends, middle, ends, ends])
         return GapRange(closed, flat)
 
-    def fingers(self, hand: HumanHand) -> np.ndarray:
-        """Dex3 posture (7, left-hand order) for a solved human hand."""
+    def fingers(self, hand: HumanHand, curl: bool = False) -> np.ndarray:
+        """Dex3 posture (7, left-hand order) for a solved human hand.
+
+        The thumb-to-finger gaps close the robot's fingers, as a pinch does. With ``curl`` each finger's
+        own bend counts as well: an index finger curled alone closes the robot's index finger, a fist
+        closes the hand. And a gap only closes a finger whose own joints, or the thumb's, are bent: a
+        camera that sees a flat hand from an odd side can read its thumb and finger as near each other,
+        and a flat hand is not a pinch."""
         u_index = float(closure_from_gap(hand.pinch[0]))
         as_index = float(np.interp(hand.pinch[1], self._middle_gap, self._index_gap))
         u_middle = float(closure_from_gap(as_index))
+        if curl:
+            thumb, index, middle = (float(c) for c in hand.curl[:3])
+            own = np.clip((np.array([index, middle]) - CURL_OPEN) / (CURL_CLOSED - CURL_OPEN), 0.0, 1.0)
+            if max(thumb, index) < CURL_BENT:
+                u_index = min(u_index, 0.0)
+            if max(thumb, middle) < CURL_BENT:
+                u_middle = min(u_middle, 0.0)
+            if own[0] > 0.0:
+                u_index = max(u_index, float(own[0]))
+            if own[1] > 0.0:
+                u_middle = max(u_middle, float(own[1]))
         return dex3_posture(max(u_index, u_middle), u_middle, u_index)
 
     def pose(self, side: str, wrist_pos: np.ndarray, wrist_quat: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

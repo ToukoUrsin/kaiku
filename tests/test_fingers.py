@@ -250,3 +250,57 @@ def test_one_glove_on_a_coil_places_the_hand_and_does_the_grasp():
         finally:
             v.close()
     s.close()
+
+
+def _replay_real_hand(name: str, monkeypatch) -> np.ndarray:
+    """A real person's hand (tests/fixtures/real_hand) down the camera path: [t, robot middle, robot index]
+    per tick, the first joint of each finger as their hand asks it of the Dex3 (0 straight, -1 closed)."""
+    import json
+    from pathlib import Path
+
+    rows = [json.loads(line) for line in (Path(__file__).parent / "fixtures" / "real_hand" / name).read_text().splitlines()]
+    clock = [time.monotonic()]
+    monkeypatch.setattr(visitor_module.time, "monotonic", lambda: clock[0])
+    s = Session(2, seed=1)
+    layout, followers = s.sample_scene(3)
+    s.new_episode(layout, followers)
+    v = VisitorOperator(s)
+    v.begin()
+    out, k, t = [], 0, 0.0
+    try:
+        while t < rows[-1]["t"]:
+            while k + 1 < len(rows) and rows[k + 1]["t"] <= t:
+                k += 1
+            clock[0] += 1 / 50
+            t += 1 / 50
+            v.set_command({"x": 0.28, "y": 0.0, "grip": False, "input": "camera", "own": False,
+                           "world": np.array(rows[k]["world"]).reshape(-1).tolist(),
+                           "right": rows[k]["label"] != "Right", "depth": 0.0})
+            s.tick(v.update(s.observe()))
+            out.append([t, v.posture[3], v.posture[5]])        # what their fingers ask of the Dex3, left-hand order
+    finally:
+        s.close()
+    return np.array(out)
+
+
+def test_a_real_persons_fingers_move_the_robots_one_at_a_time(monkeypatch):
+    """A fist that opens thumb first, then the index finger, then the middle finger, filmed from above:
+    the robot's hand is closed for the fist, its index finger opens when the person's does while its
+    middle finger stays closed, and with the hand open both are open."""
+    a = _replay_real_hand("counting_left.jsonl", monkeypatch)
+    at = lambda lo, hi: a[(a[:, 0] >= lo) & (a[:, 0] < hi), 1:].mean(axis=0)      # (middle, index)
+    fist, index_out, both_out, open_hand = at(0.5, 2.0), at(2.6, 3.0), at(4.4, 5.6), at(7.0, 13.0)
+    assert fist[0] < -0.9 and fist[1] < -0.9                  # closed
+    assert index_out[1] > index_out[0] + 0.15                 # the index finger alone has opened
+    assert both_out[0] > fist[0] + 0.3 and both_out[1] > fist[1] + 0.3
+    assert open_hand[0] > -0.45 and open_hand[1] > -0.45      # open
+
+
+def test_a_real_flat_hand_is_not_a_pinch(monkeypatch):
+    """The other hand stays a fist for seven seconds and then opens. Seen from above, the camera reads
+    its flat hand's thumb and index finger as 60 mm apart, less than its fist's: nothing may close."""
+    a = _replay_real_hand("counting_right.jsonl", monkeypatch)
+    fist = a[(a[:, 0] >= 0.5) & (a[:, 0] < 6.5), 1:].mean(axis=0)
+    flat = a[(a[:, 0] >= 11.0) & (a[:, 0] < 13.0), 1:].mean(axis=0)
+    assert fist[0] < -0.9 and fist[1] < -0.9
+    assert flat[0] > -0.45 and flat[1] > -0.45

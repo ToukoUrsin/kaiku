@@ -116,6 +116,7 @@ class VisitorOperator:
         self.range = self.rt.gap_range()
         self.dir = [0.0, 0.0]                                 # the way each palm's fingers point now
         self.pinched = False                                  # the solved hand's own pinch
+        self.posture = None                                   # the Dex3 posture their fingers ask for
         self.closed_at = None                                 # since when the fingers have been closed, their own grasp
         self.was_own = False
         self.drove = None                                     # whose fingers drove in this scene, for its label
@@ -277,7 +278,7 @@ class VisitorOperator:
         elif self.input == "coil":                             # the coil lost the hand: the page's point again
             self.input, self.anchor, self.still_since = "pointer", None, None
         if hand is None:
-            self.pinched = False
+            self.pinched, self.posture = False, None
             return None
         hand = self.filter.update({name: hand}, now).hands[name] or hand      # the gloves' own filters
         # How wide this hand opens and how far it closes, brought onto what the robot's fingers are driven by.
@@ -285,7 +286,8 @@ class VisitorOperator:
         gaps = self.range(hand.pinch)
         self.human = replace(hand, pinch=gaps, gaps=gaps)
         self.pinched = float(gaps[0]) < (PINCH_OFF if self.pinched else PINCH_ON)
-        return self.rt.fingers(self.human)
+        self.posture = self.rt.fingers(self.human, curl=True)
+        return self.posture
 
     def _place(self, hand, now: float) -> None:
         """A gloved hand on a Coil Pro: where it is, is where the robot's hand is. The pose it is first
@@ -478,9 +480,15 @@ class VisitorOperator:
             p = self.rt.models[SIDES[self.side]].points(self.human.joints).reshape(20, 3)
             hands = {SIDES[self.side]: [[0.0, 0.0, 0.0]] + [[round(float(v), 4) for v in row] for row in p]}
         gap = None if self.human is None else round(float(self.human.pinch[0]) * 1000.0)
+        closure = None
+        if self.posture is not None:
+            middle, index = closure_of_posture(self.posture)
+            closure = {"index": round(float(np.clip(index, 0.0, 1.0)), 2), "middle": round(float(np.clip(middle, 0.0, 1.0)), 2)}
         return {"calibrated": True, "source": self.source, "stand_in": False, "driving": True, "hands": hands,
                 # Where each part of the command comes from, for the page to say.
                 "fingers": self.fingers, "own": bool(self.own and self.fingers is not None), "gap_mm": gap,
+                # How far the person's own index and middle finger close the robot's, 0 open to 1 closed.
+                "closure": closure,
                 "glove": self.glove.hud() if self.glove is not None else None,
                 "placed": self.anchor is not None, "flat_s": round(float(self.flat_s), 2),
                 "input": self.input, "points": self.points, "phase": self.phase,
