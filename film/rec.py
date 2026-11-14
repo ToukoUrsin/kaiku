@@ -101,7 +101,7 @@ async def record(a: argparse.Namespace) -> None:
                     await fetch_asset(session, base, "/api/tex/" + str(tex["file"]), out, assets, set())
         if a.wait:
             await wait_for(session, ws_url, a.wait, a.wait_limit, a.operator)
-        t0 = time.monotonic()
+        t0, t0_epoch = time.monotonic(), time.time()
         print(f"recording {a.seconds:g} s", flush=True)
         async with session.ws_connect(ws_url, heartbeat=20, max_msg_size=16 * 1024 * 1024) as ws:
             async def presses() -> None:
@@ -151,7 +151,7 @@ async def record(a: argparse.Namespace) -> None:
                     print("  switched back to Operator", flush=True)
     (out / "recording.json").write_text(json.dumps({
         "format": 1, "source_url": a.url, "ws_url": ws_url, "seconds_requested": a.seconds,
-        "seconds_wall": time.monotonic() - t0, "recorded_at": time.time(),
+        "seconds_wall": time.monotonic() - t0, "recorded_at": time.time(), "t0_epoch": t0_epoch,
         "commands": [{k: c[k] for k in ("t", "name", "value")} for c in commands],
         "messages": "messages.jsonl", "message_counts": counts, "assets": assets}, indent=2) + "\n")
     print(f"saved {out}: {counts['binary']} binary, {counts['text']} text, {len(assets)} files", flush=True)
