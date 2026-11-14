@@ -1,594 +1,955 @@
 {
-  "about": {
-    "commit": "f6b1e58b688d318fb74410ec4d290f8174bee612",
-    "date": "2026-11-14",
-    "interval": "Wilson 95% intervals",
-    "notes": "MimicGen-style is our re-implementation, not MimicGen or DexMimicGen code, data, or benchmark. We detect each subtask from measured lift and rest-in-bin times, transform XY and yaw around the paired object (using shape symmetry), use the bin frame for carry/drop, replay open loop through the same IK, safety filter and MuJoCo, and keep only clean runs. We do not use paper annotations, learned placement or recovery policies, contact-aware replanning, or DexMimicGen's bimanual coordination subtasks; this task never has two hands holding one part.",
-    "off_box": {
-      "backend": "Daytona/Fly CPU sandboxes",
-      "generation_wall_seconds": 3449.7,
-      "metered_cost": "not exposed by drun; no spend was recorded",
-      "policy_training_seconds": 9092.2
-    },
-    "same_targets_for_all_generation_arms": true,
-    "simulator": "MuJoCo twin, the same IK, shaper, safety filter and physics as Session",
-    "source": "16 stand-in human recorder rows from /bulk2/runs/robotteleop/policy/demos_snap (episodes 0-15)",
-    "status": "complete for the requested 16 x 47 generation and matched 3-seed policy matrix; policy budget reduced to 10000 steps",
-    "target_manifest": "/bulk3/runs/robotteleop/baseline/measurement/targets.jsonl"
+ "about": {
+  "commit": "f6b1e58b688d318fb74410ec4d290f8174bee612",
+  "date": "2026-11-14",
+  "interval": "Wilson 95% intervals",
+  "notes": "MimicGen-style is our re-implementation, not MimicGen or DexMimicGen code, data, or benchmark. We detect each subtask from measured lift and rest-in-bin times, transform XY and yaw around the paired object (using shape symmetry), use the bin frame for carry/drop, replay open loop through the same IK, safety filter and MuJoCo, and keep only clean runs. We do not use paper annotations, learned placement or recovery policies, contact-aware replanning, or DexMimicGen's bimanual coordination subtasks; this task never has two hands holding one part.",
+  "off_box": {
+   "backend": "Daytona/Fly CPU sandboxes",
+   "generation_wall_seconds": 3449.7,
+   "metered_cost": "not exposed by drun; no spend was recorded",
+   "policy_training_seconds": 9092.2
   },
-  "generation": {
-    "copy": {
-      "attempts": 752,
-      "by_distance": {
-        "far": {
-          "attempts": 637,
-          "clean": 0,
-          "interval95": [
-            0.0,
-            0.005994398096158378
-          ],
-          "yield": 0.0
-        },
-        "mid": {
-          "attempts": 107,
-          "clean": 0,
-          "interval95": [
-            0.0,
-            0.03465723801874867
-          ],
-          "yield": 0.0
-        },
-        "near": {
-          "attempts": 8,
-          "clean": 0,
-          "interval95": [
-            0.0,
-            0.32440756488388023
-          ],
-          "yield": 0.0
-        }
-      },
-      "by_parts": {
-        "3": {
-          "attempts": 141,
-          "clean": 0,
-          "interval95": [
-            0.0,
-            0.026521818075925647
-          ],
-          "yield": 0.0
-        },
-        "4": {
-          "attempts": 376,
-          "clean": 0,
-          "interval95": [
-            0.0,
-            0.010113321575324678
-          ],
-          "yield": 0.0
-        },
-        "5": {
-          "attempts": 235,
-          "clean": 0,
-          "interval95": [
-            0.0,
-            0.016083718629344122
-          ],
-          "yield": 0.0
-        }
-      },
-      "by_shape": {
-        "other_shape": {
-          "attempts": 742,
-          "clean": 0,
-          "yield": 0.0
-        },
-        "same_shape": {
-          "attempts": 10,
-          "clean": 0,
-          "yield": 0.0
-        }
-      },
-      "clean": 0,
-      "interval95": [
-        0.0,
-        0.005082360561020009
-      ],
-      "method": "copy",
-      "offline": true,
-      "seconds_per_clean_demonstration": "not_applicable_zero_clean",
-      "source_scenes": 16,
-      "tables_per_scene": 47,
-      "wall_seconds": 747.55,
-      "yield": 0.0
+  "same_targets_for_all_generation_arms": true,
+  "simulator": "MuJoCo twin, the same IK, shaper, safety filter and physics as Session",
+  "source": "16 stand-in human recorder rows from /bulk2/runs/robotteleop/policy/demos_snap (episodes 0-15)",
+  "status": "complete: 16 x 47 generation on matched tables, and the matched 3-seed policy matrix at the full 30,000-step budget on 96 held-out tables; the earlier 10,000-step CPU pass is kept under policy_10000_steps_cpu",
+  "target_manifest": "/bulk3/runs/robotteleop/baseline/measurement/targets.jsonl"
+ },
+ "generation": {
+  "copy": {
+   "attempts": 752,
+   "by_distance": {
+    "far": {
+     "attempts": 637,
+     "clean": 0,
+     "interval95": [
+      0.0,
+      0.005994398096158378
+     ],
+     "yield": 0.0
     },
-    "kaiku": {
-      "attempts": 752,
-      "by_distance": {
-        "far": {
-          "attempts": 637,
-          "clean": 171,
-          "interval95": [
-            0.23549551406199754,
-            0.30417222132005384
-          ],
-          "yield": 0.2684458398744113
-        },
-        "mid": {
-          "attempts": 107,
-          "clean": 39,
-          "interval95": [
-            0.27946117772615114,
-            0.4589038680920145
-          ],
-          "yield": 0.3644859813084112
-        },
-        "near": {
-          "attempts": 8,
-          "clean": 4,
-          "interval95": [
-            0.21521606221387757,
-            0.7847839377861224
-          ],
-          "yield": 0.5
-        }
-      },
-      "by_parts": {
-        "3": {
-          "attempts": 141,
-          "clean": 67,
-          "interval95": [
-            0.3945057882166059,
-            0.5571655077162415
-          ],
-          "yield": 0.475177304964539
-        },
-        "4": {
-          "attempts": 376,
-          "clean": 118,
-          "interval95": [
-            0.2690076167747362,
-            0.3624175561522463
-          ],
-          "yield": 0.31382978723404253
-        },
-        "5": {
-          "attempts": 235,
-          "clean": 29,
-          "interval95": [
-            0.08731212061282667,
-            0.17161051001438143
-          ],
-          "yield": 0.12340425531914893
-        }
-      },
-      "by_shape": {
-        "other_shape": {
-          "attempts": 742,
-          "clean": 209,
-          "yield": 0.2816711590296496
-        },
-        "same_shape": {
-          "attempts": 10,
-          "clean": 5,
-          "yield": 0.5
-        }
-      },
-      "clean": 214,
-      "interval95": [
-        0.25348353585243777,
-        0.31785514077225707
-      ],
-      "method": "echo",
-      "note": "Production Echo replayed from the same recorded lead commands onto the same 752 target layouts; this is an offline matched replay, not the earlier live 207/207 denominator.",
-      "offline": true,
-      "seconds_per_clean_demonstration": 7.009418883987607,
-      "source_scenes": 16,
-      "tables_per_scene": 47,
-      "wall_seconds": 1502.9,
-      "yield": 0.2845744680851064
+    "mid": {
+     "attempts": 107,
+     "clean": 0,
+     "interval95": [
+      0.0,
+      0.03465723801874867
+     ],
+     "yield": 0.0
     },
-    "mimicgen": {
-      "attempts": 752,
-      "by_distance": {
-        "far": {
-          "attempts": 637,
-          "clean": 2,
-          "interval95": [
-            0.0008614464524192272,
-            0.011374745062287606
-          ],
-          "yield": 0.0031397174254317113
-        },
-        "mid": {
-          "attempts": 107,
-          "clean": 1,
-          "interval95": [
-            0.0016516716675200986,
-            0.051049356294803366
-          ],
-          "yield": 0.009345794392523364
-        },
-        "near": {
-          "attempts": 8,
-          "clean": 2,
-          "interval95": [
-            0.071479212752109,
-            0.5907245696898311
-          ],
-          "yield": 0.25
-        }
-      },
-      "by_parts": {
-        "3": {
-          "attempts": 141,
-          "clean": 3,
-          "interval95": [
-            0.007261943876534137,
-            0.06068447768552233
-          ],
-          "yield": 0.02127659574468085
-        },
-        "4": {
-          "attempts": 376,
-          "clean": 2,
-          "interval95": [
-            0.001459916529597918,
-            0.01918411439067011
-          ],
-          "yield": 0.005319148936170213
-        },
-        "5": {
-          "attempts": 235,
-          "clean": 0,
-          "interval95": [
-            0.0,
-            0.016083718629344122
-          ],
-          "yield": 0.0
-        }
-      },
-      "by_shape": {
-        "other_shape": {
-          "attempts": 742,
-          "clean": 5,
-          "yield": 0.006738544474393531
-        },
-        "same_shape": {
-          "attempts": 10,
-          "clean": 0,
-          "yield": 0.0
-        }
-      },
-      "clean": 5,
-      "interval95": [
-        0.0028432739691865725,
-        0.015469374350330512
-      ],
-      "method": "mimicgen_reimplementation",
-      "offline": true,
-      "seconds_per_clean_demonstration": 239.68512812405825,
-      "source_scenes": 16,
-      "tables_per_scene": 47,
-      "wall_seconds": 1199.25,
-      "yield": 0.006648936170212766
+    "near": {
+     "attempts": 8,
+     "clean": 0,
+     "interval95": [
+      0.0,
+      0.32440756488388023
+     ],
+     "yield": 0.0
     }
-  },
-  "historical_reference": {
-    "fixed_study_kaiku_mean": 0.8091,
-    "fixed_study_kaiku_runs": [
-      0.7917,
-      0.8438,
-      0.7917
-    ],
-    "fixed_study_plain_mean": 0.0035,
-    "fixed_study_plain_runs": [
+   },
+   "by_parts": {
+    "3": {
+     "attempts": 141,
+     "clean": 0,
+     "interval95": [
       0.0,
-      0.0104,
-      0.0
-    ],
-    "independent_plain_runs_seen_in_logs": [
-      0.1771,
-      0.1979,
-      0.0312,
-      0.0,
-      0.0104,
-      0.0
-    ],
-    "warning": "These historical policy runs use earlier data snapshots and are not the requested matched MimicGen comparison."
-  },
-  "policy": {
-    "arms": {
-      "copy": {
-        "heldout_scenes": 24,
-        "max_yield": 0.0,
-        "mean_parts_yield": 0.0,
-        "mean_yield": 0.0,
-        "min_yield": 0.0,
-        "n": 3,
-        "pairs": 16401,
-        "runs": [
-          {
-            "aborted": 17,
-            "arm": "copy",
-            "clean": 0,
-            "clipped": 530,
-            "loss": 0.00593,
-            "pairs": 16401,
-            "parts": 105,
-            "parts_yield": 0.0,
-            "scenes": 24,
-            "seconds": 391.0,
-            "seed": 0,
-            "steps": 10000,
-            "yield": 0.0
-          },
-          {
-            "aborted": 0,
-            "arm": "copy",
-            "clean": 0,
-            "clipped": 0,
-            "loss": 0.00602,
-            "pairs": 16401,
-            "parts": 105,
-            "parts_yield": 0.0,
-            "scenes": 24,
-            "seconds": 402.1,
-            "seed": 1,
-            "steps": 10000,
-            "yield": 0.0
-          },
-          {
-            "aborted": 1,
-            "arm": "copy",
-            "clean": 0,
-            "clipped": 34,
-            "loss": 0.00593,
-            "pairs": 16401,
-            "parts": 105,
-            "parts_yield": 0.0,
-            "scenes": 24,
-            "seconds": 401.1,
-            "seed": 2,
-            "steps": 10000,
-            "yield": 0.0
-          }
-        ],
-        "steps": 10000
-      },
-      "kaiku": {
-        "heldout_scenes": 24,
-        "max_yield": 0.0,
-        "mean_parts_yield": 0.09203333333333334,
-        "mean_yield": 0.0,
-        "min_yield": 0.0,
-        "n": 3,
-        "pairs": 226789,
-        "runs": [
-          {
-            "aborted": 0,
-            "arm": "kaiku",
-            "clean": 0,
-            "clipped": 11,
-            "loss": 0.01738,
-            "pairs": 226789,
-            "parts": 105,
-            "parts_yield": 0.019,
-            "scenes": 24,
-            "seconds": 789.2,
-            "seed": 0,
-            "steps": 10000,
-            "yield": 0.0
-          },
-          {
-            "aborted": 1,
-            "arm": "kaiku",
-            "clean": 0,
-            "clipped": 31,
-            "loss": 0.01771,
-            "pairs": 226789,
-            "parts": 105,
-            "parts_yield": 0.2381,
-            "scenes": 24,
-            "seconds": 661.0,
-            "seed": 1,
-            "steps": 10000,
-            "yield": 0.0
-          },
-          {
-            "aborted": 3,
-            "arm": "kaiku",
-            "clean": 0,
-            "clipped": 95,
-            "loss": 0.01729,
-            "pairs": 226789,
-            "parts": 105,
-            "parts_yield": 0.019,
-            "scenes": 24,
-            "seconds": 641.8,
-            "seed": 2,
-            "steps": 10000,
-            "yield": 0.0
-          }
-        ],
-        "steps": 10000
-      },
-      "kaiku_matched": {
-        "heldout_scenes": 24,
-        "max_yield": 0.0,
-        "mean_parts_yield": 0.0,
-        "mean_yield": 0.0,
-        "min_yield": 0.0,
-        "n": 3,
-        "pairs": 21296,
-        "runs": [
-          {
-            "aborted": 14,
-            "arm": "kaiku_matched",
-            "clean": 0,
-            "clipped": 456,
-            "loss": 0.00711,
-            "pairs": 21296,
-            "parts": 105,
-            "parts_yield": 0.0,
-            "scenes": 24,
-            "seconds": 649.6,
-            "seed": 0,
-            "steps": 10000,
-            "yield": 0.0
-          },
-          {
-            "aborted": 1,
-            "arm": "kaiku_matched",
-            "clean": 0,
-            "clipped": 81,
-            "loss": 0.00721,
-            "pairs": 21296,
-            "parts": 105,
-            "parts_yield": 0.0,
-            "scenes": 24,
-            "seconds": 617.1,
-            "seed": 1,
-            "steps": 10000,
-            "yield": 0.0
-          },
-          {
-            "aborted": 2,
-            "arm": "kaiku_matched",
-            "clean": 0,
-            "clipped": 62,
-            "loss": 0.00708,
-            "pairs": 21296,
-            "parts": 105,
-            "parts_yield": 0.0,
-            "scenes": 24,
-            "seconds": 618.6,
-            "seed": 2,
-            "steps": 10000,
-            "yield": 0.0
-          }
-        ],
-        "steps": 10000
-      },
-      "mimicgen": {
-        "heldout_scenes": 24,
-        "max_yield": 0.0,
-        "mean_parts_yield": 0.0,
-        "mean_yield": 0.0,
-        "min_yield": 0.0,
-        "n": 3,
-        "pairs": 17180,
-        "runs": [
-          {
-            "aborted": 24,
-            "arm": "mimicgen",
-            "clean": 0,
-            "clipped": 744,
-            "loss": 0.00619,
-            "pairs": 17180,
-            "parts": 105,
-            "parts_yield": 0.0,
-            "scenes": 24,
-            "seconds": 632.3,
-            "seed": 0,
-            "steps": 10000,
-            "yield": 0.0
-          },
-          {
-            "aborted": 23,
-            "arm": "mimicgen",
-            "clean": 0,
-            "clipped": 724,
-            "loss": 0.00617,
-            "pairs": 17180,
-            "parts": 105,
-            "parts_yield": 0.0,
-            "scenes": 24,
-            "seconds": 601.4,
-            "seed": 1,
-            "steps": 10000,
-            "yield": 0.0
-          },
-          {
-            "aborted": 24,
-            "arm": "mimicgen",
-            "clean": 0,
-            "clipped": 744,
-            "loss": 0.00617,
-            "pairs": 17180,
-            "parts": 105,
-            "parts_yield": 0.0,
-            "scenes": 24,
-            "seconds": 602.5,
-            "seed": 2,
-            "steps": 10000,
-            "yield": 0.0
-          }
-        ],
-        "steps": 10000
-      },
-      "plain": {
-        "heldout_scenes": 24,
-        "max_yield": 0.0,
-        "mean_parts_yield": 0.0,
-        "mean_yield": 0.0,
-        "min_yield": 0.0,
-        "n": 3,
-        "pairs": 16401,
-        "runs": [
-          {
-            "aborted": 15,
-            "arm": "plain",
-            "clean": 0,
-            "clipped": 466,
-            "loss": 0.00594,
-            "pairs": 16401,
-            "parts": 105,
-            "parts_yield": 0.0,
-            "scenes": 24,
-            "seconds": 780.9,
-            "seed": 0,
-            "steps": 10000,
-            "yield": 0.0
-          },
-          {
-            "aborted": 0,
-            "arm": "plain",
-            "clean": 0,
-            "clipped": 0,
-            "loss": 0.00603,
-            "pairs": 16401,
-            "parts": 105,
-            "parts_yield": 0.0,
-            "scenes": 24,
-            "seconds": 662.4,
-            "seed": 1,
-            "steps": 10000,
-            "yield": 0.0
-          },
-          {
-            "aborted": 1,
-            "arm": "plain",
-            "clean": 0,
-            "clipped": 111,
-            "loss": 0.00594,
-            "pairs": 16401,
-            "parts": 105,
-            "parts_yield": 0.0,
-            "scenes": 24,
-            "seconds": 641.2,
-            "seed": 2,
-            "steps": 10000,
-            "yield": 0.0
-          }
-        ],
-        "steps": 10000
-      }
+      0.026521818075925647
+     ],
+     "yield": 0.0
     },
-    "heldout_manifest": "/bulk3/runs/robotteleop/baseline/measurement/heldout.jsonl",
-    "heldout_scenes": 24,
-    "seeds_per_arm": 3,
-    "status": "complete_reduced_budget",
-    "steps": 10000
+    "4": {
+     "attempts": 376,
+     "clean": 0,
+     "interval95": [
+      0.0,
+      0.010113321575324678
+     ],
+     "yield": 0.0
+    },
+    "5": {
+     "attempts": 235,
+     "clean": 0,
+     "interval95": [
+      0.0,
+      0.016083718629344122
+     ],
+     "yield": 0.0
+    }
+   },
+   "by_shape": {
+    "other_shape": {
+     "attempts": 742,
+     "clean": 0,
+     "yield": 0.0
+    },
+    "same_shape": {
+     "attempts": 10,
+     "clean": 0,
+     "yield": 0.0
+    }
+   },
+   "clean": 0,
+   "interval95": [
+    0.0,
+    0.005082360561020009
+   ],
+   "method": "copy",
+   "offline": true,
+   "seconds_per_clean_demonstration": "not_applicable_zero_clean",
+   "source_scenes": 16,
+   "tables_per_scene": 47,
+   "wall_seconds": 747.55,
+   "yield": 0.0
+  },
+  "kaiku": {
+   "attempts": 752,
+   "by_distance": {
+    "far": {
+     "attempts": 637,
+     "clean": 171,
+     "interval95": [
+      0.23549551406199754,
+      0.30417222132005384
+     ],
+     "yield": 0.2684458398744113
+    },
+    "mid": {
+     "attempts": 107,
+     "clean": 39,
+     "interval95": [
+      0.27946117772615114,
+      0.4589038680920145
+     ],
+     "yield": 0.3644859813084112
+    },
+    "near": {
+     "attempts": 8,
+     "clean": 4,
+     "interval95": [
+      0.21521606221387757,
+      0.7847839377861224
+     ],
+     "yield": 0.5
+    }
+   },
+   "by_parts": {
+    "3": {
+     "attempts": 141,
+     "clean": 67,
+     "interval95": [
+      0.3945057882166059,
+      0.5571655077162415
+     ],
+     "yield": 0.475177304964539
+    },
+    "4": {
+     "attempts": 376,
+     "clean": 118,
+     "interval95": [
+      0.2690076167747362,
+      0.3624175561522463
+     ],
+     "yield": 0.31382978723404253
+    },
+    "5": {
+     "attempts": 235,
+     "clean": 29,
+     "interval95": [
+      0.08731212061282667,
+      0.17161051001438143
+     ],
+     "yield": 0.12340425531914893
+    }
+   },
+   "by_shape": {
+    "other_shape": {
+     "attempts": 742,
+     "clean": 209,
+     "yield": 0.2816711590296496
+    },
+    "same_shape": {
+     "attempts": 10,
+     "clean": 5,
+     "yield": 0.5
+    }
+   },
+   "clean": 214,
+   "interval95": [
+    0.25348353585243777,
+    0.31785514077225707
+   ],
+   "method": "echo",
+   "note": "Production Echo replayed from the same recorded lead commands onto the same 752 target layouts; this is an offline matched replay, not the earlier live 207/207 denominator.",
+   "offline": true,
+   "seconds_per_clean_demonstration": 7.009418883987607,
+   "source_scenes": 16,
+   "tables_per_scene": 47,
+   "wall_seconds": 1502.9,
+   "yield": 0.2845744680851064
+  },
+  "mimicgen": {
+   "attempts": 752,
+   "by_distance": {
+    "far": {
+     "attempts": 637,
+     "clean": 2,
+     "interval95": [
+      0.0008614464524192272,
+      0.011374745062287606
+     ],
+     "yield": 0.0031397174254317113
+    },
+    "mid": {
+     "attempts": 107,
+     "clean": 1,
+     "interval95": [
+      0.0016516716675200986,
+      0.051049356294803366
+     ],
+     "yield": 0.009345794392523364
+    },
+    "near": {
+     "attempts": 8,
+     "clean": 2,
+     "interval95": [
+      0.071479212752109,
+      0.5907245696898311
+     ],
+     "yield": 0.25
+    }
+   },
+   "by_parts": {
+    "3": {
+     "attempts": 141,
+     "clean": 3,
+     "interval95": [
+      0.007261943876534137,
+      0.06068447768552233
+     ],
+     "yield": 0.02127659574468085
+    },
+    "4": {
+     "attempts": 376,
+     "clean": 2,
+     "interval95": [
+      0.001459916529597918,
+      0.01918411439067011
+     ],
+     "yield": 0.005319148936170213
+    },
+    "5": {
+     "attempts": 235,
+     "clean": 0,
+     "interval95": [
+      0.0,
+      0.016083718629344122
+     ],
+     "yield": 0.0
+    }
+   },
+   "by_shape": {
+    "other_shape": {
+     "attempts": 742,
+     "clean": 5,
+     "yield": 0.006738544474393531
+    },
+    "same_shape": {
+     "attempts": 10,
+     "clean": 0,
+     "yield": 0.0
+    }
+   },
+   "clean": 5,
+   "interval95": [
+    0.0028432739691865725,
+    0.015469374350330512
+   ],
+   "method": "mimicgen_reimplementation",
+   "offline": true,
+   "seconds_per_clean_demonstration": 239.68512812405825,
+   "source_scenes": 16,
+   "tables_per_scene": 47,
+   "wall_seconds": 1199.25,
+   "yield": 0.006648936170212766
   }
+ },
+ "historical_reference": {
+  "fixed_study_kaiku_mean": 0.8091,
+  "fixed_study_kaiku_runs": [
+   0.7917,
+   0.8438,
+   0.7917
+  ],
+  "fixed_study_plain_mean": 0.0035,
+  "fixed_study_plain_runs": [
+   0.0,
+   0.0104,
+   0.0
+  ],
+  "independent_plain_runs_seen_in_logs": [
+   0.1771,
+   0.1979,
+   0.0312,
+   0.0,
+   0.0104,
+   0.0
+  ],
+  "warning": "These historical policy runs use earlier data snapshots and are not the requested matched MimicGen comparison."
+ },
+ "policy": {
+  "arms": {
+   "copy": {
+    "clean": 26,
+    "heldout_scenes": 96,
+    "interval95": [
+     0.062352442516798265,
+     0.12898931902162258
+    ],
+    "max_yield": 0.1354,
+    "mean_parts_yield": 0.26363333333333333,
+    "mean_yield": 0.09026666666666666,
+    "min_yield": 0.0625,
+    "n": 3,
+    "pairs": 16401,
+    "runs": [
+     {
+      "aborted": 0,
+      "arm": "copy",
+      "clean": 13,
+      "clipped": 0,
+      "device": "T4",
+      "loss": 0.00277,
+      "minutes": 3.2,
+      "pairs": 16401,
+      "parts": 397,
+      "parts_yield": 0.3199,
+      "scenes": 96,
+      "seconds": 112.3,
+      "seed": 0,
+      "steps": 30000,
+      "yield": 0.1354
+     },
+     {
+      "aborted": 0,
+      "arm": "copy",
+      "clean": 7,
+      "clipped": 0,
+      "device": "T4",
+      "loss": 0.0028,
+      "minutes": 3.5,
+      "pairs": 16401,
+      "parts": 397,
+      "parts_yield": 0.2569,
+      "scenes": 96,
+      "seconds": 112.3,
+      "seed": 1,
+      "steps": 30000,
+      "yield": 0.0729
+     },
+     {
+      "aborted": 6,
+      "arm": "copy",
+      "clean": 6,
+      "clipped": 186,
+      "device": "T4",
+      "loss": 0.00275,
+      "minutes": 3.4,
+      "pairs": 16401,
+      "parts": 397,
+      "parts_yield": 0.2141,
+      "scenes": 96,
+      "seconds": 113.1,
+      "seed": 2,
+      "steps": 30000,
+      "yield": 0.0625
+     }
+    ],
+    "scenes": 288,
+    "steps": 30000,
+    "yield": 0.09027777777777778
+   },
+   "kaiku": {
+    "clean": 210,
+    "heldout_scenes": 96,
+    "interval95": [
+     0.6750764239941186,
+     0.777223946670832
+    ],
+    "max_yield": 0.7604,
+    "mean_parts_yield": 0.8480333333333334,
+    "mean_yield": 0.7291666666666666,
+    "min_yield": 0.7083,
+    "n": 3,
+    "pairs": 226789,
+    "runs": [
+     {
+      "aborted": 0,
+      "arm": "kaiku",
+      "clean": 68,
+      "clipped": 22,
+      "device": "T4",
+      "loss": 0.01074,
+      "minutes": 3.4,
+      "pairs": 226789,
+      "parts": 397,
+      "parts_yield": 0.8237,
+      "scenes": 96,
+      "seconds": 112.5,
+      "seed": 0,
+      "steps": 30000,
+      "yield": 0.7083
+     },
+     {
+      "aborted": 4,
+      "arm": "kaiku",
+      "clean": 69,
+      "clipped": 124,
+      "device": "T4",
+      "loss": 0.01091,
+      "minutes": 3.8,
+      "pairs": 226789,
+      "parts": 397,
+      "parts_yield": 0.8539,
+      "scenes": 96,
+      "seconds": 120.2,
+      "seed": 1,
+      "steps": 30000,
+      "yield": 0.7188
+     },
+     {
+      "aborted": 2,
+      "arm": "kaiku",
+      "clean": 73,
+      "clipped": 62,
+      "device": "T4",
+      "loss": 0.01073,
+      "minutes": 3.4,
+      "pairs": 226789,
+      "parts": 397,
+      "parts_yield": 0.8665,
+      "scenes": 96,
+      "seconds": 111.2,
+      "seed": 2,
+      "steps": 30000,
+      "yield": 0.7604
+     }
+    ],
+    "scenes": 288,
+    "steps": 30000,
+    "yield": 0.7291666666666666
+   },
+   "kaiku_matched": {
+    "clean": 56,
+    "heldout_scenes": 96,
+    "interval95": [
+     0.15288192269675085,
+     0.2440509164166477
+    ],
+    "max_yield": 0.2708,
+    "mean_parts_yield": 0.38453333333333334,
+    "mean_yield": 0.19443333333333332,
+    "min_yield": 0.125,
+    "n": 3,
+    "pairs": 21296,
+    "runs": [
+     {
+      "aborted": 0,
+      "arm": "kaiku_matched",
+      "clean": 12,
+      "clipped": 0,
+      "device": "T4",
+      "loss": 0.00357,
+      "minutes": 3.3,
+      "pairs": 21296,
+      "parts": 397,
+      "parts_yield": 0.3224,
+      "scenes": 96,
+      "seconds": 114.4,
+      "seed": 0,
+      "steps": 30000,
+      "yield": 0.125
+     },
+     {
+      "aborted": 0,
+      "arm": "kaiku_matched",
+      "clean": 26,
+      "clipped": 0,
+      "device": "T4",
+      "loss": 0.00349,
+      "minutes": 3.5,
+      "pairs": 21296,
+      "parts": 397,
+      "parts_yield": 0.4282,
+      "scenes": 96,
+      "seconds": 118.0,
+      "seed": 1,
+      "steps": 30000,
+      "yield": 0.2708
+     },
+     {
+      "aborted": 0,
+      "arm": "kaiku_matched",
+      "clean": 18,
+      "clipped": 0,
+      "device": "T4",
+      "loss": 0.00356,
+      "minutes": 3.2,
+      "pairs": 21296,
+      "parts": 397,
+      "parts_yield": 0.403,
+      "scenes": 96,
+      "seconds": 111.7,
+      "seed": 2,
+      "steps": 30000,
+      "yield": 0.1875
+     }
+    ],
+    "scenes": 288,
+    "steps": 30000,
+    "yield": 0.19444444444444445
+   },
+   "mimicgen": {
+    "clean": 23,
+    "heldout_scenes": 96,
+    "interval95": [
+     0.0538028561496867,
+     0.11697979763123637
+    ],
+    "max_yield": 0.1562,
+    "mean_parts_yield": 0.2225,
+    "mean_yield": 0.07983333333333333,
+    "min_yield": 0.0,
+    "n": 3,
+    "pairs": 17180,
+    "runs": [
+     {
+      "aborted": 70,
+      "arm": "mimicgen",
+      "clean": 0,
+      "clipped": 2170,
+      "device": "T4",
+      "loss": 0.0029,
+      "minutes": 3.9,
+      "pairs": 17180,
+      "parts": 397,
+      "parts_yield": 0.0957,
+      "scenes": 96,
+      "seconds": 114.0,
+      "seed": 0,
+      "steps": 30000,
+      "yield": 0.0
+     },
+     {
+      "aborted": 0,
+      "arm": "mimicgen",
+      "clean": 15,
+      "clipped": 0,
+      "device": "T4",
+      "loss": 0.00291,
+      "minutes": 3.3,
+      "pairs": 17180,
+      "parts": 397,
+      "parts_yield": 0.3073,
+      "scenes": 96,
+      "seconds": 112.4,
+      "seed": 1,
+      "steps": 30000,
+      "yield": 0.1562
+     },
+     {
+      "aborted": 0,
+      "arm": "mimicgen",
+      "clean": 8,
+      "clipped": 0,
+      "device": "T4",
+      "loss": 0.00295,
+      "minutes": 3.2,
+      "pairs": 17180,
+      "parts": 397,
+      "parts_yield": 0.2645,
+      "scenes": 96,
+      "seconds": 109.0,
+      "seed": 2,
+      "steps": 30000,
+      "yield": 0.0833
+     }
+    ],
+    "scenes": 288,
+    "steps": 30000,
+    "yield": 0.0798611111111111
+   },
+   "plain": {
+    "clean": 26,
+    "heldout_scenes": 96,
+    "interval95": [
+     0.062352442516798265,
+     0.12898931902162258
+    ],
+    "max_yield": 0.1354,
+    "mean_parts_yield": 0.26363333333333333,
+    "mean_yield": 0.09026666666666666,
+    "min_yield": 0.0625,
+    "n": 3,
+    "pairs": 16401,
+    "runs": [
+     {
+      "aborted": 0,
+      "arm": "plain",
+      "clean": 13,
+      "clipped": 0,
+      "device": "T4",
+      "loss": 0.00277,
+      "minutes": 3.2,
+      "pairs": 16401,
+      "parts": 397,
+      "parts_yield": 0.3199,
+      "scenes": 96,
+      "seconds": 110.4,
+      "seed": 0,
+      "steps": 30000,
+      "yield": 0.1354
+     },
+     {
+      "aborted": 0,
+      "arm": "plain",
+      "clean": 7,
+      "clipped": 0,
+      "device": "T4",
+      "loss": 0.0028,
+      "minutes": 3.4,
+      "pairs": 16401,
+      "parts": 397,
+      "parts_yield": 0.2569,
+      "scenes": 96,
+      "seconds": 119.3,
+      "seed": 1,
+      "steps": 30000,
+      "yield": 0.0729
+     },
+     {
+      "aborted": 6,
+      "arm": "plain",
+      "clean": 6,
+      "clipped": 186,
+      "device": "T4",
+      "loss": 0.00275,
+      "minutes": 3.3,
+      "pairs": 16401,
+      "parts": 397,
+      "parts_yield": 0.2141,
+      "scenes": 96,
+      "seconds": 112.1,
+      "seed": 2,
+      "steps": 30000,
+      "yield": 0.0625
+     }
+    ],
+    "scenes": 288,
+    "steps": 30000,
+    "yield": 0.09027777777777778
+   }
+  },
+  "heldout_manifest": "kaiku/policy/pretrained/baseline_heldout96.jsonl",
+  "heldout_note": "the 24 tables of the 10,000-step pass plus 72 more drawn the same way (Scene.sample_layout, seed 20261115)",
+  "heldout_scenes": 96,
+  "seeds_per_arm": 3,
+  "status": "complete",
+  "steps": 30000,
+  "trained_on": "Modal, one T4 per run, 51 container minutes in all (tools/modal_matrix.py)"
+ },
+ "policy_10000_steps_cpu": {
+  "arms": {
+   "copy": {
+    "heldout_scenes": 24,
+    "max_yield": 0.0,
+    "mean_parts_yield": 0.0,
+    "mean_yield": 0.0,
+    "min_yield": 0.0,
+    "n": 3,
+    "pairs": 16401,
+    "runs": [
+     {
+      "aborted": 17,
+      "arm": "copy",
+      "clean": 0,
+      "clipped": 530,
+      "loss": 0.00593,
+      "pairs": 16401,
+      "parts": 105,
+      "parts_yield": 0.0,
+      "scenes": 24,
+      "seconds": 391.0,
+      "seed": 0,
+      "steps": 10000,
+      "yield": 0.0
+     },
+     {
+      "aborted": 0,
+      "arm": "copy",
+      "clean": 0,
+      "clipped": 0,
+      "loss": 0.00602,
+      "pairs": 16401,
+      "parts": 105,
+      "parts_yield": 0.0,
+      "scenes": 24,
+      "seconds": 402.1,
+      "seed": 1,
+      "steps": 10000,
+      "yield": 0.0
+     },
+     {
+      "aborted": 1,
+      "arm": "copy",
+      "clean": 0,
+      "clipped": 34,
+      "loss": 0.00593,
+      "pairs": 16401,
+      "parts": 105,
+      "parts_yield": 0.0,
+      "scenes": 24,
+      "seconds": 401.1,
+      "seed": 2,
+      "steps": 10000,
+      "yield": 0.0
+     }
+    ],
+    "steps": 10000
+   },
+   "kaiku": {
+    "heldout_scenes": 24,
+    "max_yield": 0.0,
+    "mean_parts_yield": 0.09203333333333334,
+    "mean_yield": 0.0,
+    "min_yield": 0.0,
+    "n": 3,
+    "pairs": 226789,
+    "runs": [
+     {
+      "aborted": 0,
+      "arm": "kaiku",
+      "clean": 0,
+      "clipped": 11,
+      "loss": 0.01738,
+      "pairs": 226789,
+      "parts": 105,
+      "parts_yield": 0.019,
+      "scenes": 24,
+      "seconds": 789.2,
+      "seed": 0,
+      "steps": 10000,
+      "yield": 0.0
+     },
+     {
+      "aborted": 1,
+      "arm": "kaiku",
+      "clean": 0,
+      "clipped": 31,
+      "loss": 0.01771,
+      "pairs": 226789,
+      "parts": 105,
+      "parts_yield": 0.2381,
+      "scenes": 24,
+      "seconds": 661.0,
+      "seed": 1,
+      "steps": 10000,
+      "yield": 0.0
+     },
+     {
+      "aborted": 3,
+      "arm": "kaiku",
+      "clean": 0,
+      "clipped": 95,
+      "loss": 0.01729,
+      "pairs": 226789,
+      "parts": 105,
+      "parts_yield": 0.019,
+      "scenes": 24,
+      "seconds": 641.8,
+      "seed": 2,
+      "steps": 10000,
+      "yield": 0.0
+     }
+    ],
+    "steps": 10000
+   },
+   "kaiku_matched": {
+    "heldout_scenes": 24,
+    "max_yield": 0.0,
+    "mean_parts_yield": 0.0,
+    "mean_yield": 0.0,
+    "min_yield": 0.0,
+    "n": 3,
+    "pairs": 21296,
+    "runs": [
+     {
+      "aborted": 14,
+      "arm": "kaiku_matched",
+      "clean": 0,
+      "clipped": 456,
+      "loss": 0.00711,
+      "pairs": 21296,
+      "parts": 105,
+      "parts_yield": 0.0,
+      "scenes": 24,
+      "seconds": 649.6,
+      "seed": 0,
+      "steps": 10000,
+      "yield": 0.0
+     },
+     {
+      "aborted": 1,
+      "arm": "kaiku_matched",
+      "clean": 0,
+      "clipped": 81,
+      "loss": 0.00721,
+      "pairs": 21296,
+      "parts": 105,
+      "parts_yield": 0.0,
+      "scenes": 24,
+      "seconds": 617.1,
+      "seed": 1,
+      "steps": 10000,
+      "yield": 0.0
+     },
+     {
+      "aborted": 2,
+      "arm": "kaiku_matched",
+      "clean": 0,
+      "clipped": 62,
+      "loss": 0.00708,
+      "pairs": 21296,
+      "parts": 105,
+      "parts_yield": 0.0,
+      "scenes": 24,
+      "seconds": 618.6,
+      "seed": 2,
+      "steps": 10000,
+      "yield": 0.0
+     }
+    ],
+    "steps": 10000
+   },
+   "mimicgen": {
+    "heldout_scenes": 24,
+    "max_yield": 0.0,
+    "mean_parts_yield": 0.0,
+    "mean_yield": 0.0,
+    "min_yield": 0.0,
+    "n": 3,
+    "pairs": 17180,
+    "runs": [
+     {
+      "aborted": 24,
+      "arm": "mimicgen",
+      "clean": 0,
+      "clipped": 744,
+      "loss": 0.00619,
+      "pairs": 17180,
+      "parts": 105,
+      "parts_yield": 0.0,
+      "scenes": 24,
+      "seconds": 632.3,
+      "seed": 0,
+      "steps": 10000,
+      "yield": 0.0
+     },
+     {
+      "aborted": 23,
+      "arm": "mimicgen",
+      "clean": 0,
+      "clipped": 724,
+      "loss": 0.00617,
+      "pairs": 17180,
+      "parts": 105,
+      "parts_yield": 0.0,
+      "scenes": 24,
+      "seconds": 601.4,
+      "seed": 1,
+      "steps": 10000,
+      "yield": 0.0
+     },
+     {
+      "aborted": 24,
+      "arm": "mimicgen",
+      "clean": 0,
+      "clipped": 744,
+      "loss": 0.00617,
+      "pairs": 17180,
+      "parts": 105,
+      "parts_yield": 0.0,
+      "scenes": 24,
+      "seconds": 602.5,
+      "seed": 2,
+      "steps": 10000,
+      "yield": 0.0
+     }
+    ],
+    "steps": 10000
+   },
+   "plain": {
+    "heldout_scenes": 24,
+    "max_yield": 0.0,
+    "mean_parts_yield": 0.0,
+    "mean_yield": 0.0,
+    "min_yield": 0.0,
+    "n": 3,
+    "pairs": 16401,
+    "runs": [
+     {
+      "aborted": 15,
+      "arm": "plain",
+      "clean": 0,
+      "clipped": 466,
+      "loss": 0.00594,
+      "pairs": 16401,
+      "parts": 105,
+      "parts_yield": 0.0,
+      "scenes": 24,
+      "seconds": 780.9,
+      "seed": 0,
+      "steps": 10000,
+      "yield": 0.0
+     },
+     {
+      "aborted": 0,
+      "arm": "plain",
+      "clean": 0,
+      "clipped": 0,
+      "loss": 0.00603,
+      "pairs": 16401,
+      "parts": 105,
+      "parts_yield": 0.0,
+      "scenes": 24,
+      "seconds": 662.4,
+      "seed": 1,
+      "steps": 10000,
+      "yield": 0.0
+     },
+     {
+      "aborted": 1,
+      "arm": "plain",
+      "clean": 0,
+      "clipped": 111,
+      "loss": 0.00594,
+      "pairs": 16401,
+      "parts": 105,
+      "parts_yield": 0.0,
+      "scenes": 24,
+      "seconds": 641.2,
+      "seed": 2,
+      "steps": 10000,
+      "yield": 0.0
+     }
+    ],
+    "steps": 10000
+   }
+  },
+  "heldout_manifest": "/bulk3/runs/robotteleop/baseline/measurement/heldout.jsonl",
+  "heldout_scenes": 24,
+  "seeds_per_arm": 3,
+  "status": "complete_reduced_budget",
+  "steps": 10000
+ }
 }

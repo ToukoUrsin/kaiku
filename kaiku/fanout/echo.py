@@ -382,6 +382,11 @@ class Echo:
         self.tau = np.minimum(self.tau + self.rate, end)
 
 
+SAME_PLACE = 0.015                  # m: a part this near the lead's place lies where the lead's does
+SLIDES = 24                         # tries at sliding a part that still lies where the lead's does
+SLIDE_SIDE = 0.01                   # m: how far such a slide may also go along the row of parts
+
+
 def sample_followers(scene: Scene, lead: Layout, rng: np.random.Generator, count: int, spread: float = 0.08,
                      vary_shape: bool = True, reach: ReachMap | None = None, rounds: int = 6) -> list[Layout]:
     """``count`` variations of the lead's layout. In each, every object keeps its colour (so
@@ -390,8 +395,10 @@ def sample_followers(scene: Scene, lead: Layout, rng: np.random.Generator, count
 
     Each variation starts as the lead's scene and is changed one part at a time; a change is
     kept only if the scene still follows the challenge's spacing rule and, with ``reach``,
-    every part still has a grasp its arm reaches clear of the other parts. So a crowded mat
-    simply varies less, and nothing is ever handed to a follower that it cannot do."""
+    every part still has a grasp its arm reaches clear of the other parts. So nothing is ever
+    handed to a follower that it cannot do. On a crowded mat most such changes do not fit, so
+    a part that still lies where the lead's does is then slid across the mat, where there is
+    room."""
     n = len(lead.placements)
     if n == 0 or count == 0:
         return [Layout([], dict(lead.mapping)) for _ in range(count)]
@@ -414,6 +421,7 @@ def sample_followers(scene: Scene, lead: Layout, rng: np.random.Generator, count
     shape = np.tile([SHAPE_CODE[o.shape] for o in obs], (K, 1))
     good = reach.parts_ok(shape, yaw, xy, sides) if reach is not None else np.ones((K, n), bool)
     rows = np.arange(K)
+
     # What a proposal changes: (place within this share of ``spread``, yaw, shape).
     # Small changes first, so that a bolder one replaces them wherever it fits.
     kinds = [(0.0, True, True), (0.3, True, True), (0.6, True, True), (1.0, True, True), (1.0, False, False),
@@ -441,6 +449,27 @@ def sample_followers(scene: Scene, lead: Layout, rng: np.random.Generator, count
                 g2[ok] = reach.parts_ok(s2[ok], y2[ok], x2[ok], sides)
                 ok &= g2[:, j] & (g2 | ~good).all(axis=1)
             xy[ok], yaw[ok], shape[ok], good[ok] = x2[ok], y2[ok], s2[ok], g2[ok]
+    # A crowded mat has no room along the row of parts, where the spacing rule holds them, but
+    # it has room across it: parts that still lie where the lead's do slide towards or away from
+    # the robot. Only the rows that need it are tried, so this costs little.
+    x_lo, x_hi = np.maximum(lo[0], lead_xy[:, 0] - spread), np.minimum(hi[0], lead_xy[:, 0] + spread)
+    for _ in range(SLIDES):
+        for j in rng.permutation(n):
+            todo = rows[np.linalg.norm(xy[:, j] - lead_xy[j], axis=-1) < SAME_PLACE]
+            if not len(todo):
+                continue
+            x2 = xy[todo].copy()
+            x2[:, j, 0] = rng.uniform(x_lo[j], x_hi[j], size=len(todo))
+            x2[:, j, 1] = np.clip(lead_xy[j, 1] + rng.uniform(-SLIDE_SIDE, SLIDE_SIDE, size=len(todo)), lo[1], hi[1])
+            gap = np.linalg.norm(x2 - x2[:, j:j + 1], axis=-1)
+            gap[:, j] = np.inf
+            ok = (gap >= L["min_spacing"]).all(axis=1) & (np.linalg.norm(x2[:, j] - lead_xy[j], axis=-1) >= SAME_PLACE)
+            g2 = good[todo]
+            if reach is not None and ok.any():
+                g2 = g2.copy()
+                g2[ok] = reach.parts_ok(shape[todo][ok], yaw[todo][ok], x2[ok], sides)
+                ok &= g2[:, j] & (g2 | ~good[todo]).all(axis=1)
+            xy[todo[ok]], good[todo[ok]] = x2[ok], g2[ok]
     out = []
     for k in rows:
         used: dict[int, int] = {}

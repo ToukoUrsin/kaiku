@@ -25,33 +25,37 @@ For the original fixed 16-demo set, the three plain runs averaged 0.35% (0%, 1.0
 
 Each number is the mean of 3 training runs, each tested on 96 scenes neither policy had seen. A scene counts only when every part rests in its own bin and the safety filter clipped no command. The numbers are in [`study.json`](kaiku/policy/pretrained/study.json) and all 48 runs, with every count behind them, in [`study_runs.jsonl`](kaiku/policy/pretrained/study_runs.jsonl). The Train button in the demo repeats the comparison on the last 16 demonstrations of the session while you watch.
 
-## Against MimicGen, and what this measurement says
+## Against MimicGen-style generation and plain copying
 
-On the same 16 source scenes and the same 47 target tables per scene (752 attempts), the production Echo replay kept 214 clean demonstrations (28.46%, Wilson 95% interval 25.35–31.79%). The MimicGen-style replay kept 5 (0.6648%, 0.284–1.547%), and naive joint copy kept 0 (0%, 0–0.508%). The full attempt JSONL, including every failure, is in [`/bulk3/runs/robotteleop/baseline/measurement`](/bulk3/runs/robotteleop/baseline/measurement); checked-in summaries and the policy runs are in [`baselines.json`](kaiku/policy/pretrained/baselines.json) and [`baseline_runs.jsonl`](kaiku/policy/pretrained/baseline_runs.jsonl).
+Three ways to turn 16 demonstrations into more were given the same 16 scenes and the same 47 new tables for each (752 attempts): Kaiku's echo, a MimicGen-style replay we wrote ourselves, and copying the lead's joints. A demonstration counts when every part rests in its own bin and the safety filter clipped nothing.
 
-| method | clean / attempts | yield (95% interval) | 3 parts | 4 parts | 5 parts |
+| method | clean / attempts | kept (95% interval) | 3 parts | 4 parts | 5 parts |
 |---|---:|---:|---:|---:|---:|
-| Kaiku Echo replay | 214 / 752 | 28.46% (25.35–31.79%) | 47.52% | 31.38% | 12.34% |
-| MimicGen-style re-implementation | 5 / 752 | 0.6648% (0.284–1.547%) | 2.13% | 0.532% | 0% |
-| naive joint copy | 0 / 752 | 0% (0–0.508%) | 0% | 0% | 0% |
+| Kaiku's echo | 214 / 752 | 28.5% (25.4–31.8%) | 47.5% | 31.4% | 12.3% |
+| MimicGen-style replay | 5 / 752 | 0.7% (0.3–1.5%) | 2.1% | 0.5% | 0% |
+| copying the lead's joints | 0 / 752 | 0% (0–0.5%) | 0% | 0% | 0% |
 
-The target distribution was intentionally broad: 8 near tables (<5 cm mean object displacement), 107 mid tables (5–10 cm), and 637 far tables (≥10 cm). Echo yields were 50.0%, 36.45% and 26.84%; MimicGen-style yields were 25.0%, 0.9346% and 0.3140%. MimicGen-style is cheaper as an offline batch (1,199 s for the run versus 1,503 s for Echo), but each of its five survivors cost 239.69 s of batch time; Echo cost 7.01 s per clean survivor. This is where Kaiku does not win: the offline generator has lower total wall time, and both methods can succeed on a table close to the source.
+Then one policy was trained on each result, three times, and tested on 96 tables none of them had seen:
 
-The implementation in [`baseline.py`](kaiku/policy/baseline.py) is ours. It detects reach/grasp and carry/drop segments from measured lift and rest-in-bin times, transforms the hand path in the paired object's XY/yaw frame (with shape symmetry), uses the fixed bin frame for carry/drop, replays open loop through the same IK, shaper, safety filter and MuJoCo, and keeps only clean runs. It does not use MimicGen or DexMimicGen code, their annotations, learned placement or recovery policies, or their benchmarks. DexMimicGen's coordination subtasks do not occur because this task never has two hands holding one part together.
+| the policy was trained on | training pairs | tables sorted, of 288 (95% interval) | lowest and highest run |
+|---|---:|---:|---:|
+| the 16 demonstrations alone | 16,401 | 9.0% (6.2–12.9%) | 6–14% |
+| + what copying kept (nothing) | 16,401 | 9.0% (6.2–12.9%) | 6–14% |
+| + the 5 the MimicGen-style replay kept | 17,180 | 8.0% (5.4–11.7%) | 0–16% |
+| + 5 of Kaiku's echoes, the same number | 21,296 | 19.4% (15.3–24.4%) | 12–27% |
+| + all 214 of Kaiku's echoes | 226,789 | 72.9% (67.5–77.7%) | 71–76% |
 
-The matched policy matrix used the same 16 human rows, 24 held-out tables, three seeds per arm and 10,000 training steps for every arm. At this CPU budget every arm scored 0/24 clean scenes: 16 alone, 16 plus copy survivors (there were none), 16 plus five MimicGen survivors, 16 plus 214 Echo survivors, and the size-matched five-Echo-survivor arm. Kaiku moved more individual parts in one seed (23.81% part yield) but completed no held-out table. This reduced budget is why the earlier 30,000-step study remains a separate historical reference; it is not mixed into this matched baseline comparison.
+Same model, same 30,000 training steps, same seeds, same 96 tables for every row. The runs are in [`baselines.json`](kaiku/policy/pretrained/baselines.json) and [`baseline_runs.jsonl`](kaiku/policy/pretrained/baseline_runs.jsonl), the 96 tables in [`baseline_heldout96.jsonl`](kaiku/policy/pretrained/baseline_heldout96.jsonl).
 
-| policy arm | training pairs | clean scenes (mean, min–max over 3 seeds) |
-|---|---:|---:|
-| 16 human demos | 16,401 | 0% (0–0%) |
-| + copy survivors | 16,401 | 0% (0–0%) |
-| + MimicGen survivors | 17,180 | 0% (0–0%) |
-| + Kaiku Echo survivors | 226,789 | 0% (0–0%) |
-| + five Echo survivors (size matched) | 21,296 | 0% (0–0%) |
+What this does and does not say:
 
-To reproduce the generation numbers, run `python tools/run_baseline_measure.py manifest ...` once and then run it with `--method echo`, `mimicgen` and `copy` against the same manifest. The policy one-liner is `python tools/run_policy_matrix.py DATA OUT --arm ARM --heldout HELDOUT --steps 10000 --seed SEED`; the assembled datasets and held-out manifest used here are under `/bulk3/runs/robotteleop/baseline`.
+- The MimicGen-style replay is ours: [`baseline.py`](kaiku/policy/baseline.py). It finds each reach-and-grasp and carry-and-drop from the measured lift and rest times, moves the hand path into the new part's frame, and replays it open loop through the same IK, safety filter and physics. It is not MimicGen's or DexMimicGen's code, and it has none of their learned or replanned recovery. A better implementation would keep more.
+- These tables are harder than the ones the live demo draws: 637 of the 752 moved the parts 10 cm or more on average, and none was checked for reach. That is why the echo kept 28.5% here and keeps nearly every table live, where each follower's table is drawn within the robot's reach.
+- Where Kaiku does not win: the MimicGen-style batch took less time in total (1,199 s against 1,503 s), and on the 8 tables closest to the source it kept 2 while the echo kept 4. Per kept demonstration the echo took 7 s and the replay 240 s.
+- The 16 demonstrations came from the scripted stand-in operator, not from a person, and the policy reads part positions from the simulator.
+- An earlier pass with 10,000 steps on CPUs sorted no held-out table in any row. It is kept in `baselines.json` and is not the result above.
 
-The three generation sandboxes took 3,449.7 seconds of simulator wall time in total. The 15 final policy seeds used 9,092.2 seconds of measured CPU training time, plus rollout and setup; drun does not expose a metered dollar cost, and no spend was recorded.
+To repeat it: `python tools/run_baseline_measure.py manifest ...` once, then `run` with `--method echo`, `mimicgen` and `copy` on that manifest, `tools/assemble_policy_dataset.py` for each, and `modal run tools/modal_matrix.py` for the policies (51 minutes of T4 time in all). The generation took 3,450 seconds of simulator time in sandboxes.
 
 ## Who drives
 

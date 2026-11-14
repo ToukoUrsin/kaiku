@@ -32,6 +32,20 @@ def test_a_copy_of_the_leads_joints_sorts_few_tables_and_the_echo_most():
     assert copied.clipped.sum() == 0 and echoed.clipped.sum() == 0
 
 
+def test_on_a_full_mat_every_followers_table_still_differs_from_the_leads():
+    s = Session(16, seed=3)
+    try:
+        for seed in range(3):
+            lead, followers = s.sample_scene(5, np.random.default_rng(seed))    # five parts: no room along the row
+            at = np.array([p.pos[:2] for p in lead.placements])
+            moved = np.array([np.linalg.norm(np.array([p.pos[:2] for p in f.placements]) - at, axis=1) for f in followers])
+            assert (moved.max(axis=1) > 0.015).all()           # no follower has the lead's own table
+            assert (moved > 0.015).mean() > 0.5                # and most parts lie elsewhere
+            assert moved.max() <= 0.08 + 1e-9                  # none further than the spread
+    finally:
+        s.close()
+
+
 def test_the_runner_shows_one_scene_without_the_echo_and_counts_none_of_it(tmp_path):
     r = Runner(n=4, port=0, seed=7, threads=1, mode="autopilot", record=tmp_path, hold_s=0.0)
     try:
@@ -53,6 +67,11 @@ def test_the_runner_shows_one_scene_without_the_echo_and_counts_none_of_it(tmp_p
                 break
         assert r.compare is not None and r.compare["robots"] == 3
         assert r.s.copy and r.hud()["copy"]["on"]              # still the scene everybody is looking at
+        for name, value in (("next_scene", None), ("mode", "policy"), ("pause", True), ("drive_start", None)):
+            r.commands.put({"type": "cmd", "name": name, "value": value, "client": 9})
+        r._commands()                                          # another visitor's buttons wait for it
+        assert r.again is not None and not r.paused and r.want_mode == "autopilot" and r.driver_client is None
+        assert sum("comparison finishes first" in text for text in said) == 4
         assert r.tot["episodes"] == 1 and r.rec.demos == saved # not a demonstration, not in the totals
         assert any("Without Kaiku" in text for text in said)
         tables = [[p.pos.copy() for p in lay.placements] for lay in r.s.layouts]

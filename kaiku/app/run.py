@@ -48,6 +48,7 @@ HUD_EVERY = 3                 # ticks between HUD updates (10 Hz)
 PAUSE_S = 20.0                # how long a pause lasts on a session that everybody shares
 MODES = ("gloves", "autopilot", "policy", "visitor")
 TURN_S, IDLE_S = 240.0, 45.0                      # a visitor's turn at the robots, and how long it may sit untouched
+HELD_BY_COMPARISON = ("pause", "next_scene", "parts", "mode", "drive_start")   # what waits while a comparison runs
 COPY_EVERY_S = 30.0                               # everybody shares the page: the scene without the echo is not the only one shown
 HERE = Path(__file__).resolve().parents[1]
 PRETRAINED = HERE / "policy" / "pretrained" / "kaiku.pt"
@@ -294,6 +295,11 @@ class Runner:
         self.hold_until = 0.0
         self.toast("Started over.", "info")
 
+    @property
+    def comparing(self) -> bool:
+        """A comparison is on its way: asked for, running without the echo, or running again with it."""
+        return bool(self.copy_next or self.s.copy or self.again is not None or (self.replaying and self.phase == "run"))
+
     def _copy_scene(self) -> None:
         """Somebody asked to see it without the echo: the next scene, every robot is sent what the lead is sent."""
         if self.mode not in ("gloves", "autopilot") or self.want_mode != self.mode:
@@ -466,7 +472,10 @@ class Runner:
                 continue
             name, value = m.get("name"), m.get("value")
             client = m.get("client")
-            if name == "drive_start":
+            if self.comparing and name in HELD_BY_COMPARISON and not (name == "pause" and not value):
+                # Everybody shares the page: one visitor's button must not end what another asked to see.
+                self.toast("The comparison finishes first, in about a minute. Then that works again.", "info")
+            elif name == "drive_start":
                 self._start_visitor(int(client))
             elif name == "drive_end" and client == self.driver_client:
                 self._end_visitor_turn("handback")
