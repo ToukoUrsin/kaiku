@@ -115,6 +115,24 @@ class Session:
         self.episode += 1
         self._obs = None
 
+    def free_episode(self, layouts: list[Layout]) -> None:
+        """Every env gets a scene of its own and nobody leads: for a policy that drives them all
+        through ``drive``."""
+        assert len(layouts) == self.n
+        self.layouts = list(layouts)
+        for i, lay in enumerate(self.layouts):
+            self.sim.reset(i, lay, hand=HOME_HAND)
+            self.safety.reset(i, HOME_ARM, HOME_HAND)
+        self.echo.begin(Layout([]), [Layout([]) for _ in range(self.n - 1)])
+        self.tick_no = 0
+        self.lead_done = False
+        self.after_done = self.rest_ticks = 0
+        self.max_lag = np.zeros(self.n - 1)
+        self.clipped = np.zeros(self.n, int)
+        self.last_action = (np.tile(HOME_ARM, (self.n, 1)), np.tile(HOME_HAND, (self.n, 1)))
+        self.episode += 1
+        self._obs = None
+
     def sample_lead(self, n: int | None = None, rng: np.random.Generator | None = None) -> Layout:
         """A scene by the challenge's rule; with ``reachable_only``, one in which the arm that
         serves each part's bin can pinch it with its open hand clear of the other parts and of
@@ -211,15 +229,29 @@ class Session:
             pinch_t[1:], rot_t[1:], hand_t[1:] = self.echo.targets(
                 fpos[..., :2], fyaw, self._on_mat(fpos, 0.06), obs.pinch[1:], obs.rot[1:])
             self.max_lag = np.maximum(self.max_lag, self.echo.lag)
+        self.timing["echo"] += time.perf_counter() - t0
+        lean = np.broadcast_to(self.kin.rest, (n, 2, 7)).copy()
+        if F:
+            lean[1:] = self.echo.lead_arm.reshape(F, 2, 7)
+        self.drive(pinch_t, rot_t, hand_t, lean)
+        if self.lead_done:
+            self.after_done += 1
+            moving = (self.sim.obj_speed() > 0.02) & self.sim.active
+            self.rest_ticks = 0 if moving.any() else self.rest_ticks + 1
+        return obs
+
+    def drive(self, pinch_t: np.ndarray, rot_t: np.ndarray, hand_t: np.ndarray, lean: np.ndarray | None = None) -> None:
+        """Send every env its targets for one control tick: pinch points (N, 2, 3), palm
+        rotations (N, 2, 3, 3) and finger targets (N, 14). They become joint targets through
+        the arm IK, the shaper and the safety filter, and the physics advances one tick."""
+        n = self.n
         t1 = time.perf_counter()
         palm_t = pinch_t - np.einsum("nsij,sj->nsi", rot_t, self.off)
         # Solve from the last command, not from a free-running solution: the answer can then
         # never run ahead of what the rate limit lets the robot do. The arm's spare degree of
         # freedom leans towards a posture known to work: over the mat the one tabulated for
-        # that grasp, elsewhere the lead robot's own.
-        lean = np.broadcast_to(self.kin.rest, (n, 2, 7)).copy()
-        if F:
-            lean[1:] = self.echo.lead_arm.reshape(F, 2, 7)
+        # that grasp, elsewhere ``lean`` (for an echo, the lead robot's own posture).
+        lean = np.broadcast_to(self.kin.rest, (n, 2, 7)).copy() if lean is None else lean
         table, trust = self.reach.posture(pinch_t, np.arctan2(rot_t[..., 1, 0], rot_t[..., 0, 0]))
         lean += trust[..., None] * (table - lean)
         q, err, _ = self.kin.solve(self.safety.arm_cmd, palm_t, rot_t, rest=lean, rest_gain=self.lean_gain)
@@ -241,16 +273,11 @@ class Session:
         t3 = time.perf_counter()
         self.sim.step(arm, hand)
         t4 = time.perf_counter()
-        for k, v in (("echo", t1 - t0), ("ik", t2 - t1), ("safety", t3 - t2), ("physics", t4 - t3)):
+        for k, v in (("ik", t2 - t1), ("safety", t3 - t2), ("physics", t4 - t3)):
             self.timing[k] += v
         self.last_action = (arm, hand)
         self.tick_no += 1
-        if self.lead_done:
-            self.after_done += 1
-            moving = (self.sim.obj_speed() > 0.02) & self.sim.active
-            self.rest_ticks = 0 if moving.any() else self.rest_ticks + 1
         self._obs = None
-        return obs
 
     # ------------------------------------------------------------------ results
     def progress(self) -> np.ndarray:

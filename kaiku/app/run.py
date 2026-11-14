@@ -1,11 +1,13 @@
 """The live demo: one operator, many robots, in the browser.
 
     python -m kaiku.app.run --n 48 --port 8651 [--parts auto|3|4|5] [--record DIR] [--seed 0]
-                            [--gloves HOST[:PORT]] [--mode gloves|autopilot]
+                            [--gloves HOST[:PORT]] [--mode gloves|autopilot|policy]
+                            [--policy FILE] [--train local|modal]
 
 Without ``--gloves`` the operator is the stand-in: a scripted person wearing emulated Smartgloves
 II, sent through the same RGMP socket, hand solver, calibration and retargeting as real gloves.
-``--mode autopilot`` skips the gloves and commands the lead robot directly.
+``--mode autopilot`` skips the gloves and commands the lead robot directly. In ``policy`` mode
+nobody drives: a policy trained on the demonstrations gives every robot a scene of its own.
 
 One loop at the challenge's 30 Hz: the operator (gloves, or the stand-in) moves the lead robot,
 the echo carries the motion to every other robot's own scene, the safety filter and the physics
@@ -14,6 +16,7 @@ judge all of them, the recorder keeps the clean demonstrations, the browser show
 from __future__ import annotations
 
 import argparse
+import json
 import queue
 import signal
 import time
@@ -25,6 +28,7 @@ import numpy as np
 
 from kaiku.app.autopilot import Autopilot
 from kaiku.app.session import FAILED, IDLE, LEAD, RUNNING, SUCCESS, Session
+from kaiku.app.trainer import Trainer
 from kaiku.data.recorder import Recorder
 from kaiku.sim.twin import CONTROL_HZ
 from kaiku.teleop.operator import GloveOperator
@@ -32,13 +36,18 @@ from kaiku.web.server import ViewerServer
 
 DT = 1.0 / CONTROL_HZ
 HUD_EVERY = 3                 # ticks between HUD updates (10 Hz)
-MODES = ("autopilot", "gloves", "replay", "policy")
+MODES = ("gloves", "autopilot", "policy")
+HERE = Path(__file__).resolve().parents[1]
+PRETRAINED = HERE / "policy" / "pretrained" / "kaiku.pt"
+STUDY = HERE / "policy" / "pretrained" / "study.json"
 
 
 class Runner:
     def __init__(self, n: int = 48, port: int = 8651, host: str = "0.0.0.0", seed: int = 0, parts: str | int = "auto",
                  record: Path | str | None = None, hold_s: float = 1.6, lead_timeout_s: float = 90.0,
-                 threads: int | None = None, mode: str = "gloves", gloves: str | None = None):
+                 threads: int | None = None, mode: str = "gloves", gloves: str | None = None,
+                 policy: Path | str | None = None, train: str = "local", train_steps: int = 20000,
+                 policy_timeout_s: float = 80.0, stall_s: float = 15.0):
         self.s = Session(n, seed=seed, threads=threads)
         self.n = n
         self.parts = parts
@@ -50,7 +59,8 @@ class Runner:
         self.viewer.on_message(self.commands.put)
         self.gloves = gloves                                   # HOST[:PORT] of a Rokoko driver, or None: the stand-in
         self.ops: dict = {}
-        self.mode = self.want_mode = mode if mode in ("gloves", "autopilot") else "gloves"
+        self.mode = mode if mode in ("gloves", "autopilot") else "gloves"
+        self.want_mode = mode if mode in MODES else "gloves"
         self.op = self._operator(self.mode)
         self.rec = Recorder(self.s, record, operator=self._who())
         self.paused = False
@@ -68,6 +78,21 @@ class Runner:
         self.t_start = time.time()
         self.hud_tick = 0
         self.next = self.pool.submit(self._sample)
+        # The policy: trained here (the Train button) or handed in, and what it has done on its own.
+        self.policy = self.pilot = self.next_free = self.loading = None
+        self.plain: dict = {}
+        self.policy_timeout, self.stall = int(policy_timeout_s * CONTROL_HZ), int(stall_s * CONTROL_HZ)
+        self.want = np.zeros(n, int)
+        self.last_gain = 0
+        self.pol = {"rounds": 0, "scenes": 0, "ok": 0, "parts": 0, "sorted": 0, "clipped": 0}
+        self.study = json.loads(STUDY.read_text()) if STUDY.exists() else {}
+        out = Path(record) / "policies" if record else None
+        self.trainer = Trainer(record, out or "policies", train, train_steps)
+        policy = policy or (PRETRAINED if PRETRAINED.exists() else None)
+        if policy:
+            self.loading = self.pool.submit(self._load, Path(policy))
+        elif self.want_mode == "policy":
+            self.want_mode = self.mode
 
     # ------------------------------------------------------------------ operators
     def _operator(self, mode: str):
@@ -91,14 +116,46 @@ class Runner:
             n = int(self.rng.choice([3, 4, 5], p=[0.35, 0.40, 0.25]))
         return self.s.sample_scene(int(n), self.rng)
 
+    def _sample_free(self):
+        """A scene for every robot, each drawn by the challenge's rule."""
+        def parts():
+            return int(self.rng.choice([3, 4, 5], p=[0.35, 0.40, 0.25])) if self.parts == "auto" else int(self.parts)
+        return [self.s.sample_lead(parts(), self.rng) for _ in range(self.n)]
+
+    def _load(self, path: Path):
+        from kaiku.policy.model import Policy             # torch: only when there is a policy to run
+        from kaiku.policy.rollout import Pilot
+        policy = Policy.load(path)
+        plain = path.with_name("plain.pt")
+        return policy, Pilot(self.s, policy), (Policy.load(plain).info if plain.exists() else {})
+
+    def _ready(self) -> bool:
+        """The next scene has been drawn (and, for the policy, the policy is in)."""
+        if self.want_mode == "policy":
+            return self.pilot is not None and self.next_free is not None and self.next_free.done()
+        return self.next.done()
+
     def _begin_episode(self) -> None:
+        if self.want_mode != self.mode:
+            self.mode = self.want_mode
+            if self.mode != "policy":
+                self.op = self._operator(self.mode)
+                self.rec.operator = self._who()
+        if self.mode == "policy":
+            layouts = self.next_free.result()
+            self.next_free = self.pool.submit(self._sample_free)
+            self.s.free_episode(layouts)
+            self.pilot.begin(layouts)
+            self.want = self.pilot.present.sum(axis=1)
+            self.states[:] = RUNNING
+            self.sorted[:] = 0
+            self.last_gain = 0
+            self.phase = "run"
+            return
         lead, followers = self.next.result()
         self.next = self.pool.submit(self._sample)
         self.s.new_episode(lead, followers)
-        if self.want_mode != self.mode:
-            self.mode = self.want_mode
-            self.op = self._operator(self.mode)
-            self.rec.operator = self._who()
+        self.want[:] = len(lead.placements)
         self.op.begin()
         self.rec.begin()
         self.states[:] = IDLE
@@ -131,6 +188,78 @@ class Runner:
         self.phase = "hold"
         self.hold_until = time.perf_counter() + self.hold_s
 
+    def _end_policy_episode(self, count: bool = True) -> None:
+        s = self.s
+        r = s.result()
+        clean = r.success & ~r.aborted & (r.clipped == 0)
+        self.states[:] = np.where(clean, SUCCESS, FAILED)
+        self.sorted = s.progress()
+        if count:
+            p = self.pol
+            p["rounds"] += 1
+            p["scenes"] += self.n
+            p["ok"] += int(clean.sum())
+            p["parts"] += int(self.want.sum())
+            p["sorted"] += int(self.sorted.sum())
+            p["clipped"] += int(r.clipped.sum())
+            self.history.append({"episode": p["rounds"], "parts": int(self.want.sum()), "ok": int(clean.sum()),
+                                 "robots": self.n, "lead_ok": None, "saved": 0, "policy": True,
+                                 "seconds": round(s.tick_no * DT, 1)})
+        self.phase = "hold"
+        self.hold_until = time.perf_counter() + self.hold_s + 1.0
+
+    def _policy_step(self) -> None:
+        s = self.s
+        obs = s.observe()
+        s.drive(*self.pilot.step(obs))
+        if s.tick_no % 6:
+            return
+        got = s.progress()
+        if (got > self.sorted).any():
+            self.last_gain = s.tick_no
+        self.sorted = got
+        done = got >= self.want
+        self.states[:] = np.where(s.safety.aborted, FAILED, np.where(done, SUCCESS, RUNNING))
+        home = np.linalg.norm(obs.pinch - s.home_pinch, axis=-1).max(axis=1) < 0.03
+        # Over when everybody has sorted everything and is back home, or when those still at it
+        # have not sorted a part for a while.
+        if (done & home).all() or s.tick_no - self.last_gain > self.stall or s.tick_no >= self.policy_timeout:
+            self._end_policy_episode()
+
+    def _train(self) -> None:
+        if self.rec.root is None:
+            self.toast("Start with --record DIR: training uses the demonstrations saved there.", "warn")
+        elif self.trainer.busy:
+            self.toast("Already training.", "info")
+        elif not self.rec.demos:
+            self.toast("Nothing to train on yet. Let a few scenes finish first.", "warn")
+        elif self.trainer.start():
+            self.toast(f"Training two policies on {self.rec.demos} demonstrations: one with the echoes, "
+                       "one with the operator's own alone.", "info")
+
+    def _policy_news(self) -> None:
+        """Pick up a policy that has finished loading, and a training run that has ended."""
+        if self.loading is not None and self.loading.done():
+            try:
+                self.policy, self.pilot, self.plain = self.loading.result()
+                if self.next_free is None:
+                    self.next_free = self.pool.submit(self._sample_free)
+            except Exception as e:                            # a file from another version, a missing torch
+                self.toast(f"The policy could not be loaded: {e}", "warn")
+                if self.want_mode == "policy" and self.mode != "policy":
+                    self.want_mode = self.mode
+            self.loading = None
+        st = self.trainer.status()
+        if st["state"] in ("done", "failed") and self.trainer.finished:
+            self.trainer.finished = False
+            if st["state"] == "done":
+                self.loading = self.pool.submit(self._load, self.trainer.out / "kaiku.pt")
+                jobs = st["jobs"]
+                self.toast(f"Trained. With the echoes it sorts {jobs['kaiku'].get('success', 0):.0%} of new scenes, "
+                           f"with the operator's demonstrations alone {jobs['plain'].get('success', 0):.0%}.", "info")
+            else:
+                self.toast(st["error"] or "Training failed.", "warn")
+
     # ------------------------------------------------------------------ the loop
     def _commands(self) -> None:
         while True:
@@ -145,7 +274,7 @@ class Runner:
                 self.paused = bool(value)
             elif name == "next_scene":
                 if self.phase == "run":
-                    self._end_episode(record=False)
+                    self._end_policy_episode(False) if self.mode == "policy" else self._end_episode(record=False)
                 self.hold_until = 0.0
             elif name == "parts":
                 self.parts = value if value == "auto" else int(value)
@@ -155,9 +284,16 @@ class Runner:
                 if value and self.rec.root is None:
                     self.toast("Start with --record DIR to save demonstrations.", "warn")
             elif name == "mode":
-                if value in ("gloves", "autopilot"):
+                if value == "policy" and self.policy is None and self.loading is None:
+                    self.toast("No policy yet. Train one in the Policy tab first.", "warn")
+                elif value in MODES:
                     self.want_mode = value
-                    if value != self.mode:
+                    if "policy" in (value, self.mode) and value != self.mode:
+                        # Nobody waits a whole scene to see the robots work alone, or to take them back.
+                        if self.phase == "run":
+                            self._end_policy_episode(False) if self.mode == "policy" else self._end_episode(False)
+                        self.hold_until = 0.0
+                    elif value != self.mode:
                         self.toast(f"{str(value).capitalize()} takes over at the next scene.", "info")
                 else:
                     self.toast(f"{str(value).capitalize()} mode is not connected in this build.", "warn")
@@ -169,7 +305,7 @@ class Runner:
                 else:
                     self.toast("The stand-in operator calibrates itself. Connect gloves to calibrate yours.", "info")
             elif name == "train":
-                self.toast("Training is not connected in this build.", "warn")
+                self._train()
 
     def toast(self, text: str, level: str = "info") -> None:
         self.viewer.send_event({"type": "toast", "text": text, "level": level})
@@ -177,10 +313,15 @@ class Runner:
     def _step(self) -> None:
         s = self.s
         if self.phase == "hold":
-            if time.perf_counter() >= self.hold_until and self.next.done():
+            if time.perf_counter() >= self.hold_until and self._ready():
                 self._begin_episode()
             return
         t0 = time.perf_counter()
+        if self.mode == "policy":
+            self._policy_step()
+            self.tick_ms.append(1000.0 * (time.perf_counter() - t0))
+            self.walls.append(time.perf_counter())
+            return
         obs = s.observe()
         cmd = self.op.update(obs)
         if self.op.done or s.tick_no >= self.lead_timeout:
@@ -211,9 +352,10 @@ class Runner:
 
     def hud(self) -> dict:
         s, t = self.s, self.tot
+        alone = self.mode == "policy"
         F = self.n - 1
         parts = len(s.layouts[0].placements)
-        lag = s.echo.lag if F else np.zeros(0)
+        lag = s.echo.lag if F and not alone else np.zeros(F)
         working = self.phase == "run"
         status = "paused" if self.paused else ("running" if working and not s.lead_done else "settling")
         minutes = (t["ticks"] + (s.tick_no if working else 0)) * DT / 60.0
@@ -224,17 +366,22 @@ class Runner:
         return {
             "mode": self.mode,
             "status": status,
-            "operator": self.op.hud() if isinstance(self.op, GloveOperator) else
+            "operator": self.op.hud() if isinstance(self.op, GloveOperator) and not alone else
             {"left": {"connected": False, "hz": 0.0}, "right": {"connected": False, "hz": 0.0},
-             "calibrated": False, "stand_in": True, "source": "autopilot", "hands": None},
-            "episode": {"index": t["episodes"] + 1, "parts": parts, "sorted": int(self.sorted[0]),
-                        "elapsed_s": round(s.tick_no * DT, 1), "step": self.op.label},
-            "echo": {"robots": F, "done": int(s.echo.done.sum()) if F else 0,
+             "calibrated": False, "stand_in": not alone, "source": "policy" if alone else "autopilot", "hands": None},
+            "episode": {"index": self.pol["rounds"] + 1, "parts": int(self.want.sum()), "sorted": int(self.sorted.sum()),
+                        "elapsed_s": round(s.tick_no * DT, 1), "step": "Policy"} if alone else
+            {"index": t["episodes"] + 1, "parts": parts, "sorted": int(self.sorted[0]),
+             "elapsed_s": round(s.tick_no * DT, 1), "step": self.op.label},
+            "echo": {"robots": self.n, "done": int((self.states != RUNNING).sum()),
+                     "ok": int((self.states == SUCCESS).sum()), "failed": int((self.states == FAILED).sum()),
+                     "lag_s": 0.0, "lag_max_s": 0.0} if alone else
+            {"robots": F, "done": int(s.echo.done.sum()) if F else 0,
                      "ok": int((self.states[1:] == SUCCESS).sum()), "failed": int((self.states[1:] == FAILED).sum()),
                      "lag_s": round(float(lag.mean()), 2) if F else 0.0,
                      "lag_max_s": round(float(lag.max()), 2) if F else 0.0},
             "envs": {"lag_s": [0.0] + [round(float(v), 2) for v in lag], "sorted": [int(v) for v in self.sorted],
-                     "clipped": [int(v) for v in s.clipped]},
+                     "parts": [int(v) for v in self.want], "clipped": [int(v) for v in s.clipped]},
             "totals": {"episodes": t["episodes"], "human_demos": t["human"], "robot_demos": t["robot"],
                        "amplification": round(demos / t["human"], 1) if t["human"] else 0.0,
                        "yield": round(t["robot"] / t["attempts"], 4) if t["attempts"] else 0.0,
@@ -243,10 +390,25 @@ class Runner:
             "history": list(self.history),
             "dataset": {"episodes": self.rec.demos, "frames": self.rec.frames,
                         "path": str(self.rec.root) if self.rec.root else None, "recording": self.rec.enabled},
-            "policy": {"state": "none", "progress": 0.0, "loss": None, "success": None, "curve": []},
+            "policy": self._policy_hud(),
             "perf": {"realtime": round(hz / CONTROL_HZ, 2), "tick_ms": round(float(np.mean(self.tick_ms)), 1)
                      if self.tick_ms else 0.0, "hz": CONTROL_HZ},
         }
+
+    def _policy_hud(self) -> dict:
+        st, p = self.trainer.status(), self.pol
+        info = self.policy.info if self.policy is not None else {}
+        out = {"state": "none", "progress": 0.0, "stage": None, "loss": info.get("loss"),
+               "success": info.get("success"), "plain": self.plain.get("success"),
+               "humans": info.get("humans"), "demos": info.get("demos"), "tested_on": info.get("scenes"),
+               "curve": self.study.get("curve", []), "study": self.study.get("about"),
+               "alone": {"rounds": p["rounds"], "scenes": p["scenes"], "ok": p["ok"], "parts": p["parts"],
+                         "sorted": p["sorted"], "clipped": p["clipped"]}}
+        if st["state"] == "training":
+            out.update(state="training", progress=st["progress"], stage=st["stage"], loss=st["loss"])
+        elif self.policy is not None:
+            out["state"] = "running" if self.mode == "policy" else "ready"
+        return out
 
     def run(self) -> None:
         self.viewer.start()
@@ -255,6 +417,7 @@ class Runner:
         try:
             while not self.stop:
                 self._commands()
+                self._policy_news()
                 if not self.paused:
                     self._step()
                 self.hud_tick += 1
@@ -268,6 +431,7 @@ class Runner:
                     nxt = time.perf_counter()                  # running behind: never try to catch up
         finally:
             self.viewer.stop()
+            self.trainer.close()
             self.pool.shutdown(wait=False, cancel_futures=True)
             for op in self.ops.values():
                 if hasattr(op, "close"):
@@ -284,12 +448,17 @@ def main(argv=None) -> None:
     ap.add_argument("--parts", default="auto", help="auto, 3, 4 or 5 parts per scene")
     ap.add_argument("--record", default=None, help="folder to save the demonstrations in")
     ap.add_argument("--threads", type=int, default=None)
-    ap.add_argument("--mode", default="gloves", choices=("gloves", "autopilot"))
+    ap.add_argument("--mode", default="gloves", choices=MODES)
+    ap.add_argument("--policy", default=None, help="a trained policy (default: the one shipped with Kaiku)")
+    ap.add_argument("--train", default="local", choices=("local", "modal"),
+                    help="where the Train button trains: this machine, or a rented GPU through Modal")
+    ap.add_argument("--train-steps", type=int, default=20000)
     ap.add_argument("--gloves", default=None, metavar="HOST[:PORT]",
                     help="RGMP address of the Rokoko driver; without it the stand-in operator drives")
     a = ap.parse_args(argv)
     r = Runner(a.n, a.port, a.host, a.seed, a.parts if a.parts == "auto" else int(a.parts), a.record,
-               threads=a.threads, mode=a.mode, gloves=a.gloves)
+               threads=a.threads, mode=a.mode, gloves=a.gloves, policy=a.policy, train=a.train,
+               train_steps=a.train_steps)
 
     def quit_(*_):
         r.stop = True

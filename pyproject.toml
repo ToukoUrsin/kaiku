@@ -16,6 +16,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+policy = ["torch"]          # training and running the policy (kaiku.policy)
+export = ["pyarrow"]        # the dataset in the challenge's LeRobot and GR00T layouts (kaiku.data.export)
 dev = ["pytest"]
 
 [tool.setuptools.packages.find]

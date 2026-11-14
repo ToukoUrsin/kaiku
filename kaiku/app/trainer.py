@@ -1,0 +1,99 @@
+"""Training from the live demo: a process of its own, so the robots keep their 30 Hz.
+
+``python -m kaiku.policy.fit`` does the work on this machine; with ``backend="modal"`` the same
+code runs on a rented GPU (``tools/modal_policy.py::live``; needs ``MODAL_TOKEN_ID`` and
+``MODAL_TOKEN_SECRET``). Either way the process reports on stdout and leaves ``kaiku.pt`` and
+``plain.pt`` in the output folder.
+"""
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import threading
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+WHICH = ("kaiku", "plain")
+
+
+class Trainer:
+    def __init__(self, data: Path | str | None, out: Path | str, backend: str = "local", steps: int = 20000,
+                 scenes: int = 48):
+        self.data = Path(data) if data else None
+        self.out = Path(out)
+        self.backend, self.steps, self.scenes = backend, steps, scenes
+        self.proc: subprocess.Popen | None = None
+        self.lock = threading.Lock()
+        self.jobs: dict[str, dict] = {}
+        self.error: str | None = None
+        self.finished = False                # set once per run; the runner clears it when it has the policies
+
+    @property
+    def busy(self) -> bool:
+        return self.proc is not None and self.proc.poll() is None
+
+    def start(self) -> bool:
+        if self.busy or self.data is None:
+            return False
+        self.out.mkdir(parents=True, exist_ok=True)
+        common = [str(self.data), "--out", str(self.out), "--steps", str(self.steps), "--scenes", str(self.scenes)]
+        if self.backend == "modal":
+            cmd = ["uvx", "modal", "run", "tools/modal_policy.py::live", "--data", *common]
+        else:
+            # Below the live demo in the queue for the processor, and on a share of the cores.
+            cmd = [*(["nice", "-n", "10"] if shutil.which("nice") else []), sys.executable, "-u", "-m",
+                   "kaiku.policy.fit", *common, "--threads", str(max(2, (os.cpu_count() or 4) // 4))]
+        with self.lock:
+            self.jobs = {w: {"stage": "loading", "progress": 0.0} for w in WHICH}
+            self.error, self.finished = None, False
+        self.proc = subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                     start_new_session=True)
+        threading.Thread(target=self._read, args=(self.proc,), daemon=True, name="kaiku-trainer").start()
+        return True
+
+    def _read(self, proc: subprocess.Popen) -> None:
+        last = ""
+        for line in proc.stdout:
+            line = line.strip()
+            at = line.find("KAIKU {")
+            if at < 0:
+                last = line or last
+                continue
+            try:
+                m = json.loads(line[at + 6:])
+            except ValueError:
+                continue
+            with self.lock:
+                if m.get("stage") == "error":
+                    self.error = str(m.get("text", "Training failed."))
+                elif m.get("which") in self.jobs:
+                    self.jobs[m["which"]].update(m)
+        code = proc.wait()
+        with self.lock:
+            done = all(j.get("stage") == "done" for j in self.jobs.values())
+            if not done and self.error is None:
+                self.error = f"Training stopped ({last[-160:] or f'exit code {code}'})."
+            self.finished = True
+
+    def status(self) -> dict:
+        """Where the training is: ``state`` idle, training, done or failed, and the two jobs."""
+        with self.lock:
+            jobs = {w: dict(j) for w, j in self.jobs.items()}
+            error, finished = self.error, self.finished
+        if not jobs:
+            return {"state": "idle"}
+        state = "failed" if error else ("done" if finished else "training")
+        k = jobs["kaiku"]
+        return {"state": state, "error": error, "stage": k.get("stage"), "loss": k.get("loss"),
+                "progress": round(sum(j.get("progress", 0.0) for j in jobs.values()) / len(jobs), 4), "jobs": jobs}
+
+    def close(self) -> None:
+        if self.busy:
+            try:
+                os.killpg(self.proc.pid, signal.SIGTERM)       # its own process group, nobody else's
+            except ProcessLookupError:
+                pass
