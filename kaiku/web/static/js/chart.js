@@ -2,11 +2,27 @@
 // Kaiku's echoes and one without. Drawn as plain SVG into a 320 x 196 viewBox.
 
 const NS = 'http://www.w3.org/2000/svg';
+
+/** A share as a person reads it. A small rate that is not nothing is never rounded to 0%, nor a near miss to 100%. */
+export function percent(share) {
+  const value = share * 100;
+  if (value > 0 && value < 1) return 'under 1%';
+  if (value < 100 && value > 99.5) return 'over 99%';
+  return `${Math.round(value)}%`;
+}
+
+/** The lowest and highest of a point's training runs, or null when it has one run or none. */
+function range(point, series) {
+  const runs = point[`${series}_runs`];
+  if (!Array.isArray(runs) || runs.length < 2) return null;
+  return { low: Math.min(...runs), high: Math.max(...runs), runs: runs.length };
+}
 const LEFT = 36, RIGHT = 306, TOP = 10, BOTTOM = 168;
 
 /**
  * @param {SVGSVGElement} svg
- * @param {{demos: number, plain: number, kaiku: number}[]} curve  success as 0..1; empty draws the bare axes
+ * @param {{demos: number, plain: number, kaiku: number, plain_runs?: number[], kaiku_runs?: number[]}[]} curve
+ *   success as 0..1, and each training run's where they are known; empty draws the bare axes
  * @param {number} [mark]  demonstrations to mark: the gap between the two lines there is labelled
  */
 export function drawChart(svg, curve, mark) {
@@ -33,8 +49,8 @@ export function drawChart(svg, curve, mark) {
   if (marked && Number.isFinite(marked.kaiku) && Number.isFinite(marked.plain)) {
     const x = xOf(at);
     svg.append(node('line', { class: 'gap', x1: x, x2: x, y1: yOf(marked.plain), y2: yOf(marked.kaiku) }));
-    svg.append(node('text', { class: 'gap-kaiku', x: x - 8, y: yOf(marked.kaiku) - 6, 'text-anchor': 'end' }, `${Math.round(marked.kaiku * 100)}%`));
-    svg.append(node('text', { class: 'gap-plain', x: x - 8, y: yOf(marked.plain) - 6, 'text-anchor': 'end' }, `${Math.round(marked.plain * 100)}%`));
+    svg.append(node('text', { class: 'gap-kaiku', x: x - 8, y: yOf(marked.kaiku) - 6, 'text-anchor': 'end' }, percent(marked.kaiku)));
+    svg.append(node('text', { class: 'gap-plain', x: x - 8, y: yOf(marked.plain) - 6, 'text-anchor': 'end' }, percent(marked.plain)));
   }
 
   for (const series of ['plain', 'kaiku']) {
@@ -45,8 +61,14 @@ export function drawChart(svg, curve, mark) {
     if (path.trim()) svg.append(node('path', { class: `series series-${series}`, d: path }));
     points.forEach((p, i) => {
       if (!Number.isFinite(p[series])) return;
+      // the runs behind the mean: a thin bar from the lowest to the highest, where they differ enough to see
+      const runs = range(p, series);
+      if (runs && runs.high - runs.low >= 0.03) {
+        svg.append(node('line', { class: `runs runs-${series}`, x1: xOf(i), x2: xOf(i), y1: yOf(runs.low), y2: yOf(runs.high) }));
+      }
       const dot = node('circle', { class: `dot-${series}`, cx: xOf(i), cy: yOf(p[series]), r: i === at ? 3.6 : 2.6 });
-      dot.append(node('title', {}, `${p.demos} demonstrations: ${Math.round(p[series] * 100)}%`));
+      dot.append(node('title', {}, `${p.demos} demonstrations: ${percent(p[series])}`
+        + (runs ? `, ${Math.round(runs.low * 100)} to ${Math.round(runs.high * 100)}% across ${runs.runs} runs` : '')));
       svg.append(dot);
     });
   }
