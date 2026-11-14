@@ -486,10 +486,9 @@ a.button {
   font-size: var(--t-14);
 }
 
-.visitor-controls {
+.block-actions {
   display: flex;
   gap: var(--s-2);
-  margin-top: var(--s-3);
 }
 
 /* The top of the stage while somebody drives: what to do next, on a surface of its own, and the camera
@@ -541,9 +540,38 @@ a.button {
 
 .drive-more {
   max-width: 46ch;
+  min-height: 2.8em;                  /* two lines, used or not: the buttons under it stay where they are */
   font-variant-numeric: tabular-nums;
   color: var(--text-2);
   font-size: var(--t-14);
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+
+/* Who does the grasp: one switch, and one line that says what each hand does. */
+.drive-grasp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: var(--s-1);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line);
+}
+
+.drive-grasp[hidden] {
+  display: none;
+}
+
+.drive-grasp .segmented {
+  pointer-events: auto;
+}
+
+.drive-grasp-note {
+  max-width: 52ch;
+  color: var(--text-2);
+  font-size: var(--t-12);
   line-height: 1.4;
   text-wrap: pretty;
 }
@@ -556,6 +584,14 @@ a.button {
   gap: var(--s-2);
   margin-top: 6px;
   pointer-events: auto;
+}
+
+/* While somebody drives from this page, what the runner says goes under their words: never onto the table. */
+.drive-top .toasts {
+  position: static;
+  align-items: center;
+  max-width: min(420px, 100%);
+  transform: none;
 }
 
 .drive-left {
@@ -636,14 +672,6 @@ a.button {
   top: auto;
   bottom: var(--s-5);
   animation: none;
-}
-
-.app[data-driving] .toasts {
-  right: auto;
-  left: 50%;
-  bottom: calc(var(--s-5) + 44px);
-  align-items: center;
-  transform: translateX(-50%);
 }
 
 .app[data-driving] #view {
@@ -743,6 +771,13 @@ a.button {
   margin-top: var(--s-5);
   padding-top: var(--s-4);
   border-top: 1px solid var(--line-strong);
+}
+
+/* Where the lead robot's table leaves no room for four in a row: two and two, clear of it. */
+.story[data-tight] .story-stats {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: var(--s-3) var(--s-6);
 }
 
 .story-stats dt {
@@ -1536,22 +1571,23 @@ a.button {
 }
 
 .minimap {
+  --cell: 20px;                 /* the page makes it smaller where the panel is short of room */
   display: grid;
   justify-content: center;
-  gap: 4px;
+  gap: calc(var(--cell) / 5);
   padding: var(--s-2) 0 var(--s-1);
 }
 
 .minimap-rank {
   display: flex;
   justify-content: center;
-  gap: 4px;
+  gap: calc(var(--cell) / 5);
 }
 
 .minimap button {
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
+  width: var(--cell);
+  height: var(--cell);
+  border-radius: calc(var(--cell) / 4);
   background: var(--surface-active);
   transition: background var(--medium), transform var(--fast), box-shadow var(--fast);
 }
@@ -1972,6 +2008,17 @@ a.button {
   margin-left: auto;
 }
 
+/* "Resume" is longer than "Pause": the row stays one row beside a laptop's stage */
+@media (min-width: 761px) {
+  .controls [data-ref="pause"] {
+    min-width: 88px;
+  }
+
+  .controls .segmented-small button {
+    padding: 0 7px;
+  }
+}
+
 /* why the buttons under it do nothing for now */
 .held {
   display: flex;
@@ -2040,7 +2087,7 @@ a.button {
     right: auto;
     left: var(--s-6);
     bottom: var(--s-6);
-    max-width: 480px;
+    max-width: min(480px, var(--story-room, 480px));
     color: var(--text-3);
     font-size: var(--t-12);
     text-align: left;
@@ -2051,9 +2098,41 @@ a.button {
   .app:not([data-clean]) .story {
     bottom: calc(var(--s-6) + 52px);
   }
+
+  /* beside a table the caption is narrower and a line longer */
+  .app:not([data-clean]) .story[data-tight] {
+    bottom: calc(var(--s-6) + 68px);
+  }
 }
 
 /* ---------------------------------------------------------------- laptop, short */
+
+/* a laptop's side panel holds the whole Live tab: its blocks stand closer */
+@media (max-height: 960px) and (min-width: 761px) {
+  .block {
+    padding: var(--s-3) var(--s-4) 14px;
+  }
+
+  .block-head {
+    margin-bottom: var(--s-1);
+  }
+
+  .history {
+    margin-top: var(--s-3);
+  }
+
+  .history-bars {
+    height: 24px;
+  }
+
+  .minimap {
+    padding: var(--s-1) 0 0;
+  }
+
+  .minimap + .pair {
+    margin-top: var(--s-2);
+  }
+}
 
 @media (max-height: 760px) and (min-width: 761px) {
   :root {
@@ -2182,13 +2261,16 @@ a.button {
     gap: var(--s-2);
   }
 
-  .drive-card {
+  /* never wider than a phone: on a wide small window the stage's sides stay in view */
+  .drive-card,
+  .drive-top:has(.hand-cam:not([hidden])) .drive-card {
     width: 100%;
+    max-width: 420px;
     padding: var(--s-3) var(--s-3) var(--s-2);
   }
 
-  .drive-top:has(.hand-cam:not([hidden])) .drive-card {
-    max-width: 100%;
+  .drive-grasp {
+    padding-top: var(--s-2);
   }
 
   .drive-say {
@@ -2228,11 +2310,6 @@ a.button {
   /* driving on a phone: what else there is to say sits at the foot of the stage */
   .app[data-driving] .banner {
     bottom: var(--s-3);
-  }
-
-  .app[data-driving] .toasts {
-    top: auto;
-    bottom: calc(var(--s-3) + 64px);       /* clear of a banner two lines high */
   }
 
   .stage-tools kbd,
@@ -2398,9 +2475,8 @@ a.button {
     padding: 0 11px;
   }
 
-  .minimap button {
-    width: 22px;
-    height: 22px;
+  .minimap {
+    --cell: 22px;
   }
 
   .controls {

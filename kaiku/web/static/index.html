@@ -69,13 +69,19 @@
         <button type="button" class="button button-primary button-large drive-ask" data-ref="drive-stage">Drive it yourself</button>
       </div>
 
-      <div class="drive-top">
+      <div class="drive-top" data-ref="drive-top">
         <div class="drive-card" data-ref="drive-card" hidden>
           <p class="drive-say" data-ref="drive-say" role="status"></p>
           <p class="drive-more" data-ref="drive-more"></p>
+          <div class="drive-grasp" data-ref="drive-grasp" hidden>
+            <div class="segmented segmented-small" role="radiogroup" aria-label="Who does the grasp" data-ref="drive-own">
+              <button type="button" role="radio" aria-checked="true" data-own="0">Helped grasp</button>
+              <button type="button" role="radio" aria-checked="false" data-own="1">My own grasp</button>
+            </div>
+            <p class="drive-grasp-note" data-ref="drive-grasp-note"></p>
+          </div>
           <div class="drive-row">
             <button type="button" class="button" data-ref="drive-camera">Use my hand</button>
-            <button type="button" class="button" data-ref="drive-own" aria-pressed="false" hidden>Grasp it myself</button>
             <button type="button" class="button" data-ref="drive-back">Hand it back</button>
             <span class="drive-left num" data-ref="drive-left"></span>
           </div>
@@ -135,7 +141,7 @@
         <span data-ref="tag-text">Operator</span>
       </div>
 
-      <section class="story" aria-label="Demonstrations">
+      <section class="story" data-ref="story" aria-label="Demonstrations">
         <p class="story-chain">
           <b data-ref="chain-count">1</b> <span data-ref="chain-who">robot driven</span>
           <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
@@ -146,7 +152,7 @@
           <span class="story-gain" data-ref="gain" aria-hidden="true"></span>
         </p>
         <p class="story-label" data-ref="demos-label">demonstrations saved</p>
-        <dl class="story-stats">
+        <dl class="story-stats" data-ref="story-stats">
           <div><dt data-ref="stat1-label">Saved per scene</dt><dd title="Demonstrations saved for each scene the operator did: its own run, and one from every echo that kept up."><span data-ref="amplification">0</span><small data-ref="amplification-of"></small></dd></div>
           <div><dt data-ref="stat2-label">Echoes that succeed</dt><dd data-ref="yield">0%</dd></div>
           <div><dt data-ref="stat3-label">Saved per minute</dt><dd data-ref="rate">0</dd></div>
@@ -230,16 +236,16 @@
           <section class="block">
             <header class="block-head">
               <h2>Operator</h2>
-              <button type="button" class="button" data-ref="calibrate" hidden>Calibrate</button>
+              <div class="block-actions">
+                <button type="button" class="button" data-ref="calibrate" hidden>Calibrate</button>
+                <button type="button" class="button button-primary" data-ref="drive-panel">Drive it yourself</button>
+                <button type="button" class="button" data-ref="drive-panel-back" hidden>Hand it back</button>
+              </div>
             </header>
             <p class="source" data-ref="source">
               <span data-ref="source-text">Waiting for the operator</span>
             </p>
             <p class="source" data-ref="operator-message" hidden></p>
-            <div class="visitor-controls">
-              <button type="button" class="button button-primary" data-ref="drive-panel">Drive it yourself</button>
-              <button type="button" class="button" data-ref="drive-panel-back" hidden>Hand it back</button>
-            </div>
             <dl class="rows" data-ref="operator-rows"></dl>
           </section>
 
@@ -302,7 +308,7 @@
               <h2>The last scene</h2>
               <a class="button" href="/api/dataset.zip" download data-ref="ds-download">Download</a>
             </header>
-            <p class="lede">One demonstration from every robot that sorted it, as LeRobot v3.0 and GR00T. About 30 MB.</p>
+            <p class="lede" data-ref="ds-size">One demonstration from every robot that sorted it, as LeRobot v3.0 and GR00T. 30 to 50 MB.</p>
           </section>
           <section class="block" data-ref="ds-where">
             <header class="block-head"><h2>Saved to</h2></header>
@@ -365,6 +371,7 @@
               <div class="row"><dt>Its own test</dt><dd data-ref="policy-test"></dd></div>
               <div class="row"><dt>Driving here</dt><dd data-ref="policy-here"></dd></div>
             </dl>
+            <p class="note" data-ref="policy-first" role="status" hidden></p>
             <p class="note" data-ref="drive-note" hidden></p>
           </section>
           <section class="block block-minor">

@@ -7,7 +7,17 @@ import { IDLE } from './markers.js';
 import { samplePolicy } from './sample.js';
 
 const STATE_NAMES = ['idle', 'running', 'success', 'failed', 'lead'];
-const STATE_TEXT = ['Waiting for a scene', 'Working', 'Sorted its scene', 'Did not finish', 'Driven by the operator'];
+// What one robot is doing, said with the scene it is about: the panel beside it reports the scene before.
+function stateText(state, alone, index) {
+  const which = Number.isFinite(index) ? (alone ? `its scene in round ${index}` : `scene ${index}`) : 'this scene';
+  switch (state) {
+    case 1: return `Working on ${which}`;
+    case 2: return `Sorted ${which}`;
+    case 3: return `Did not finish ${which}`;
+    case 4: return 'Driven by the operator';
+    default: return 'Waiting for the next scene';
+  }
+}
 const STEP_ORDER = ['approach', 'descend', 'grasp', 'lift', 'carry', 'release'];
 const STEP_TEXT = {
   approach: 'Reaching for the next part',
@@ -158,7 +168,10 @@ export class Hud {
     el['drive-back']?.addEventListener('click', () => this.onDriveEnd());
     el['drive-panel-back']?.addEventListener('click', () => this.onDriveEnd());
     el['drive-camera']?.addEventListener('click', () => this.onCamera());
-    el['drive-own']?.addEventListener('click', () => this.onOwn());
+    el['drive-own']?.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-own]');
+      if (button) this.onOwn(button.dataset.own === '1');
+    });
 
     el['focus-close'].addEventListener('click', () => this.onFocus(-1));
     el['focus-prev'].addEventListener('click', () => this.onFocus(this.focus - 1));
@@ -171,6 +184,7 @@ export class Hud {
     el.headline.addEventListener('click', () => this.selectTab('policy'));
     el.tabs.addEventListener('keydown', (event) => {
       if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+      if (this.focus >= 0) return;                  // a robot is looked at closely: the arrows go to the next one
       const tabs = [...el.tabs.children];
       const next = tabs[(tabs.indexOf(document.activeElement) + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
       this.selectTab(next.dataset.tab);
@@ -383,7 +397,7 @@ export class Hud {
     const alone = this.hud.mode === 'policy';
     const policy = this.hud.policy || {};
     const tally = policy.alone || {};
-    const first = alone && !tally.scenes;                 // the policy is still on its first round: nothing to count yet
+    const first = alone && !tally.scenes;                 // the policy is still on its first round: no round to count yet
     this.text('chain-count', alone ? '' : '1');
     this.attr('chain-count', 'hidden', alone);
     this.text('chain-who', alone ? 'Nobody driving' : 'robot driven');
@@ -410,8 +424,13 @@ export class Hud {
       }
     }
     counter.goal = demos;
-    this.text('demos-label', first ? 'Driving its first scenes' : alone ? 'new scenes sorted with nobody driving'
-      : dataset.recording ? 'demonstrations saved' : 'demonstrations');
+    // A round's result does not roll in: the banner says "47 of 48" the moment the round ends, and a number
+    // still on its way there would read as another result.
+    if (alone) counter.shown = demos;
+    // With nobody driving the number is the total of every round so far, and says so: the banner's is one round's.
+    this.text('demos-label', first ? 'Driving its first scenes'
+      : alone ? (tally.rounds > 1 ? `scenes sorted in ${count(tally.rounds)} rounds, nobody driving` : 'scenes sorted in round 1, nobody driving')
+        : dataset.recording ? 'demonstrations saved' : 'demonstrations');
 
     const labels = alone ? ['Scenes sorted alone', 'Learned from the operator', 'Learned from echoes']
       : ['Saved per scene', 'Echoes that succeed', 'Saved per minute'];
@@ -421,8 +440,8 @@ export class Hud {
       this.text(`stat${i + 1}-label`, label);
       this.text(`stat${i + 1}-label-2`, short[i]);
     });
-    // A share of no scenes is no number: none is shown until the first round has ended.
-    const amplification = alone ? (tally.scenes ? percent(tally.ok / tally.scenes) : 'Not yet')
+    // A share of no scenes is no number: until the first round has ended, it is how far that round has come.
+    const amplification = alone ? (tally.scenes ? percent(tally.ok / tally.scenes) : String(echo.ok ?? 0))
       : Number.isFinite(totals.amplification) ? trim(totals.amplification) : '0';
     const yieldText = alone ? count(policy.humans || 0)
       : Number.isFinite(totals.yield) ? `${Math.round(totals.yield * 100)}%` : '0%';
@@ -431,7 +450,8 @@ export class Hud {
     const clippedSteps = alone ? tally.clipped || 0 : totals.clipped_steps || 0;
     const clipped = count(clippedSteps);
     // Demonstrations saved for each scene the operator did: its own run and one from every robot that kept up.
-    const most = !alone && Number.isFinite(totals.amplification) && totals.episodes ? ` of ${robots + 1}` : '';
+    const most = first ? ` of ${robots} so far`
+      : !alone && Number.isFinite(totals.amplification) && totals.episodes ? ` of ${robots + 1}` : '';
     this.text('amplification', amplification);
     this.text('amplification-2', amplification);
     this.text('amplification-of', most);
@@ -454,6 +474,30 @@ export class Hud {
         ? `${who} The other ${robots} get the same joint commands, but their parts lie somewhere else.`
       : `${who} ${robots} echoes repeat every motion, each on its own table.`
         + (this.flags.clean ? '' : ' The clean runs train a policy.'));
+    this.fitStory();
+  }
+
+  /** Keep the totals clear of the table they stand beside: `room` is the width (px) left of it, or null
+   *  when no table is near. Four numbers in a row where they fit, two and two where they do not. */
+  fitStory(room = this.storyRoom) {
+    this.storyRoom = room ?? null;
+    const story = this.el.story;
+    const stats = this.el['story-stats'];
+    if (!story || !stats) return;
+    let tight = false;
+    if (this.storyRoom != null) {
+      const gap = 24;
+      let wide = -gap;
+      for (const item of stats.children) wide += item.getBoundingClientRect().width + gap;
+      // a number that grows by a digit does not flip the layout back and forth
+      tight = wide > this.storyRoom - (story.hasAttribute('data-tight') ? 24 : 0);
+    }
+    this.attr('story', 'data-tight', tight);
+    const width = this.storyRoom == null ? '' : `${Math.max(240, Math.round(this.storyRoom))}px`;
+    if (this.written.get('story@room') === width) return;
+    this.written.set('story@room', width);
+    if (width) this.app.style.setProperty('--story-room', width);
+    else this.app.style.removeProperty('--story-room');
   }
 
   renderOperator() {
@@ -474,7 +518,20 @@ export class Hud {
 
     // Rows for what is driving, and nothing else: glove rows, rates and calibration only when gloves are the source.
     const rows = [];
-    if (drive?.gloves) {
+    if (drive?.gloves && !real) {
+      // Emulated gloves have nothing to fix by hand: one row says both are there, and more only when one is not.
+      const sides = ['left', 'right'].map((side) => ({ side, ...(operator[side] || {}) }));
+      const off = sides.filter((glove) => !glove.connected || glove.status !== 'tracking');
+      const hz = sides.map((glove) => glove.hz).filter(Number.isFinite);
+      rows.push({
+        label: 'Emulated gloves',
+        dot: off.length === 0 ? 'tracking' : off.some((glove) => !glove.connected) ? 'none' : 'weak',
+        value: off.length === 0 ? 'Both tracking' : off.length === 2 ? 'No signal'
+          : `${sentence(off[0].side)} ${off[0].connected ? off[0].status || 'weak' : 'has no signal'}`,
+        more: hz.length ? `${Math.round(Math.min(...hz))} Hz` : '',
+      });
+      if (!operator.calibrated) rows.push({ label: 'Calibration', value: 'Not calibrated' });
+    } else if (drive?.gloves) {
       for (const side of ['left', 'right']) {
         const glove = operator[side] || {};
         rows.push({
@@ -499,7 +556,7 @@ export class Hud {
         rows.push({ label: 'Fingers', value: 'Camera' });
       }
       rows.push({ label: 'Position', value: name === 'glove-coil' ? 'Coil Pro' : name.endsWith('camera') ? 'Camera' : 'Pointer' });
-      rows.push({ label: 'Grasp', value: operator.own ? (mine ? 'Your own fingers' : 'Their own fingers') : 'Assisted' });
+      rows.push({ label: 'Grasp', value: operator.own ? (mine ? 'Your own' : 'Their own') : 'Helped' });
       if (Number.isFinite(operator.turn_left_s)) rows.push({ label: 'Turn', value: `${clock(operator.turn_left_s)} left` });
     }
     const key = JSON.stringify(rows);
@@ -587,10 +644,24 @@ export class Hud {
     const kept = this.fingersSeen && performance.now() - this.fingersSeen.at < 2000 ? this.fingersSeen : null;
     const fingers = operator.fingers || (camera && kept ? kept.value : null);
     const closure = operator.closure || (fingers && kept ? kept.closure : null);
-    const own = Boolean(operator.own);
-    this.show('drive-own', Boolean(fingers) || camera || Boolean(this.driving?.own));
-    this.text('drive-own', this.driving?.own ? 'Help me grasp' : 'Grasp it myself');
-    this.attr('drive-own', 'aria-pressed', this.driving?.own ? 'true' : 'false');
+    // The grasp is the one this visitor chose, and stays it: nothing here or in the runner changes it for them.
+    const own = Boolean(this.driving?.own);
+    const glove = fingers === 'glove' || Boolean(operator.glove);
+    const coil = operator.input === 'coil' || Boolean(operator.glove?.coil);
+    const hand = camera || coil;                                  // a hand says where; else the pointer does
+    // One switch, once there are fingers to grasp with, and one line under it: what the hand does, what the robot does.
+    const choice = camera || glove || own;
+    this.show('drive-grasp', choice);
+    if (choice) {
+      for (const button of this.el['drive-own'].children) {
+        const on = (button.dataset.own === '1') === own;
+        if (button.getAttribute('aria-checked') !== String(on)) button.setAttribute('aria-checked', String(on));
+      }
+      this.text('drive-grasp-note', !own
+        ? `${hand ? 'Your hand' : 'The pointer'} says where and your pinch says when. The robot grasps, lifts and lets go.`
+        : hand ? `Your hand places it, lowers it and closes its fingers. The robot picks the arm, turns the wrist${coil ? '' : ' and lifts'}.`
+          : 'The pointer places the hand and a press lowers it. Your fingers close its fingers. The robot picks the arm, turns the wrist and lifts.');
+    }
     // The clock the driver needs most: the scene's in its last 20 s (it is then replaced), else the turn's.
     const sceneLeft = Number.isFinite(operator.scene_left_s) ? operator.scene_left_s : null;
     const ending = sceneLeft != null && sceneLeft <= 20 && !operator.expired;
@@ -602,56 +673,97 @@ export class Hud {
     const held = table?.parts.find((part) => part.held);
     const phase = this.hud.mode === 'visitor' ? operator.phase : 'wait';
     const settling = this.hud.status === 'settling';
+    const left = table ? table.parts.filter((part) => part.on_mat && !part.held).length : 0;
+    if (phase === 'wait' || !table) this.turnCarried = false;
+    else if (held) this.turnCarried = true;
     let say;
-    const whose = fingers === 'glove' ? 'The glove' : 'Your fingers';
-    const coil = operator.input === 'coil' || (fingers === 'glove' && Boolean(operator.glove?.coil));
     // The robot's two fingers, as the person's own index and middle finger close them right now.
-    const now = closure ? `: index ${Math.round(closure.index * 10) * 10}% closed, middle ${Math.round(closure.middle * 10) * 10}%` : '';
-    let more = own ? `${fingers === 'glove' ? 'The glove does' : 'Your fingers do'} the grasp${now}. The robot only turns its wrist${coil ? '' : ' and lifts'}.`
-      : fingers ? `${whose} move${fingers === 'glove' ? 's' : ''} the robot's${now ? '' : ' fingers'}${now}. The grasp is assisted.`
+    const now = closure ? `Index finger ${Math.round(closure.index * 10) * 10}% closed, middle ${Math.round(closure.middle * 10) * 10}%.` : '';
+    let more = fingers ? now
+      // A pointer has no fingers. Said once, until the first part is in the hand.
+      : !hand && !glove && !this.turnCarried ? 'A pointer has no fingers. It says where and when, and the robot grasps.'
         : `${robots} echoes redo every move on their own tables.`;
+    const pinchWord = hand || glove ? 'pinch' : 'press';
     if (phase === 'wait' || !table) {
       say = 'Your turn starts with the next scene';
+      more = `${robots} echoes will redo every move on their own tables.`;
     } else if (coil && !operator.placed) {
       say = 'Hold your gloved hand flat and still';
       more = 'Where you hold it is the middle of the table.';
-    } else if (own && !settling) {
+    } else if (settling) {
+      say = 'Sorted';
+      more = `Now the ${robots} echoes finish theirs. Every one that gets it right is a demonstration.`;
+    } else if (phase === 'release' && held) {
+      // Only what is true while it is let go: where it ends is said once it lies still.
+      const into = operator.into;
+      say = !into ? 'Letting go over the table' : into === held.bin ? `Letting go over the ${held.color} bin` : 'Letting go over another bin';
+      more = !into ? 'The hand is not over a bin.' : into === held.bin ? more : `This part belongs in the ${held.color} bin.`;
+    } else if (own) {
       const near = coil ? true : this.driving?.nearest?.();
       const press = coil ? 'Lower your hand onto a part' : camera ? 'Over it: push your hand towards the camera' : 'Over it: hold the button down';
       say = held ? (operator.over && operator.over === held.bin ? 'Open your hand' : `Take it to the ${held.color} bin`)
         : near ? `${press}, then close your fingers` : 'Move over a part';
-    } else if (settling) {
-      say = 'Sorted';
-      more = `Now the ${robots} echoes finish theirs. Every one that gets it right is a demonstration.`;
     } else if (phase === 'pick') {
-      say = camera || fingers === 'glove' ? 'Keep pinching' : 'Keep holding';
+      say = hand || glove ? 'Keep pinching' : 'Keep holding';
       more = 'The hand goes down and lifts it.';
     } else if (phase === 'carry' && held) {
       const over = operator.over && operator.over === held.bin;
-      say = over ? (camera || fingers === 'glove' ? 'Open your hand' : 'Let go') : `Take it to the ${held.color} bin`;
-    } else if (phase === 'release') {
-      say = 'In it goes';
-    } else if (fingers === 'glove') {
+      say = over ? (hand || glove ? 'Open your hand' : 'Let go') : `Take it to the ${held.color} bin`;
+    } else if (glove && !camera) {
       say = coil ? 'Move your hand over a part and pinch' : 'Point at a part and pinch';
     } else {
       say = camera ? 'Move your hand over a part and pinch' : 'Press on a part and hold';
     }
     if (failed > 0 && !settling) more = `${failed} of ${robots} echoes could not follow that. The rest keep up with you.`;
-    // What just went wrong, or what changed, comes before the next step.
-    const pinch = camera || fingers === 'glove' ? 'pinch' : 'press';
+
+    // What just happened comes before the next step. A part that was let go: where it lies now.
+    const again = own ? 'Grasp it again' : 'Pick it up again';
+    const landed = operator.landed;
+    const gone = 'The next scene deals new parts.';
     if (operator.expired) {
       say = 'Time is up for this scene';
       more = 'A new one is being dealt. Your turn goes on.';
+    } else if (landed?.where && !held && phase !== 'wait' && !(settling && landed.where === 'in')) {
+      if (landed.where === 'in') {
+        say = `It is in the ${landed.color} bin`;
+        more = left > 0 ? `${left} more on the table.` : '';
+      } else if (landed.where === 'wrong') {
+        say = 'It is in the wrong bin';
+        more = `It belongs in the ${landed.color} bin and the hand cannot take it out. ${gone}`;
+      } else if (landed.where === 'beside') {
+        say = 'It landed beside the bin, not in it';
+        more = landed.reach ? `${again} and let go over the middle of the ${landed.color} bin.` : `The hand cannot reach it there. ${gone}`;
+      } else if (landed.where === 'table') {
+        say = 'It is on the table, not in a bin';
+        more = landed.reach ? `${again} and take it to the ${landed.color} bin.` : `The hand cannot reach it there. ${gone}`;
+      } else {
+        say = 'It fell off the table';
+        more = gone;
+      }
     } else if (operator.dropped && !held) {
-      say = 'It dropped';
-      more = own ? 'Move over it and grasp it again.' : `Let go, move over it and ${pinch} again.`;
+      say = 'It fell out of the hand';
+      more = own ? 'Move over it and grasp it again.' : `Let go, move over it and ${pinchWord} again.`;
     } else if (operator.missed && !held && !settling) {
-      say = 'No part under the hand';
-      more = `Move over a part and ${pinch} again.`;
+      // What to do next, in the grasp this visitor chose.
+      say = own ? 'Your fingers closed on nothing' : 'No part under the hand';
+      more = !own ? `Move over a part and ${pinchWord} again.`
+        : coil ? 'Open your hand, lower it onto a part, then close your fingers.'
+          : camera ? 'Open your hand, move over a part, push your hand towards the camera, then close your fingers.'
+            : 'Open your hand, hold the button down over a part, then close your fingers.';
     } else if (operator.dealt && phase !== 'wait') {
       more = 'Time was up, so a new scene was dealt.';
     } else if (operator.dealt) {
       say = 'A new scene is coming';
+    }
+
+    // The hand is not seen: the robot waits as it is, and the page says why nothing moves.
+    const unseen = operator.lost || (camera && this.driving?.handLost) || (own && glove && !camera && !operator.fingers && !kept);
+    if (!unseen) this.unseenAt = 0;
+    else if (!this.unseenAt) this.unseenAt = performance.now();
+    if (unseen && performance.now() - this.unseenAt > 400 && phase !== 'wait' && table && !operator.expired) {
+      say = camera ? 'Your hand is not in the picture' : 'The glove is not sending';
+      more = held || operator.holding ? `The robot keeps hold of the part until it ${camera ? 'sees your hand' : 'hears from the glove'} again.`
+        : camera ? 'Hold it up to the camera. The robot waits until it sees it.' : 'The robot waits until it does.';
     }
     this.text('drive-say', say);
     this.text('drive-more', more);
@@ -663,9 +775,10 @@ export class Hud {
     return Array.isArray(queue) && this.client != null ? queue.indexOf(this.client) : -1;
   }
 
-  onOwn() {
-    if (!this.driving) return;
-    this.driving.own = !this.driving.own;
+  /** The visitor chose who does the grasp. Only this changes it. */
+  onOwn(own) {
+    if (!this.driving || this.driving.own === own) return;
+    this.driving.own = own;
     this.driving.at = this.driving.at || { x: 0.28, y: 0 };
     this.driving.dirty = true;
     this.renderDrive();
@@ -674,6 +787,14 @@ export class Hud {
   setDriveActive(active) {
     this.driveLocal = Boolean(active);
     this.app.toggleAttribute('data-driving', this.driveLocal);
+    // While this page drives, what the runner says goes under the words at the top: never onto the table.
+    const toasts = this.el.toasts;
+    if (!this.toastsHome) {
+      this.toastsHome = document.createComment('toasts');
+      toasts.before(this.toastsHome);
+    }
+    if (this.driveLocal) this.el['drive-top'].append(toasts);
+    else this.toastsHome.after(toasts);
     this.renderDrive();
   }
 
@@ -725,7 +846,7 @@ export class Hud {
     if (key === this.historyKey) return;
     this.historyKey = key;
 
-    this.text('history-title', alone ? 'Last rounds, nobody driving' : 'Last scenes, with an operator');
+    this.text('history-title', alone ? 'Last rounds' : 'Last scenes');      // the line beside it says whose
     this.text('history-empty', alone ? 'The first round is still running.' : 'The first scene is still running.');
     this.attr('history', 'aria-label', alone
       ? 'Robots that sorted their scene alone in each of the last rounds'
@@ -782,15 +903,47 @@ export class Hud {
       const cell = event.target.closest('[data-env]');
       if (cell) this.onFocus(Number(cell.dataset.env) === this.focus ? -1 : Number(cell.dataset.env));
     });
+    if (!this.minimapRoom) {
+      this.minimapRoom = new ResizeObserver(() => this.fitMinimap());
+      this.minimapRoom.observe(map.closest('.pane'));
+      this.minimapRoom.observe(map.closest('.pane').parentElement);
+    }
+    this.fitMinimap();
+  }
+
+  /** The fleet map's cells as large as the side panel has room for, so the Live tab is read without scrolling. */
+  fitMinimap() {
+    const map = this.el.minimap;
+    const pane = map.closest('.pane');
+    const rows = map.children.length;
+    if (this.phone.matches || !rows) {
+      map.style.removeProperty('--cell');
+      return;
+    }
+    if (!pane.offsetHeight) return;
+    const now = map.querySelector('button').offsetHeight;
+    const per = rows + (rows - 1) / 5;                  // the rows and the gaps between them, in cells
+    const rest = pane.scrollHeight - now * per;
+    const fit = Math.floor((pane.parentElement.clientHeight - rest) / per);
+    map.style.setProperty('--cell', `${Math.max(10, Math.min(20, fit))}px`);
   }
 
   renderFleet() {
     const { echo = {} } = this.hud;
     if (this.states) {
+      // A result belongs to the scene it came in: the states and the scene's number do not arrive together.
+      if (this.resultOf?.length !== this.minimap.length) {
+        this.resultOf = new Array(this.minimap.length).fill(null);
+        this.stateWas = new Uint8Array(this.minimap.length).fill(255);
+      }
       for (let e = 0; e < this.minimap.length; e++) {
         const name = STATE_NAMES[this.states[e]] || 'idle';
         const cell = this.minimap[e];
         if (cell.dataset.state !== name) cell.dataset.state = name;
+        if (this.stateWas[e] !== this.states[e]) {
+          this.stateWas[e] = this.states[e];
+          this.resultOf[e] = this.hud.episode?.index ?? null;
+        }
       }
     }
     const robots = echo.robots ?? 0;
@@ -814,6 +967,9 @@ export class Hud {
     const minutes = (dataset.frames || 0) / 30 / 60;
     this.text('ds-time', minutes >= 90 ? `${(minutes / 60).toFixed(1)} h` : `${Math.round(minutes)} min`);
     this.show('ds-get', Boolean(dataset.download));
+    // The size of the zip the runner last built, when it has built one. Until then a range, not a guess.
+    this.text('ds-size', `One demonstration from every robot that sorted it, as LeRobot v3.0 and GR00T. ${Number.isFinite(dataset.zip_mb)
+      ? `The last download was ${Math.max(1, Math.round(dataset.zip_mb))} MB.` : '30 to 50 MB.'}`);
     this.show('ds-where', !this.hud.shared);                          // a path on the server says nothing to a visitor
     this.text('ds-path', dataset.path || 'Not recording to disk');
     this.show('ds-copy', Boolean(dataset.path));
@@ -873,10 +1029,21 @@ export class Hud {
       this.text('policy-about', `${origin}: one training run`
         + (Number.isFinite(policy.humans) ? ` on ${count(policy.humans)} demonstrations and their ${count(echoes)} echoes.` : '.'));
       this.text('policy-test', `${percent(success)} of ${count(policy.tested_on || 0)} new scenes`);
-      // A share of nothing is no number: until a round has ended, it is driving its first scenes.
+      // A share of nothing is no number: until its first round has ended, it is how far that round has come.
       const tally = policy.alone || {};
+      const echo = this.hud.echo || {};
+      const episode = this.hud.episode || {};
+      const first = driving && !tally.scenes;
       this.text('policy-here', tally.scenes ? `${count(tally.ok)} of ${count(tally.scenes)} sorted`
-        : driving ? 'Its first scenes, now' : 'Not yet');
+        : first ? `${count(echo.ok ?? 0)} of ${count(echo.robots ?? 0)} scenes so far` : 'Not yet');
+      this.show('policy-first', first);
+      if (first) {
+        this.text('policy-first', episode.parts
+          ? `Its first round is running: ${count(Math.min(episode.sorted || 0, episode.parts))} of ${count(episode.parts)} parts sorted so far.`
+          : 'Its first round is starting.');
+      }
+    } else {
+      this.show('policy-first', false);
     }
 
     const training = state === 'training';
@@ -1005,7 +1172,21 @@ export class Hud {
     } else if (this.stalled) {
       banner = { level: 'warn', text: 'The runner has stopped sending. Waiting for it' };
     } else if (hud.status === 'paused') {
-      banner = { level: 'info', text: 'Paused', action: 'Resume', run: () => this.togglePause() };
+      // One session for everybody: a pause is everybody's, so the page says whose it was and when it ends.
+      const other = hud.paused_by != null && hud.paused_by !== this.client;
+      const back = Number.isFinite(hud.resume_s) ? Math.max(1, Math.round(hud.resume_s)) : null;
+      banner = {
+        level: 'info',
+        text: other ? `Another visitor paused the robots.${back ? ` They carry on in ${back} s` : ''}`
+          : `Paused${hud.shared ? ' for everyone' : ''}${back ? `. Carries on in ${back} s` : ''}`,
+        action: 'Resume', run: () => this.togglePause(),
+      };
+    } else if (hud.switched && hud.switched.by != null && hud.switched.by !== this.client && !this.driveLocal) {
+      banner = {
+        level: 'info',
+        text: hud.switched.to === 'policy' ? 'Another visitor let the policy drive. Nobody is driving now'
+          : 'Another visitor took the robots back from the policy',
+      };
     } else if (hud.copy?.on && hud.echo?.robots) {
       banner = {
         level: 'warn',
@@ -1057,7 +1238,7 @@ export class Hud {
       banner = {
         level: 'ok',
         text: hud.mode === 'policy'
-          ? `${ok} of ${robots} robots sorted their scene with nobody driving`
+          ? `Round ${hud.episode?.index ?? ''}: ${ok} of ${robots} robots sorted their scene, nobody driving`
           : ended ? `Scene ${hud.episode?.index ?? ''} sorted by ${ok} of ${robots} echoes`
             : `Scene ${hud.episode?.index ?? ''}: ${ok} of ${robots} echoes have sorted it so far`,
       };
@@ -1077,12 +1258,15 @@ export class Hud {
   fitBanner() {
     const banner = this.el.banner;
     const tools = banner.parentElement.querySelector('.stage-tools');
-    const key = `${this.el['banner-text'].textContent}|${this.el['banner-action'].hidden}|${innerWidth}|${tools.offsetWidth}`;
+    // by what is measured, not what is written: the same words are wider once the page's font has arrived
+    const room = banner.parentElement.clientWidth;
+    const key = `${banner.offsetWidth}|${room}|${tools.offsetWidth}`;
     if (this.bannerKey === key) return;
     this.bannerKey = key;
     delete banner.dataset.low;
     if (innerWidth <= 760 || !tools.offsetWidth) return;
-    if (banner.getBoundingClientRect().left < tools.getBoundingClientRect().right + 12) banner.dataset.low = '';
+    const toolsEnd = tools.getBoundingClientRect().right - banner.parentElement.getBoundingClientRect().left;
+    if ((room - banner.offsetWidth) / 2 < toolsEnd + 12) banner.dataset.low = '';
   }
 
   // ------------------------------------------------------------------ camera and focus
@@ -1104,7 +1288,9 @@ export class Hud {
     if (env < 0) return;
     const { envs = {}, episode = {} } = this.hud;
     const state = this.states ? this.states[env] : IDLE;
-    this.text('focus-state', STATE_TEXT[state] || STATE_TEXT[IDLE]);
+    // "Sorted" and "Did not finish" keep the number of the scene they were said in, also once the next has begun
+    const index = (state === 2 || state === 3) && this.resultOf?.[env] != null ? this.resultOf[env] : episode.index;
+    this.text('focus-state', stateText(state, this.hud.mode === 'policy', index));
     this.attr('focus-dot', 'data-state', STATE_NAMES[state] || 'idle');
     const alone = this.hud.mode === 'policy';
     const parts = envs.parts?.[env] ?? (alone ? 0 : episode.parts || 0);
@@ -1123,9 +1309,12 @@ export class Hud {
   frame(now, dt, tag) {
     const counter = this.demos;
     if (counter.shown !== counter.goal) {
-      counter.shown += (counter.goal - counter.shown) * (1 - Math.exp(-dt * 5));
+      // By the clock, not by the frame: a page that draws slowly still arrives within a second.
+      const real = Math.min(1, Math.max(dt, (now - (this.frameAt || now)) / 1000));
+      counter.shown += (counter.goal - counter.shown) * (1 - Math.exp(-real * 5));
       if (Math.abs(counter.goal - counter.shown) < 0.5) counter.shown = counter.goal;
     }
+    this.frameAt = now;
     this.text('demos', count(Math.round(counter.shown)));
     this.attr('demos', 'data-tick', now < counter.tickUntil);
     this.attr('gain', 'data-show', now < counter.gainUntil);

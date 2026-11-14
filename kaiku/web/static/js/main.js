@@ -108,7 +108,11 @@ async function boot() {
   };
   stream.onEvent = (event) => {
     // A word about one page's turn is for that page only, and replaces the last word about it.
-    if (event.type === 'toast' && (event.to == null || event.to === stream.client)) hud.toast(event.text, event.level, event.key);
+    if (event.type !== 'toast' || (event.to != null && event.to !== stream.client)) return;
+    // Everybody shares the session. The page whose button it was is told what it did; the others are told
+    // that another visitor did it, or their robots would stop or change hands for no reason they can see.
+    const mine = event.by == null || event.by === stream.client;
+    hud.toast(mine ? event.text : event.other || event.text, event.level, event.key);
   };
   stream.onStatus = (status) => {
     if (flags.preview !== 'reconnecting' && flags.preview !== 'connecting') hud.setConnection(status);
@@ -149,8 +153,11 @@ async function boot() {
   hud.onCamera = () => (drive.camera ? drive.stopCamera() : drive.startCamera(hud.el['hand-cam']));
   drive.onState = (active) => {
     hud.setDriveActive(active);
-    // a phone is tall: the table has to fill its width, the robots behind get what is left
-    rig.shots.drive.frame = phone.matches ? [1.15, 1.5] : [1.85, 1.6];
+    // A phone is tall: the part of the table the hand reaches fills its width, so a part is a fingertip wide,
+    // and the camera looks more steeply down, so the lead robot stands under the words and not behind them.
+    rig.shots.drive.frame = phone.matches ? [0.84, 1.2] : [1.85, 1.6];
+    rig.shots.drive.polar = (phone.matches ? 50 : 63) * Math.PI / 180;
+    wordsEnd = 0;
     if (active) rig.goTo('drive', 0.9);
     else if (rig.shot === 'drive') rig.goTo(flags.shot, 0.9);
     place();
@@ -175,6 +182,7 @@ async function boot() {
   window.addEventListener('keydown', (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     const onPage = event.target === document.body || event.target === canvas;
+    const typing = Boolean(event.target.closest?.('input, textarea, select, [contenteditable]'));
     if (drive.active) {
       if (event.key === 'Escape') drive.stop();
       return;
@@ -183,8 +191,9 @@ async function boot() {
     else if (event.key === '2') rig.goTo('overview');
     else if (event.key === '3') rig.goTo('top');
     else if (event.key === 'Escape' && rig.focus >= 0) focusOn(-1);
-    else if (event.key === 'ArrowRight' && rig.focus >= 0 && onPage) focusOn(rig.focus + 1);
-    else if (event.key === 'ArrowLeft' && rig.focus >= 0 && onPage) focusOn(rig.focus - 1);
+    // The arrows go from robot to robot wherever the keyboard is, also on a button that was just clicked.
+    else if (event.key === 'ArrowRight' && rig.focus >= 0 && !typing) focusOn(rig.focus + 1);
+    else if (event.key === 'ArrowLeft' && rig.focus >= 0 && !typing) focusOn(rig.focus - 1);
     else if (event.key === ' ' && onPage) hud.togglePause();
     else if (event.key.toLowerCase() === 'c' && onPage) link.send({ type: 'cmd', name: 'calibrate' });
     else if ((event.key === 'n' || event.key === 'N') && onPage) stream.send({ type: 'cmd', name: 'next_scene' });
@@ -192,19 +201,119 @@ async function boot() {
     event.preventDefault();
   });
 
-  // Where the subject sits in the picture, so the totals laid over the stage do not cover it.
-  function place() {
-    const close = rig.shot === 'lead' || rig.shot === 'focus';
-    if (rig.shot === 'drive') rig.shiftGoal.set(0, phone.matches ? -0.12 : -0.28);   // the table low, the others above it
-    else if (phone.matches) rig.shiftGoal.set(0, close ? 0.24 : 0.14);
-    else rig.shiftGoal.set(close ? 0.15 : 0.05, close ? 0.1 : 0.06);
+  // ---------------------------------------------------------------- the picture and what lies over it
+
+  // A robot's table (top and legs) and a robot with its table, as boxes in its own station's frame.
+  const table = { min: [Infinity, Infinity, described.groundZ], max: [-Infinity, -Infinity, described.tableZ] };
+  for (const fixture of described.fixtures) {
+    if (fixture.role !== 'counter' && fixture.role !== 'leg') continue;
+    for (let i = 0; i < 2; i++) {
+      table.min[i] = Math.min(table.min[i], fixture.pos[i] - fixture.size[i]);
+      table.max[i] = Math.max(table.max[i], fixture.pos[i] + fixture.size[i]);
+    }
   }
+  if (!Number.isFinite(table.min[0])) Object.assign(table, { min: [0.09, -0.55, described.groundZ], max: [0.69, 0.55, described.tableZ] });
+  const HEAD_Z = 0.5;                       // the top of a G1's head over its pelvis
+  const station = { min: [-0.22, table.min[1], described.groundZ], max: [table.max[0], table.max[1], HEAD_Z] };
+  const corner = new THREE.Vector3();
+
+  /** The box around `box` (at station `env`) on the stage, in pixels, where the camera is going. Not slid. */
+  function onStage(box, env) {
+    const ghost = rig.arrived();
+    const o = layout.offsets;
+    const out = { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity };
+    for (let i = 0; i < 8; i++) {
+      corner.set(
+        (i & 1 ? box.max[0] : box.min[0]) + o[env * 3],
+        (i & 2 ? box.max[1] : box.min[1]) + o[env * 3 + 1],
+        (i & 4 ? box.max[2] : box.min[2]) + o[env * 3 + 2],
+      ).project(ghost);
+      const x = (corner.x * 0.5 + 0.5) * stage.width;
+      const y = (0.5 - corner.y * 0.5) * stage.height;
+      out.left = Math.min(out.left, x); out.right = Math.max(out.right, x);
+      out.top = Math.min(out.top, y); out.bottom = Math.max(out.bottom, y);
+    }
+    return out;
+  }
+
+  /**
+   * Put `box` in the middle of `free` (stage pixels): nearer or further until it fits, then the picture is
+   * slid. A box taller than the room keeps its foot in view: that is where the table is. `foot` stands the
+   * box on the bottom of the room instead, and leaves the distance alone.
+   */
+  function centre(box, env, free, foot = false) {
+    let seen = onStage(box, env);
+    if (!foot) {
+      const fill = Math.max((seen.right - seen.left) / (free.right - free.left), (seen.bottom - seen.top) / (free.bottom - free.top));
+      if (fill > 0.05) rig.zoom(Math.min(1.8, Math.max(0.6, fill / 0.94)));
+      seen = onStage(box, env);
+    }
+    const tall = foot || seen.bottom - seen.top > free.bottom - free.top;
+    const dx = (free.left + free.right) / 2 - (seen.left + seen.right) / 2;
+    const dy = tall ? free.bottom - seen.bottom : (free.top + free.bottom) / 2 - (seen.top + seen.bottom) / 2;
+    rig.shiftGoal.set((2 * dx) / stage.width, (-2 * dy) / stage.height);
+    return { left: seen.left + dx, right: seen.right + dx, top: seen.top + dy, bottom: seen.bottom + dy };
+  }
+
+  const within = (element) => {
+    const box = element.getBoundingClientRect();
+    const frame = stageElement.getBoundingClientRect();
+    return { left: box.left - frame.left, right: box.right - frame.left, top: box.top - frame.top, bottom: box.bottom - frame.top };
+  };
+
+  // Where the subject sits in the picture, so nothing laid over the stage covers it.
+  function place() {
+    const width = stage.width;
+    const height = stage.height;
+    let room = null;                        // the width left of the table for the totals, where a table is near them
+    if (rig.shot === 'drive') {
+      // The driver's: the lead robot and the table it sorts on, under the words that say what to do next.
+      // The words only ever take more room within a turn: the table does not move under a hand that aims.
+      wordsEnd = Math.max(wordsEnd, Math.min(within(hud.el['drive-card']).bottom + 8, height * 0.6));
+      const free = { left: 0, right: width, top: wordsEnd, bottom: height - (phone.matches ? 16 : 60) };
+      centre({ min: [0.0, -0.42, described.tableZ], max: [0.62, 0.42, HEAD_Z] }, 0, free, true);
+    } else if (rig.shot === 'focus' && rig.focus >= 0) {
+      // One robot and its table, in the middle of what the totals and the robot's card leave free.
+      if (phone.matches) {
+        const card = within(hud.el.focus);
+        const story = within(hud.el.story);
+        // beside its card where the card leaves a column, under it where it does not
+        const beside = card.left - 16 >= 150;
+        centre(station, rig.focus, beside
+          ? { left: 8, right: card.left - 8, top: card.top, bottom: Math.max(story.top - 8, card.top + 120) }
+          : { left: 8, right: width - 8, top: Math.min(card.bottom + 8, height * 0.45), bottom: Math.max(story.top - 8, height * 0.6) });
+      } else {
+        room = FOCUS_ROOM;
+        const left = hud.el.story.offsetLeft + room + 24;
+        centre(station, rig.focus, { left, right: width - 24, top: 24, bottom: height - 24 });
+      }
+    } else if (phone.matches) {
+      rig.shiftGoal.set(0, rig.shot === 'lead' ? 0.24 : 0.14);
+    } else {
+      if (rig.shot === 'lead') rig.shiftGoal.set(0.15, 0.1);
+      else rig.shiftGoal.set(0.05, 0.06);
+      // where the lead robot's table comes down beside the totals, they end where it begins
+      const seen = onStage(table, 0);
+      const story = within(hud.el.story);
+      const left = seen.left + (rig.shiftGoal.x * width) / 2;
+      const foot = seen.bottom - (rig.shiftGoal.y * height) / 2;
+      if (foot > story.top && left > story.left) room = left - story.left - 24;
+    }
+    hud.fitStory(room);
+  }
+  const FOCUS_ROOM = 292;                   // the totals as two rows of two, beside a robot looked at closely
+  let wordsEnd = 0;                         // where the driver's words end on the stage, in pixels from its top
   const resize = () => {
+    wordsEnd = 0;
     stage.resize(stageElement.clientWidth, stageElement.clientHeight);
     rig.refit();
     place();
   };
   new ResizeObserver(resize).observe(stageElement);
+  // the words over a driver's table grow and shrink with what they say: the table keeps clear of them
+  new ResizeObserver(() => {
+    if (rig.shot === 'drive' && within(hud.el['drive-card']).bottom + 8 > wordsEnd) place();
+  }).observe(hud.el['drive-card']);
   hud.onLayout = resize;
   resize();
 

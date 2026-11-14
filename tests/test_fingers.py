@@ -48,6 +48,71 @@ def test_landmarks_read_as_the_hand_they_came_from():
     assert float(closed.curl[1]) > float(opened.curl[1]) + 0.3   # the index finger reads as curled
 
 
+def test_their_own_grasp_is_not_taken_over_when_the_hand_leaves_the_picture(monkeypatch):
+    """A hand the camera no longer sees: the robot keeps the part it holds, where it holds it, and the page
+    is told the hand is not seen. The grasp stays the one the visitor chose."""
+    rng = np.random.default_rng(1)
+    s = Session(1, seed=1)
+    s.new_episode(*s.sample_scene(3))
+    v = VisitorOperator(s)
+    v.begin()
+    clock = [time.monotonic()]
+    monkeypatch.setattr(visitor_module.time, "monotonic", lambda: clock[0])
+    state = {"x": 0.28, "y": 0.0, "depth": 0.0, "aperture": None, "seen": True}
+
+    def tick():
+        clock[0] += 1 / 50
+        value = {"x": state["x"], "y": state["y"], "grip": False, "input": "camera", "own": True}
+        if state["seen"]:
+            value.update(world=_landmarks(state["aperture"], rng, 0.002).round(4).reshape(-1).tolist(),
+                         right=True, depth=state["depth"])
+        v.set_command(value)
+        s.tick(v.update(s.observe()))
+
+    def run(until, limit):
+        for _ in range(limit):
+            tick()
+            if until():
+                return
+
+    try:
+        lay = s.layouts[0]
+        k = min(range(len(lay.placements)), key=lambda k: lay.placements[k].pos[0])
+        ob = s.scene.by_name[lay.placements[k].name]
+        part = lambda: s.observe().obj_pos[0, ob.index]
+        p = part()[:2].copy()
+        state.update(x=float(p[0]), y=float(p[1]))
+        run(lambda: np.linalg.norm(s.observe().pinch[0, v.side, :2] - p) < 0.012, 400)
+        run(lambda: False, 40)
+        state["depth"] = DEPTH_FULL * 1.1
+        run(lambda: s.observe().pinch[0, v.side, 2] < s.scene.rest_z + 0.012, 300)
+        run(lambda: False, 10)
+        for aperture in np.linspace(0.11, 0.02, 15):
+            state["aperture"] = float(aperture)
+            tick()
+        run(lambda: part()[2] > s.scene.rest_z + 0.05, 200)
+        hud = v.hud()
+        assert hud["own"] and not hud["lost"] and hud["holding"]
+
+        state["seen"] = False                                 # the hand leaves the picture for three seconds
+        run(lambda: False, 30)                                # the last picture of it is good for half a second
+        fingers = v.hand[v.side].copy()
+        run(lambda: False, 120)
+        hud = v.hud()
+        assert hud["own"] and hud["lost"] and hud["fingers"] is None      # still their own grasp, and the page is told
+        assert hud["holding"] and v.job is None and v.phase == "carry"    # nothing scripted took over
+        assert np.array_equal(v.hand[v.side], fingers)                    # the fingers stayed as they were
+        assert part()[2] > s.scene.rest_z + 0.05                          # and the part is still in them
+        assert float(np.abs(v.vel).max()) < 1e-6                          # the hand has come to rest
+
+        state["seen"] = True                                  # back in the picture: it carries on
+        run(lambda: False, 10)
+        hud = v.hud()
+        assert hud["own"] and not hud["lost"] and hud["holding"]
+    finally:
+        s.close()
+
+
 def test_a_persons_own_grasp_sorts_and_the_echoes_follow(monkeypatch):
     """Nothing scripted in the grasp: 21 noisy landmarks a tick, the hand's place and how near it is."""
     rng = np.random.default_rng(1)

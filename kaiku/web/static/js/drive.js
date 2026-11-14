@@ -10,6 +10,7 @@ const SEND_MS = 33;                   // as often as the robots are commanded
 const NEAR_M = 0.05;                  // a part this close to the pointer is the one a press takes
 const PINCH_ON = 0.38;                // thumb tip to index tip, in hand lengths: closer is a pinch
 const PINCH_OFF = 0.55;               // further is open again
+const HAND_LOST_MS = 600;             // no hand in the picture for this long: it is not seen (one missed frame is not that)
 const BONES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
   [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17]];
 const MEDIAPIPE = new URL('../vendor/mediapipe/', import.meta.url).href;
@@ -34,6 +35,7 @@ export class Drive {
     this.camera = null;               // {video, stream, landmarker, canvas} while a camera hand drives
     this.own = false;                 // the visitor does the grasp themselves: nothing scripted
     this.fingers = null;              // whose fingers the runner has: 'camera', 'glove' or null
+    this.glove = false;               // the visitor wears a glove: fingers without a camera
     this.origin = new THREE.Vector3();
     this.direction = new THREE.Vector3();
     this.point = new THREE.Vector3();
@@ -59,6 +61,7 @@ export class Drive {
     this.table = mine ? operator?.table || null : null;
     this.want = mine ? operator?.want || null : null;
     this.fingers = mine ? operator?.fingers || null : null;
+    this.glove = mine && Boolean(operator?.glove);
     if (mine === this.active) return;
     this.active = mine;
     this.rig.driving = mine;
@@ -75,6 +78,11 @@ export class Drive {
       this.at = this.at || { x: 0.28, y: 0 };
     }
     this.onState(mine);
+  }
+
+  /** The camera is on and has not seen a hand for a moment (or not yet at all). */
+  get handLost() {
+    return Boolean(this.camera) && performance.now() - this.camera.seen > HAND_LOST_MS;
   }
 
   /** Still waiting for the runner's yes. */
@@ -236,6 +244,9 @@ export class Drive {
       // already gone
     }
     this.grip = false;
+    // Their own grasp needs their fingers. Without the camera only a glove gives them: back to the helped
+    // grasp, which the switch on the page shows, so a pointer is never left waiting for fingers it has not got.
+    if (!this.glove) this.own = false;
     this.dirty = true;
   }
 
@@ -256,11 +267,8 @@ export class Drive {
     }
     this.draw(camera, hand);
     if (!hand) {
-      // a hand that left the picture lets go only after a moment: one missed frame is not a release
-      if (performance.now() - camera.seen > 600 && this.grip) {
-        this.grip = false;
-        this.dirty = true;
-      }
+      // A hand that left the picture lets go of nothing: the robot keeps what it has, where it has it, until
+      // the hand is seen again. The page says the hand is not seen (hud.js), so nothing here decides for it.
       if (performance.now() - camera.seen > 1500) {           // gone: wherever it comes back is level again
         camera.scale0 = null;
         camera.scales.length = 0;

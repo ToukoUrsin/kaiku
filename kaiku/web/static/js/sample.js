@@ -23,6 +23,24 @@ export function previewHud(hud, name, client = null) {
     case 'paused':
       d.status = 'paused';
       break;
+    case 'pausedby':
+      // another visitor pressed Pause: everybody's robots stand still, and this page says why
+      d.status = 'paused';
+      d.shared = true;
+      d.paused_by = -1;
+      d.resume_s = 14;
+      break;
+    case 'switched': {
+      // another visitor pressed "Let it drive" a moment ago
+      const robots = (d.echo?.robots ?? 7) + 1;
+      d.mode = 'policy';
+      d.shared = true;
+      d.switched = { by: -1, to: 'policy', age_s: 2 };
+      d.policy = { ...d.policy, state: 'running', alone: { rounds: 0, scenes: 0, ok: 0, parts: 0, sorted: 0, clipped: 0 } };
+      d.echo = { ...d.echo, robots, ok: Math.round(robots / 4), done: Math.round(robots / 4) };
+      d.episode = { ...d.episode, index: 1, parts: robots * 3, sorted: Math.round(robots * 1.6) };
+      break;
+    }
     case 'nogloves':
       d.mode = 'gloves';
       d.operator = {
@@ -76,6 +94,8 @@ export function previewHud(hud, name, client = null) {
       d.mode = 'policy';
       d.policy = { ...d.policy, state: 'running', alone: { rounds: 0, scenes: 0, ok: 0, parts: 0, sorted: 0, clipped: 0 } };
       d.echo = { ...d.echo, robots: (d.echo?.robots ?? 7) + 1 };      // with nobody driving, every robot is the policy's
+      d.echo.ok = d.echo.done = Math.round(d.echo.robots / 4);        // a quarter of them have sorted their scene so far
+      d.episode = { ...d.episode, index: 1, parts: d.echo.robots * 3, sorted: Math.round(d.echo.robots * 1.6) };
       break;
     case 'comparing':
       // the half without Kaiku runs now; an older comparison's result is still in hand

@@ -229,11 +229,80 @@ def test_the_next_visitor_waits_in_line_and_each_page_hears_only_about_its_own_t
         operator = r.hud()["operator"]
         assert operator["driver"] == 6 and operator["queue"] == []
         assert [(e["to"], "ended" in e["text"]) for e in said[1:]] == [(5, True), (6, False)]
+        assert "next visitor" in said[1]["text"] and "stand-in" not in said[1]["text"]   # who drives after them, truly
 
         say(7, "drive_start")
         r.commands.put({"type": "disconnect", "client": 7})   # a page that closes leaves the line
         r._commands()
         assert r.hud()["operator"]["queue"] == []
+
+        say(6, "drive_end")                                    # nobody waits: the stand-in has the robots again
+        r._commands()
+        assert said[-1]["to"] == 6 and "stand-in" in said[-1]["text"]
+    finally:
+        r.close()
+
+
+def test_a_button_that_changes_the_session_for_everybody_says_whose_it_was():
+    """Pause, the policy and the next scene are everybody's: every other page is told another visitor pressed it."""
+    import types
+    r = Runner(n=2, port=0, seed=7, threads=1, mode="autopilot", hold_s=0.0, shared=True)
+    said = []
+    r.viewer.send_event = said.append
+    try:
+        say = lambda client, name, value=None: r.commands.put({"type": "cmd", "name": name, "value": value, "client": client})
+        hud = r.hud()
+        assert hud["paused_by"] is None and hud["resume_s"] is None and hud["switched"] is None
+
+        say(3, "pause", True)
+        r._commands()
+        hud = r.hud()
+        assert hud["status"] == "paused" and hud["paused_by"] == 3 and 0 < hud["resume_s"] <= run_module.PAUSE_S
+        assert said[-1]["by"] == 3 and said[-1]["other"].startswith("Another visitor paused the robots.")
+        assert said[-1]["text"].startswith("Paused for everyone.")        # what the page that pressed it reads
+        say(4, "pause", False)
+        r._commands()
+        hud = r.hud()
+        assert hud["status"] != "paused" and hud["paused_by"] is None and hud["resume_s"] is None
+        assert said[-1]["by"] == 4 and said[-1]["other"].startswith("Another visitor") and not said[-1]["text"]
+
+        r.loading, r.policy = None, types.SimpleNamespace(info={})        # a policy is in: it may be handed the robots
+        say(4, "mode", "policy")
+        r._commands()
+        switched = r.hud()["switched"]
+        assert switched["by"] == 4 and switched["to"] == "policy" and switched["age_s"] < run_module.SWITCHED_S
+        assert said[-1]["by"] == 4 and said[-1]["other"].startswith("Another visitor let the policy drive.")
+        assert said[-1]["text"].startswith("Switched to Policy.")
+        r.switched["at"] -= run_module.SWITCHED_S + 1.0                   # a while later it is no longer news
+        assert r.hud()["switched"] is None
+
+        say(3, "next_scene")
+        r._commands()
+        assert said[-1] == {"type": "toast", "text": "", "level": "info", "by": 3,
+                            "other": "Another visitor asked for the next scene."}
+        assert all("by" in e for e in said)                    # nothing here was said without saying who
+    finally:
+        r.close()
+
+
+def test_the_page_says_another_visitors_words_only_to_the_other_pages():
+    """main.js picks the line by who pressed; hud.js must not say a part went in before the runner knows."""
+    static = run_module.HERE / "web" / "static" / "js"
+    main, hud = (static / "main.js").read_text(), (static / "hud.js").read_text()
+    assert "event.by" in main and "event.other" in main
+    assert "In it goes" not in hud                             # said before the part had landed: it may not have
+    assert "paused_by" in hud and "landed" in hud and "operator.lost" in hud
+
+
+def test_the_download_is_said_to_be_as_large_as_the_last_one_built(tmp_path):
+    r = Runner(n=2, port=0, seed=7, threads=1, mode="autopilot", hold_s=0.0, record=tmp_path)
+    try:
+        assert r.hud()["dataset"]["zip_mb"] is None            # none built yet: the page says a range
+        if not r.download:
+            return
+        _step(r, lambda: r.rec.demos > 0, 120.0)
+        path, _ = r._dataset_zip()
+        assert r.hud()["dataset"]["zip_mb"] == round(path.stat().st_size / 1e6)
     finally:
         r.close()
 
