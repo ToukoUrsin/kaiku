@@ -56,6 +56,7 @@ def job(cfg: dict) -> dict:
     log(f"{len(data.x)} pairs, {demos} demonstrations ({humans} by the operator), loaded in {time.time() - t0:.0f} s")
     policy = train(data, loader.feat, cfg.get("steps", 30000), cfg.get("batch", 512), width=cfg.get("width", 512),
                    depth=cfg.get("depth", 4), sigma=cfg.get("sigma", 0.004), sigma_asked=cfg.get("sigma_asked", 0.002),
+                   shape_error=cfg.get("shape_error", 0.0),
                    seed=cfg.get("seed", 0), threads=16, log=log)
     policy.info.update(humans=int(humans), demos=int(demos), plain=bool(cfg["plain"]))
     Path("/data/policies").mkdir(exist_ok=True)
@@ -193,7 +194,7 @@ def live(data: str, out: str, steps: int = 30000, scenes: int = 48, last: int = 
 @app.local_entrypoint()
 def main(humans: str = "1,2,4,8,16,32", only: str = "", name: str = "curve", steps: int = 30000, rounds: int = 2,
          stride: int = 1, out: str = "", retest: str = "", every: str = "12", parts: int = 0, seeds: str = "0", data: str = "",
-         skip: int = 0):
+         skip: int = 0, shape_error: float = 0.0, n: int = 48):
     out_path = Path(out or f"/bulk2/runs/robotteleop/policy/{name}.jsonl")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if retest:
@@ -212,7 +213,7 @@ def main(humans: str = "1,2,4,8,16,32", only: str = "", name: str = "curve", ste
                                  # every second tick of the largest sets, so they fit in memory while loading
                                  "stride": stride if plain else max(stride, -(-k // 64)),
                                  "every": int(every.split(",")[0]), "parts": parts or None, "seed": seed,
-                                 "data": data, "skip": skip})
+                                 "data": data, "skip": skip, "shape_error": shape_error, "n": n})
         fn = job
     # Written as they come in, so a run that is cut short keeps what it has.
     with open(out_path, "a") as f:
