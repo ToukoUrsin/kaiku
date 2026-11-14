@@ -202,6 +202,7 @@ def glove_definition(side: str, device_id: int, *, magnetometer: bool = False) -
     return {
         "protocol_name": "RGMP",
         "protocol_version": "2.0.0",
+        "kaiku_emulated": True,
         "device_id": device_id,
         "device_type": "Smartgloves II",
         "timestamp_epoch": "device_boot",

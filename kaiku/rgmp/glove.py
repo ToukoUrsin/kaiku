@@ -44,6 +44,7 @@ HEADING_RELIABLE = "is_heading_reliable"
 _POSE_ORDER = (0, 1, 2, 6, 3, 4, 5)     # wire x,y,z,qx,qy,qz,qw -> x,y,z,qw,qx,qy,qz
 _QUAT_ORDER = (3, 0, 1, 2)              # wire qx,qy,qz,qw -> qw,qx,qy,qz
 _RATE_WINDOW_S = 1.0
+_STALE_S = 3.0
 
 _Flag = tuple[int, int]                 # (value slot of the STATUS_FLAGS stream, bit mask)
 
@@ -88,6 +89,11 @@ class GloveDecoder:
         self.side: str = side
         self.device_id = definition.device_id
         self.group = group
+        # The emulator marks its definitions explicitly; real Rokoko definitions do not carry
+        # this private field, so this is a conservative stream-level distinction.
+        self.emulated = bool(definition.document.get("kaiku_emulated") or definition.device_info.get("kaiku_emulated")
+                             or definition.device_info.get("emulated"))
+        self.firmware = definition.device_info.get("firmware") or definition.device_info.get("firmware_version")
 
         # (target, reference of its pose, reference of its flags), in the row order of the decoded
         # pose matrix: five fingers, arm in hub, arm in coil. Sensor flags are intrinsic to the
@@ -162,6 +168,8 @@ class GloveStream:
         self._lock = threading.Lock()                       # guards the two dicts below
         self._latest: dict[str, GloveFrame] = {}
         self._arrivals: dict[str, deque[float]] = {side: deque() for side in SIDES}
+        self._emulated = False
+        self._firmware: dict[str, str] = {}
 
     def start(self) -> GloveStream:
         """Start receiving in the background and return self. Does not wait for a glove."""
@@ -185,7 +193,12 @@ class GloveStream:
     def latest(self, side: str) -> GloveFrame | None:
         """The newest frame of the "left" or "right" glove; None while that glove is not streaming."""
         with self._lock:
-            return self._latest.get(side)
+            frame = self._latest.get(side)
+            # A TCP connection can remain open after a radio link has gone quiet. Do not keep
+            # commanding from the last good hand indefinitely.
+            if frame is None or time.monotonic() - frame.t_recv > _STALE_S:
+                return None
+            return frame
 
     def rate_hz(self, side: str) -> float:
         """Measured frame rate of one side over the last second (nominally 83.33); 0.0 when stalled."""
@@ -196,12 +209,32 @@ class GloveStream:
             span = arrivals[-1] - arrivals[0]
             return (len(arrivals) - 1) / span if span > 0 else 0.0
 
+    @property
+    def emulated(self) -> bool:
+        with self._lock:
+            return bool(self._emulated)
+
+    @property
+    def firmware(self) -> dict[str, str]:
+        with self._lock:
+            return dict(self._firmware)
+
+    def age_s(self, side: str) -> float | None:
+        with self._lock:
+            frame = self._latest.get(side)
+            return None if frame is None else max(0.0, time.monotonic() - frame.t_recv)
+
     def _on_definition(self, definition: Definition) -> None:
         self._on_disconnect(definition.device_id)           # a re-sent definition is a new session
         if definition.device_type not in GLOVE_DEVICE_TYPES:
             return
         try:
-            self._decoders[definition.device_id] = GloveDecoder(definition)
+            decoder = GloveDecoder(definition)
+            self._decoders[definition.device_id] = decoder
+            with self._lock:
+                self._emulated = self._emulated or decoder.emulated
+                if decoder.firmware:
+                    self._firmware[decoder.side] = str(decoder.firmware)
         except ProtocolError as error:
             _log.warning("ignoring glove %d: %s", definition.device_id, error)
 
