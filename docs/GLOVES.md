@@ -64,8 +64,9 @@ sort is saved with the robots that followed it.
 
 On the laptop with Rokoko's driver, Rokoko's hand solver and its emulated Smartglove II: the checklist,
 the page in the person's hands from the first scene, the glove's pinch picking a part up, the
-recording, stopping, the pull to the box, and the study in sandboxes. Rokoko's emulated glove never
-opens its fingers, so whole scenes sorted by a glove's pinch are tested with Kaiku's own moving
-emulator. A session from an emulated glove is labelled emulated and changes nothing.
+recording, stopping, the pull to the box, and the study in sandboxes. Rokoko's emulated glove holds
+one pose, which Rokoko's hand solver reads as a pinch, so whole scenes sorted by a glove's pinch are
+tested with Kaiku's own moving emulator. A session from an emulated glove is labelled emulated and
+changes nothing.
 
 Nobody has worn real Smartgloves with Kaiku yet.
