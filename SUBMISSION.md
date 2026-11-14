@@ -1,6 +1,8 @@
 # Kaiku
 
-**Punchline:** One pair of Rokoko gloves, 48 robots.
+This is the version in force: no real gloves have been worn. The version for after a real glove session is [SUBMISSION.gloves.md](SUBMISSION.gloves.md).
+
+**Punchline:** One hand, 48 robots.
 
 **Challenge:** The Robot Teleoperation Challenge by Rokoko
 
@@ -8,18 +10,26 @@
 
 ## Description
 
-Kaiku is Finnish for echo. One person sorts parts with a Unitree G1 through Rokoko Smartgloves, and 47 more G1s do the same job at the same moment. Each one has its own scene: the parts are somewhere else, turned differently, sometimes a different shape. So the motion is not copied. It is redone on every table, relative to the parts that are actually there, while the operator is still moving.
+Kaiku is Finnish for echo. One person sorts parts with a Unitree G1, and 47 more G1s do the same job at the same moment. Each one has its own scene: the parts are somewhere else, turned differently, sometimes a different shape. So the motion is not copied. It is redone on every table, relative to the parts that are actually there, while the person is still moving.
 
-Robot learning runs out of demonstrations long before it runs out of anything else. From 16 demonstrations by the operator a policy sorted 0% of new scenes. From the same 16 plus their echoes it sorted 81%. 32 demonstrations with echoes beat 128 without. Then the gloves come off, and the 48 robots sort scenes they have never seen.
+Robot learning runs out of demonstrations long before it runs out of anything else. From one set of 16 demonstrations a policy sorted under 1% of new scenes; other sets of 16 gave 0% to 31%. From the same 16 plus their echoes it sorted 81%. 32 demonstrations with echoes beat 128 without. Then nobody drives, and the 48 robots sort scenes they have never seen.
 
-Every robot goes through the humanoid challenge's safety filter, and physics decides whether the parts really landed in the right bins. Only the clean runs are saved, in the humanoid challenge's LeRobot and GR00T format.
+Open the demo and press Drive it yourself. Hold your hand up to the camera and the robot's fingers follow yours: the hand's 21 landmarks go down the same path Rokoko's gloves use. The grasp is assisted until you press Grasp it myself. Press See it without Kaiku to watch 47 robots copy the same motion and miss, then the same scene again with Kaiku on.
 
-Open the demo and press Train to rerun that comparison live, Policy to watch the robots work with nobody driving, or download the scene that just finished as a dataset.
+Every robot goes through the humanoid challenge's safety filter, and physics decides whether the parts really landed in the right bins. Only the clean runs are saved, in the humanoid challenge's LeRobot and GR00T format, and the page offers them as a download.
 
-What is real: Rokoko's driver and hand solver read the gloves (tested with the driver's emulated Smartgloves II), and the humanoid challenge's own runner takes the lead robot's commands, 1,800 in a row through its safety filter with none clipped. What is not yet: it runs in a MuJoCo twin of the sorting station, the operator in the hosted demo is a scripted hand in emulated gloves, and the policy reads where the parts are from the simulator instead of cameras.
+What is real: a person's hand, seen by a camera, drives the robot's fingers through the glove pipeline. Rokoko's driver and hand solver feed the same pipeline, tested with the driver's emulated Smartgloves II, as a pair and as a single glove. The humanoid challenge's own runner takes the lead robot's commands, 1,800 in a row through its safety filter with none clipped. What is not: nobody has worn real Smartgloves yet, it runs in a MuJoCo twin of the sorting station, and while no visitor drives the hosted demo a scripted hand in emulated gloves does. The page says which one is driving.
 
-Redoing demonstrations in new scenes is known from MimicGen and DexMimicGen, where it runs afterwards on recordings. Kaiku does it live, from the glove stream, with physics and the safety filter deciding what counts.
+Redoing demonstrations in new scenes is known from MimicGen and DexMimicGen, where it runs afterwards on recordings. Kaiku does it live, from the hand stream, with physics and the safety filter deciding what counts.
+
+## Deck line
+
+A person's hand drives one robot. 47 more redo the job on their own tables, and a policy learns from all 48.
+
+## Booth pitch
+
+Hold your hand up to the laptop camera. The robot's fingers follow yours and you sort a part. Behind it 47 more robots do the same job, each on a table where the parts lie somewhere else. A policy trained on 16 demonstrations sorted almost no new scenes. With the echoes, 81%. Rokoko gloves plug into the same stream. We tested that with Rokoko's driver and its emulated gloves, because we had no real ones.
 
 ## Technologies
 
-Rokoko Smartgloves II, Rokoko Device SDK (RGMP), Unitree G1 with Dex3 hands, MuJoCo, Python, PyTorch, LeRobot v3.0, GR00T, three.js, Modal, Fly.io
+Rokoko Smartgloves II, Rokoko Device SDK (RGMP, hand solver), Unitree G1 with Dex3 hands, MuJoCo, MediaPipe hand landmarks, Python, PyTorch, LeRobot v3.0, GR00T, three.js, Fly.io
