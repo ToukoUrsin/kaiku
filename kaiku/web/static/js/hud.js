@@ -1240,10 +1240,22 @@ export function finding(curve) {
   return { point: widest, beats: null };
 }
 
+/** The rate the simulation keeps up over the last ten seconds or so. It dips for a moment every time
+ *  new tables are laid, and a dip is not what the page should call its speed. */
+const pace = { rate: null, at: 0 };
+function steady(rate) {
+  const now = Date.now() / 1000;
+  if (pace.rate === null || now - pace.at > 30) pace.rate = rate;
+  else pace.rate += (rate - pace.rate) * (1 - Math.exp(-(now - pace.at) / 10));
+  pace.at = now;
+  return pace.rate;
+}
+
 /** How fast the simulation runs against a clock, when it is not real time: "0.8× real time". */
 function speed(perf, lead) {
-  const rate = perf?.realtime;
-  if (!Number.isFinite(rate) || rate <= 0 || rate >= 0.9) return '';
+  if (!Number.isFinite(perf?.realtime) || perf.realtime <= 0) return '';
+  const rate = steady(perf.realtime);
+  if (rate >= 0.9) return '';
   return `${lead ? `${lead} at ` : ''}${rate.toFixed(1)}× real time`;
 }
 
