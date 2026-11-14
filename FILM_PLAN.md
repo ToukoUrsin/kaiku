@@ -1,54 +1,65 @@
 # Kaiku film plan
 
-Two minutes at most, public. Two cuts share every shot but shot 2: the one in force says no gloves
-were worn; the other is used only after a real glove session exists.
+Two minutes at most, public. This is the plan of film v3 (1:50.5), the no-gloves cut: nobody has worn
+real gloves with Kaiku and nothing in it says so. How to build it: `film/README.md`.
 
 ## The story
 
-1. A robot learns a job from demonstrations, and a person gives them one at a time.
-2. With Kaiku one person's hand drives one robot and 47 more redo the job live, each on its own table.
-3. A policy trained on 16 demonstrations sorts almost nothing. With the echoes, 81%. Then nobody drives.
+1. A real hand moves a robot's fingers. Nothing is worn on it.
+2. One robot is driven and 47 echoes redo the job live, each on its own table. Copying the motion
+   fails; Kaiku's echoes sort every table.
+3. The echoes are worth demonstrations: a policy trained on 32 sorts 58% of new scenes alone, 95%
+   with their echoes. Then nobody drives.
 
-**The moment a judge retells:** "They switched it off and 47 robots grabbed at parts that weren't
-there. Switched it on, same scene, all 47 sorted. Then I held my hand up to my own laptop and the
-robot's fingers followed mine."
+**The moment a judge retells:** "They switched it off and 40 robots grabbed at parts that weren't
+there. Switched it on, same tables, all 47 sorted. And 32 demonstrations with echoes beat 128 without."
 
-## Shots (1:54)
+## Shots (1:50.5)
 
-| Time | Screen | Voiceover, word for word | Number on screen |
+Everything is at real speed. The words and numbers below are filled in from `film/film.json`; the
+build stops if a number is not what the checked-in files and the page say.
+
+| Time | Screen | Voiceover, word for word | In the film's own type |
 |---|---|---|---|
-| 0:00–0:09 | All 48 robots sorting, slow push in | "One person is sorting parts with this robot. Forty-seven more are doing the same job, right now." | 48 robots |
-| 0:09–0:24 | **No gloves:** the camera picture of a bare hand beside the lead robot's hand; the fingers close together. **Gloves:** phone footage of the gloved hand beside the lead robot's hand | **No gloves:** "Nobody is wearing anything. A camera sees the hand, and the robot's fingers follow the fingers, down the same path Rokoko's gloves use." **Gloves:** "The gloves are Rokoko Smartgloves. Rokoko's driver reads them, and the robot's fingers follow the fingers." | The page's own source line |
-| 0:24–0:34 | Three tables side by side: the same colours, parts in other places | "Every table is different. The parts lie somewhere else, turned another way. So the motion can't just be copied." | none |
-| 0:34–0:50 | See it without Kaiku: the robots reach for parts that are not there | "Copy it anyway and this happens." (three seconds of silence on the misses) | the banner's count without Kaiku |
-| 0:50–1:04 | The same scene again, Kaiku on | "Kaiku redoes the motion on every table, around the parts that are really there, while the person is still moving. Same scene." | the banner's count with Kaiku |
-| 1:04–1:22 | Policy tab: the two curves | "Why it matters: from sixteen demonstrations a policy sorted almost nothing. From the same sixteen and their echoes, eighty-one percent. Thirty-two with echoes beat a hundred and twenty-eight without." | 81%, 32 against 128 |
-| 1:22–1:38 | Policy mode, all robots, nobody driving | "Then nobody drives. Forty-eight robots, scenes none of them has seen." | the live share of scenes sorted |
-| 1:38–1:48 | Dataset tab, then the challenge runner's log | "Every run goes through the humanoid challenge's safety filter. Physics decides what counts. The clean ones download in the challenge's own format." | 1,800 commands, 0 clipped |
-| 1:48–1:54 | The address, a hand held up to a laptop | "Hold your hand up. Drive it yourself." | kaiku-echo.fly.dev |
+| 0:00 to 0:14 | The page's camera picture of a real hand beside the robot's hand, same run, same moment | "This is film of a real hand. We play it into the page as its camera, and the robot's fingers follow it. Nothing is worn on the hand." | "A real hand moves the robot's fingers"; "Film of a real hand (it loops), played into the page as its camera"; "Hand: S. Perquin, CC BY-SA 4.0" |
+| 0:14 to 0:24.5 | All 48 robots sorting, slow push in | "On the live page, a scripted hand drives one robot. Forty-seven echoes redo the job as it happens, each on its own table." | "One robot is driven. 47 echoes redo the job, each on its own table."; "On the live page a scripted hand drives." |
+| 0:24.5 to 0:36.5 | See it without Kaiku: the robots reach for parts that are not there. The page's banner counts | "Every table is different. So if the others just copy the motion, this happens." (2.8 s without music on the result) | "Kaiku off: every robot gets the same motion"; "Real time" |
+| 0:36.5 to 0:48.5 | The same tables, Kaiku on. The page's own line: "Without Kaiku: 7 of 47 tables sorted. With Kaiku: 47 of 47." | "Same tables, Kaiku on. Each echo redoes the motion around the parts that are really there." | "Kaiku on, the same tables"; "Real time" |
+| 0:48.5 to 1:04.5 | The page's study panel beside the numbers | "Why it matters. A policy trained on thirty-two demonstrations sorts fifty-eight percent of new scenes. With their echoes, ninety-five. Thirty-two with echoes beat a hundred and twenty-eight without." | 58% alone, 95% with their echoes; "32 with echoes beat 128 without"; "128 demonstrations alone: 92%"; "Share of 96 unseen scenes sorted, mean of 3 training runs. The study's demonstrations came from a scripted hand." |
+| 1:04.5 to 1:16 | The page's matched comparison beside the numbers | "Against a MimicGen-style replay, from the same sixteen demonstrations: eight percent with the replay, seventy-three with Kaiku's echoes. The replay is our own implementation." | 8% MimicGen-style replay, 73% Kaiku's echoes; "The replay is our own implementation, not MimicGen's code." |
+| 1:16 to 1:25 | Policy mode, all robots, the page's banner counts | "Then nobody drives. The policy sorts scenes it has never seen." | "Then nobody drives"; "Real time" |
+| 1:25 to 1:36 | The runner's log line by line as it was printed, beside the local Kaiku it followed | "This is the humanoid challenge's own runner, with a mock robot. Eighteen hundred commands went through its safety filter. None was clipped." | "The humanoid challenge's own runner and safety filter, with a mock robot"; "55 seconds later"; "1,800 commands through the safety filter. 0 clipped." |
+| 1:36 to 1:42.5 | The page's dataset panel | "Every clean run is saved as a demonstration, in the format the challenge asks for." | "Every clean run is a demonstration, in the challenge's format" |
+| 1:42.5 to 1:50.5 | The live page, whole | "It is live at kaiku echo dot fly dot dev. Open it and drive it yourself." | "Live now. Drive it yourself."; kaiku-echo.fly.dev; the hand film's full credit |
 
 ## Where each shot comes from
 
-All screens are the hosted page at 1920×1080, recorded with `tools/film/record.py` and rendered with
-`tools/film/capture.py` (run through `drun`, output to `/bulk3/runs/robotteleop/film/`). No account.
+All page shots are the hosted page (`https://kaiku-echo.fly.dev`, master f632b46) at 1920x1080:
+its stream recorded with `film/rec.py` (it only listens) and drawn again frame by frame by
+`film/shoot.py` in `drun` sandboxes. Recordings and takes: `/bulk3/runs/robotteleop/film/v3/`.
 
-| Shot | URL and state | Reset |
+| Shot | Source | Pressed |
 |---|---|---|
-| 1 | `/?clean=1&shot=overview&quality=high`, Operator mode | none |
-| 2, no gloves | `/?intro=0&shot=lead`, Drive it yourself, Use my hand, Grasp it myself; screen recording of a real browser with a person's hand | hand the turn back |
-| 2, gloves | the glove session's replay, `/?clean=1&shot=lead`; phone footage from the sitting | none |
-| 3 | `/?clean=1&env=1`, `env=7`, `env=19`, tiled in the edit | none |
-| 4, 5 | `/?shot=overview&quality=high`, See it without Kaiku; one take holds both halves | wait half a minute between takes |
-| 6 | `/?tab=policy&result=1` | none |
-| 7 | `/?clean=1&shot=overview`, Policy mode | switch back to Operator |
-| 8 | `/?tab=dataset`; `tests/test_g1.py` output | none |
-| 9 | title card | none |
+| 1 | `hand/take4`: `film/hand.py` plays "Finger-counting in Dutch" (S. Perquin, Wikimedia Commons, CC BY-SA 4.0) into the page as its camera | Drive it yourself, Use my hand, Grasp it myself; the turn handed back |
+| 2 to 6, 9, 10 | `rec/operator`, Operator mode, a scripted hand driving | See it without Kaiku, once |
+| 5, 6 numbers | `kaiku/policy/pretrained/study.json`, `baselines.json`, and the page's own panels | none |
+| 7 | `rec/policy`, Policy mode | Policy |
+| 8 | `film/g1log.sh`: the challenge's runner (`--backend mock`) follows a local Kaiku for 60 s; its log, its summary, the local Kaiku's stream | none on the live page |
 
-## Must be true before filming
+Train both is never pressed.
 
-- The source line on the page says what is really driving in every shot. Nothing says gloves in the no-gloves cut.
-- Shot 2 without gloves needs a person's hand in front of a real camera. Until Touko films it, the cut uses the page's own camera picture from a screen recording by whoever is at the laptop. It is the one shot an agent cannot make.
-- The numbers in shots 4 to 6 are read off the page in that take, not typed in the edit.
-- The 81% and the 32 against 128 match the README on the day. If the baseline study changes them, the voiceover changes with them.
-- A judge alone on the address gets to shot 4 in two presses and to shot 2 in three, under 30 seconds.
-- Proof from outside our own simulator: Rokoko's driver and hand solver in shot 2, the humanoid challenge's own runner and safety filter in shot 8.
+## What is true in it, and what is not claimed
+
+- Shot 1 is film of a real hand, not a person at the laptop. The film says so in type and in voice.
+  The hand and the robot are one run on one clock; the sync is not edited.
+- Shots 2 to 7 and the study's demonstrations are driven by a scripted hand. The voice, the film's
+  type or the page's own source line says so in each.
+- Shot 8 is the challenge's own runner and safety filter with a mock robot, not a real G1.
+- No gloves are worn or claimed.
+- The voice is synthetic (Gemini speech); the music is v2's score.
+
+## When a person's hand is filmed
+
+`film/make.sh vN --shot2 FILE` puts a screen recording of a person's own hand in shot 1, changes the
+head and the voice line to say so, and drops the hand film's credit. `film/README.md` says what the
+clip must be. It is the one shot an agent cannot make.

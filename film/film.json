@@ -3,300 +3,384 @@
  "cut": "nogloves",
  "fps": 30,
  "voice": {
-  "id": "nPczCjzI2devNBz1zQrb",
-  "name": "Brian (ElevenLabs premade)",
-  "model": "eleven_multilingual_v2",
-  "speed": 1.04
+  "provider": "gemini",
+  "id": "Charon",
+  "name": "Charon (Gemini speech)",
+  "model": "gemini-3.8-flash-tts",
+  "speed": 1.0,
+  "about": "ElevenLabs (v2's voice, Brian) had no credit left when v3 was cut. To go back: provider elevenlabs, id nPczCjzI2devNBz1zQrb, model eleven_multilingual_v2, speed 1.04, no instructions."
  },
  "music": {
   "prompt": "Minimal, calm, confident instrumental score for a robotics demo film, 96 BPM. Soft low pulse and warm analog pad from the start. Around 34 seconds the music thins to almost nothing for a few seconds, then at 50 seconds a clean hopeful lift with a gentle arpeggio and light percussion. Steady and warm through the middle, a small rise near 82 seconds, resolved soft final chord at 112 seconds. No vocals. Understated, not cheesy.",
   "seconds": 118,
   "gain_db": -15,
-  "duck": 6
+  "duck": 6,
+  "about": "The v2 score, kept: ElevenLabs had no credit left when v3 was cut (it resets on 5 December 2026). The prompt's times are v2's; the silence is placed by the edit, not the score."
  },
  "numbers": {
-  "about": "Spoken by the voice. Each one is compared with what the page itself said in that take (CLIP.says.jsonl), and the build stops if they differ. On screen the numbers are the page's own pixels.",
+  "about": "Spoken by the voice and shown in the film's own type. The build stops unless each one is what the page said in that take AND what the checked-in files say (kaiku/policy/pretrained/study.json, baselines.json, the runner's summary).",
   "fleet": 48,
-  "fleet_say": "Forty-eight",
   "fleet_others": 47,
   "fleet_others_say": "Forty-seven",
-  "study_demos": 16,
-  "study_demos_say": "sixteen",
-  "study_with_echoes": "81%",
-  "study_with_echoes_say": "eighty-one percent",
-  "study_few": 32,
-  "study_few_say": "Thirty-two",
+  "study_demos": 32,
+  "study_demos_say": "thirty-two",
+  "study_demos_cap": "Thirty-two",
+  "study_alone": "58%",
+  "study_alone_say": "fifty-eight percent",
+  "study_with_echoes": "95%",
+  "study_with_echoes_say": "ninety-five",
   "study_many": 128,
-  "study_many_say": "a hundred and twenty-eight"
+  "study_many_say": "a hundred and twenty-eight",
+  "study_many_alone": "92%",
+  "study_runs": 3,
+  "study_scenes": 96,
+  "matched_demos": 16,
+  "matched_demos_say": "sixteen",
+  "matched_replay": "8%",
+  "matched_replay_say": "eight percent",
+  "matched_kaiku": "73%",
+  "matched_kaiku_say": "seventy-three",
+  "runner_commands": 1800,
+  "runner_commands_say": "Eighteen hundred",
+  "runner_clipped": 0,
+  "address": "kaiku-echo.fly.dev",
+  "address_say": "kaiku echo dot fly dot dev",
+  "hand_credit": "Hand: S. Perquin, CC BY-SA 4.0",
+  "hand_credit_long": "Hand film: “Finger-counting in Dutch” by S. Perquin, Wikimedia Commons, CC BY-SA 4.0",
+  "runner_commands_shown": "1,800"
  },
  "shots": [
   {
-   "id": "1-all",
-   "dur": 9.0,
-   "clip": "1-all.mp4",
+   "id": "1-hand",
+   "dur": 14.0,
+   "swappable": true,
+   "clip": "shot2.mp4",
+   "about": "The swappable shot. Without --shot2 it is the hand film: the page's own camera picture beside the robot's hand, both from take hand (film/hand.py), lined up on the clock they were recorded with. With film/make.sh vN --shot2 FILE the clip fills the frame and vo_real is spoken.",
+   "head": "A real hand moves the robot's fingers",
+   "label": "Film of a real hand (it loops), played into the page as its camera",
+   "label_robot": "The robot's hand, same run, same moment",
+   "head_real": "A person's hand moves the robot's fingers",
    "vo": [
     {
      "at": 0.4,
-     "text": "One hand is sorting parts with this robot. {fleet_others_say} more robots are doing the same job, right now."
-    }
-   ]
-  },
-  {
-   "id": "2-hand",
-   "dur": 15.0,
-   "clip": "shot2.mp4",
-   "swappable": true,
-   "vo": [
-    {
-     "at": 0.3,
-     "text": "Right now a scripted hand in emulated Rokoko gloves is driving. Hold your own hand up to your camera, and the robot's fingers follow yours, down the same path."
+     "text": "This is film of a real hand. We play it into the page as its camera, and the robot's fingers follow it. Nothing is worn on the hand."
     }
    ],
    "vo_real": [
     {
-     "at": 0.3,
-     "text": "Nobody is wearing anything. A camera sees the hand, and the robot's fingers follow the fingers, down the same path Rokoko's gloves use."
-    }
-   ],
-   "about": "The swappable shot. vo is spoken over the stand-in clip, vo_real over a real clip (film/make.sh --shot2 FILE)."
-  },
-  {
-   "id": "3-tables",
-   "dur": 10.0,
-   "clip": [
-    "3-env1.mp4",
-    "3-env7.mp4",
-    "3-env19.mp4"
-   ],
-   "vo": [
-    {
-     "at": 0.3,
-     "text": "Every table is different. The parts lie somewhere else, turned another way. So the motion can't just be copied."
+     "at": 0.4,
+     "text": "This is a person's hand in front of a laptop camera. The robot's fingers follow the fingers. Nothing is worn on the hand."
     }
    ]
   },
   {
-   "id": "4-without",
-   "dur": 15.0,
-   "clip": [
-    "4a.mp4",
-    "4b.mp4"
-   ],
+   "id": "2-fleet",
+   "dur": 10.5,
+   "head": "One robot is driven. {fleet_others} echoes redo the job, each on its own table.",
+   "sub": "On the live page a scripted hand drives.",
    "vo": [
     {
      "at": 0.3,
-     "text": "Copy it anyway and this happens."
+     "text": "On the live page, a scripted hand drives one robot. {fleet_others_say} echoes redo the job as it happens, each on its own table."
     }
    ]
   },
   {
-   "id": "5-with",
-   "dur": 15.0,
-   "clip": [
-    "5a.mp4",
-    "5b.mp4"
-   ],
+   "id": "3-without",
+   "dur": 12.0,
+   "mark": "Real time",
+   "head": "Kaiku off: every robot gets the same motion",
    "vo": [
     {
      "at": 0.3,
-     "text": "Kaiku redoes the motion on every table, around the parts that are really there, while the hand is still moving. Same scene."
+     "text": "Every table is different. So if the others just copy the motion, this happens."
     }
    ]
   },
   {
-   "id": "6-policy-tab",
-   "dur": 15.0,
-   "clip": [
-    "6-page.mp4",
-    "6-left.mp4",
-    "6-panel.png"
-   ],
+   "id": "4-with",
+   "dur": 12.0,
+   "mark": "Real time",
+   "head": "Kaiku on, the same tables",
    "vo": [
     {
      "at": 0.3,
-     "text": "Why it matters: from {study_demos_say} demonstrations a policy sorted almost nothing. From the same {study_demos_say} and their echoes, {study_with_echoes_say}. {study_few_say} with echoes beat {study_many_say} without."
+     "text": "Same tables, Kaiku on. Each echo redoes the motion around the parts that are really there."
     }
+   ]
+  },
+  {
+   "id": "5-study",
+   "dur": 16.0,
+   "head": "What the echoes are worth: a policy trained on {study_demos} demonstrations",
+   "big": [
+    [
+     "{study_alone}",
+     "alone"
+    ],
+    [
+     "{study_with_echoes}",
+     "with their echoes"
+    ]
+   ],
+   "then": "{study_demos} with echoes beat {study_many} without",
+   "then_sub": "{study_many} demonstrations alone: {study_many_alone}",
+   "note": "Share of {study_scenes} unseen scenes sorted, mean of {study_runs} training runs. The study's demonstrations came from a scripted hand.",
+   "vo": [
+    {
+     "at": 0.3,
+     "text": "Why it matters. A policy trained on {study_demos_say} demonstrations sorts {study_alone_say} of new scenes. With their echoes, {study_with_echoes_say}. {study_demos_cap} with echoes beat {study_many_say} without."
+    }
+   ],
+   "cues": [
+    "{study_alone_say}",
+    "{study_with_echoes_say}"
+   ],
+   "then_cue": "{study_demos_cap}",
+   "about": "cues: each big number appears as the voice starts to say it; then_cue the same for the line under them."
+  },
+  {
+   "id": "6-matched",
+   "dur": 11.5,
+   "head": "The same {matched_demos} demonstrations, multiplied two ways",
+   "big": [
+    [
+     "{matched_replay}",
+     "MimicGen-style replay"
+    ],
+    [
+     "{matched_kaiku}",
+     "Kaiku's echoes"
+    ]
+   ],
+   "note": "Share of {study_scenes} unseen tables sorted, {study_runs} runs each. The replay is our own implementation, not MimicGen's code.",
+   "vo": [
+    {
+     "at": 0.3,
+     "text": "Against a MimicGen-style replay, from the same {matched_demos_say} demonstrations: {matched_replay_say} with the replay, {matched_kaiku_say} with Kaiku's echoes. The replay is our own implementation."
+    }
+   ],
+   "cues": [
+    "{matched_replay_say}",
+    "{matched_kaiku_say}"
    ]
   },
   {
    "id": "7-nobody",
-   "dur": 12.0,
-   "clip": "7-nobody.mp4",
+   "dur": 9.0,
+   "mark": "Real time",
+   "head": "Then nobody drives",
    "vo": [
     {
      "at": 0.4,
-     "text": "Then nobody drives. {fleet_say} robots, scenes none of them has seen."
+     "text": "Then nobody drives. The policy sorts scenes it has never seen."
     }
    ]
   },
   {
-   "id": "8-checked",
+   "id": "8-runner",
    "dur": 11.0,
-   "clip": [
-    "8-left.mp4",
-    "8-panel.png"
-   ],
+   "head": "The humanoid challenge's own runner and safety filter, with a mock robot",
+   "label_robot": "A local Kaiku. The runner follows this robot's commands.",
    "vo": [
     {
      "at": 0.3,
-     "text": "Every run goes through the humanoid challenge's safety filter. Physics decides what counts. The clean ones download in the challenge's own format."
+     "text": "This is the humanoid challenge's own runner, with a mock robot. {runner_commands_say} commands went through its safety filter. None was clipped."
+    }
+   ],
+   "cut_cue": "{runner_commands_say}",
+   "later": "{seconds} seconds later",
+   "about": "The log skips from the first seconds of the run to its last second where the voice starts cut_cue; the film says how many seconds it skipped.",
+   "count": [
+    "{runner_commands_shown} commands",
+    "through the safety filter. {runner_clipped} clipped."
+   ]
+  },
+  {
+   "id": "9-dataset",
+   "dur": 6.5,
+   "head": "Every clean run is a demonstration, in the challenge's format",
+   "vo": [
+    {
+     "at": 0.3,
+     "text": "Every clean run is saved as a demonstration, in the format the challenge asks for."
     }
    ]
   },
   {
-   "id": "9-address",
-   "dur": 6.0,
+   "id": "10-address",
+   "dur": 8.0,
    "card": {
-    "title": "Kaiku",
-    "line": "One hand drives {fleet} robots.",
-    "address": "kaiku-echo.fly.dev"
+    "line": "Live now. Drive it yourself.",
+    "address": "{address}",
+    "at": 1.0
    },
    "vo": [
     {
-     "at": 0.5,
-     "text": "Hold your hand up. Drive it yourself."
+     "at": 0.4,
+     "text": "It is live at {address_say}. Open it and drive it yourself."
     }
    ]
   }
  ],
  "takes": {
-  "about": "What is filmed. rec = a recording under WORK/../rec made with film/rec.py; start/end are seconds into it; speed = recorded seconds per film second. css and init are film-only: they hide buttons, enlarge the page's own lines, or move the camera. They never change a word or a number. whole = filmed by one browser from start to end (close shots, where a join between two browsers shows as a twitch). init push = the camera moves in 6% over the 9 s of shot 1 (the page clock is 100000 ms + recording time).",
+  "about": "What is filmed. rec = a recording under WORK/../rec made with film/rec.py (or film/hand.py, film/g1log.sh); start/end are seconds into it; speed = recorded seconds per film second (everything in this cut is 1). css and init are film-only: they hide buttons, enlarge or move the page's own lines, or move the camera. They never change a word or a number. whole = filmed by one browser from start to end (close shots, where a join between two browsers shows as a twitch).",
+  "hand": {
+   "take": "../hand/take4",
+   "about": "film/hand.py's output: rec/ (the stream), inset/ + inset.jsonl (the page's camera picture, timed), hand.jsonl (what the page read and what the runner said was driving)."
+  },
   "css": {
-   "base": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}",
-   "source": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:30px!important;line-height:1.3!important;max-width:900px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.tag{font-size:26px!important;padding:9px 18px!important}",
-   "bare": "[data-ref=\"opening\"]{display:none!important}.drive-tools,.story,.caption,.focus,.tag{display:none!important}",
-   "count": ".drive-tools{display:none!important}.app[data-clean] .banner:not([hidden]){display:flex!important;font-size:34px!important;padding:16px 32px!important;top:40px!important}.app[data-clean] .banner .banner-dot{width:16px!important;height:16px!important}.app[data-clean] .banner-action{display:none!important}.app[data-clean] .caption{font-size:30px!important;line-height:1.3!important;max-width:900px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}",
-   "quiet": "[data-ref=\"opening\"]{display:none!important}.drive-tools,.banner{display:none!important}",
-   "stage": "[data-ref=\"opening\"]{display:none!important}.drive-tools,.story,.caption{display:none!important}",
-   "nobody": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:30px!important;line-height:1.3!important;max-width:900px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.tag{font-size:26px!important;padding:9px 18px!important}.app[data-clean] .story{transform:scale(1.7)!important;transform-origin:left bottom!important}"
+   "hand": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:30px!important;line-height:1.3!important;max-width:900px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.story,.focus,.tag,.banner{display:none!important}",
+   "fleet": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:30px!important;line-height:1.3!important;max-width:900px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.tag{font-size:26px!important;padding:9px 18px!important}.app[data-clean] .story{transform:scale(1.5)!important;transform-origin:left bottom!important}",
+   "count": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:30px!important;line-height:1.3!important;max-width:900px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.app[data-clean] .banner:not([hidden]){display:flex!important;font-size:46px!important;padding:20px 40px!important;top:176px!important}.app[data-clean] .banner .banner-dot{width:20px!important;height:20px!important}.app[data-clean] .banner-action{display:none!important}",
+   "nobody": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:30px!important;line-height:1.3!important;max-width:900px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.app[data-clean] .banner:not([hidden]){display:flex!important;font-size:46px!important;padding:20px 40px!important;top:176px!important}.app[data-clean] .banner .banner-dot{width:20px!important;height:20px!important}.app[data-clean] .banner-action{display:none!important}.app[data-clean] .story{transform:scale(1.5)!important;transform-origin:left bottom!important}",
+   "stage": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.story,.caption,.banner{display:none!important}",
+   "page": "[data-ref=\"opening\"]{display:none!important}",
+   "panel": "[data-ref=\"opening\"]{display:none!important}.banner{display:none!important}",
+   "with": ".drive-tools{display:none!important}.app[data-clean] .caption{font-size:30px!important;line-height:1.3!important;max-width:900px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.app[data-clean] .banner:not([hidden]){display:flex!important;font-size:46px!important;padding:20px 40px!important;top:176px!important}.app[data-clean] .banner .banner-dot{width:20px!important;height:20px!important}.app[data-clean] .banner-action{display:none!important}"
   },
   "init": {
-   "close": "(()=>{const r=window.kaiku.rig;Object.assign(r.shots.lead,{target:[0.34,0,0.42],frame:[1.25,1.0]});r.goTo('lead',0.01);})()",
-   "nostage": "window.kaiku.stage.render=()=>{}",
-   "push": "(()=>{const r=window.kaiku.rig,f=[...r.frame],a=100000+107500;const go=()=>{const k=1-0.06*Math.min(1,Math.max(0,(performance.now()-a)/9000));r.frame=[f[0]*k,f[1]*k];r.refit();requestAnimationFrame(go);};go();})()"
+   "hand-a": "(()=>{const r=window.kaiku.rig;r.look({target:[0.44,0.07,0.17],azimuth:-0.5,polar:1.05,frame:[0.42,0.42]},0.01);r.shiftGoal.set(0.45,0);r.shift.set(0.45,0);})()",
+   "hand-b": "(()=>{const r=window.kaiku.rig;r.look({target:[0.44,0.07,0.17],azimuth:0.55,polar:0.95,frame:[0.36,0.36]},0.01);r.shiftGoal.set(0.45,0);r.shift.set(0.45,0);})()",
+   "push": "(()=>{const r=window.kaiku.rig,f=[...r.frame],a=100000+6000;const go=()=>{const k=1-0.06*Math.min(1,Math.max(0,(performance.now()-a)/10500));r.frame=[f[0]*k,f[1]*k];r.refit();requestAnimationFrame(go);};go();})()",
+   "panel": "(()=>{window.kaiku.stage.render=()=>{};const d=document.querySelector('[data-ref=baselines]');if(d)d.open=true;})()",
+   "nostage": "window.kaiku.stage.render=()=>{}"
   },
   "clips": {
-   "1-all": {
-    "rec": "operator2",
-    "start": 107.5,
-    "end": 116.5,
-    "query": "clean=1&shot=overview&quality=high",
-    "css": "source",
-    "init": "push"
-   },
-   "shot2-standin": {
-    "rec": "operator2",
-    "start": 116.5,
-    "end": 131.5,
+   "1-robot-a": {
+    "rec": "../hand/take4/rec",
+    "start": 8.85,
+    "end": 15.95,
     "query": "clean=1&shot=lead&quality=high",
-    "css": "source",
-    "init": "close",
+    "css": "hand",
+    "init": "hand-a",
     "whole": true
    },
-   "3-env1": {
-    "rec": "operator2",
-    "start": 131.5,
-    "end": 141.5,
-    "size": "640x1080",
-    "query": "clean=1&env=1&quality=high",
-    "css": "bare"
+   "1-robot-b": {
+    "rec": "../hand/take4/rec",
+    "start": 16.15,
+    "end": 23.05,
+    "query": "clean=1&shot=lead&quality=high",
+    "css": "hand",
+    "init": "hand-b",
+    "whole": true
    },
-   "3-env7": {
-    "rec": "operator2",
-    "start": 131.5,
-    "end": 141.5,
-    "size": "640x1080",
-    "query": "clean=1&env=7&quality=high",
-    "css": "bare"
+   "2-fleet": {
+    "rec": "operator",
+    "start": 6.0,
+    "end": 16.5,
+    "query": "clean=1&shot=overview&quality=high",
+    "css": "fleet",
+    "init": "push"
    },
-   "3-env19": {
-    "rec": "operator2",
-    "start": 131.5,
-    "end": 141.5,
-    "size": "640x1080",
-    "query": "clean=1&env=19&quality=high",
-    "css": "bare"
-   },
-   "4a": {
-    "rec": "operator2",
-    "start": 36.0,
-    "end": 56.2,
-    "speed": 2,
+   "3-without": {
+    "rec": "operator",
+    "start": 39.5,
+    "end": 51.5,
     "query": "clean=1&shot=overview&quality=high",
     "css": "count"
    },
-   "4b": {
-    "rec": "operator2",
-    "start": 56.2,
-    "end": 61.0,
+   "4-with": {
+    "rec": "operator",
+    "start": 71.4,
+    "end": 83.4,
     "query": "clean=1&shot=overview&quality=high",
-    "css": "count"
+    "css": "with",
+    "whole": true
    },
-   "5a": {
-    "rec": "operator2",
-    "start": 77.6,
-    "end": 97.6,
-    "speed": 2,
-    "query": "clean=1&shot=overview&quality=high",
-    "css": "count"
+   "5-left": {
+    "rec": "operator",
+    "start": 125.0,
+    "end": 141.0,
+    "size": "1138x1080",
+    "query": "clean=1&shot=lead&quality=high",
+    "css": "stage",
+    "whole": true
    },
-   "5b": {
-    "rec": "operator2",
-    "start": 97.6,
-    "end": 102.6,
-    "query": "clean=1&shot=overview&quality=high",
-    "css": "count"
-   },
-   "6-page": {
-    "rec": "operator2",
-    "start": 104.5,
-    "end": 106.5,
-    "query": "tab=policy&result=1&quality=high",
-    "css": "quiet"
+   "6-left": {
+    "rec": "operator",
+    "start": 141.0,
+    "end": 152.5,
+    "size": "1138x1080",
+    "query": "clean=1&shot=lead&quality=high",
+    "css": "stage",
+    "whole": true
    },
    "7-nobody": {
     "rec": "policy",
-    "start": 35.0,
-    "end": 47.0,
+    "start": 56.2,
+    "end": 65.2,
     "query": "clean=1&shot=overview&quality=high",
     "css": "nobody"
    },
-   "6-left": {
-    "rec": "operator2",
-    "start": 105.8,
-    "end": 119.5,
+   "8-robot-a": {
+    "rec": "g1",
+    "start": 2.6,
+    "end": 9.6,
+    "size": "740x1080",
+    "query": "clean=1&shot=lead&quality=high",
+    "css": "stage",
+    "whole": true
+   },
+   "8-robot-b": {
+    "rec": "g1",
+    "start": 60.0,
+    "end": 69.5,
+    "size": "740x1080",
+    "query": "clean=1&shot=lead&quality=high",
+    "css": "stage",
+    "whole": true
+   },
+   "9-left": {
+    "rec": "operator",
+    "start": 152.5,
+    "end": 159.0,
     "size": "1138x1080",
     "query": "clean=1&shot=lead&quality=high",
     "css": "stage",
     "whole": true
    },
-   "8-left": {
-    "rec": "operator2",
-    "start": 142.8,
-    "end": 149.5,
-    "size": "1138x1080",
-    "query": "clean=1&shot=lead&quality=high",
-    "css": "stage",
-    "whole": true
+   "10-page": {
+    "rec": "operator",
+    "start": 160.0,
+    "end": 168.0,
+    "query": "intro=0&shot=lead&quality=high",
+    "css": "page"
    }
   },
   "stills": {
-   "6-panel": {
-    "rec": "operator2",
-    "at": 110,
+   "5-panel": {
+    "rec": "operator",
+    "at": 130,
     "scale": 3,
-    "clip": "1565,100,355,490",
-    "query": "tab=policy&result=1&quality=low",
-    "init": "nostage"
+    "clip": "1565,100,355,450",
+    "query": "tab=policy&quality=low",
+    "css": "panel",
+    "init": "panel"
    },
-   "8-panel": {
-    "rec": "operator2",
-    "at": 144,
+   "6-panel": {
+    "rec": "operator",
+    "at": 130,
     "scale": 3,
-    "clip": "1565,100,355,500",
+    "clip": "1565,560,355,345",
+    "query": "tab=policy&quality=low",
+    "css": "panel",
+    "init": "panel"
+   },
+   "9-panel": {
+    "rec": "operator",
+    "at": 155,
+    "scale": 3,
+    "clip": "1565,100,355,505",
     "query": "tab=dataset&quality=low",
+    "css": "panel",
     "init": "nostage"
    }
+  },
+  "runner": {
+   "about": "Shot 8: the terminal shows WORK/g1/runner.log line by line at the moments the lines were printed. Part a starts a_from seconds into rec g1; part b starts b_lead seconds before the runner printed its summary, where the voice gets to the count.",
+   "a_from": 2.6,
+   "b_lead": 1.0
   }
  }
 }
