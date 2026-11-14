@@ -56,10 +56,14 @@ SAYS = """() => {
     'demos-label', 'stat1-label', 'amplification', 'stat2-label', 'yield', 'stat3-label', 'rate', 'clipped', 'finding',
     'study-note', 'policy-kaiku', 'policy-plain', 'policy-data', 'policy-test', 'policy-alone', 'policy-here', 'tag-text',
     'headline-top', 'headline-main', 'ds-episodes', 'ds-frames', 'ds-time', 'drive-say', 'scene-index', 'sorted-text',
-    'fleet-note', 'history-note', 'conn-text']) {
+    'fleet-note', 'history-note', 'conn-text', 'chain-them', 'headline-tail', 'claim-top', 'claim-main', 'claim-more',
+    'baselines-title', 'baselines-lede', 'baselines-note', 'policy-about', 'drive-left']) {
     const v = one(ref); if (v) out[ref] = v; }
   const toasts = [...document.querySelectorAll('[data-ref="toasts"] > *')].filter(shown).map((el) => el.textContent.replace(/\\s+/g, ' ').trim());
   if (toasts.length) out.toasts = toasts;
+  const bars = [...document.querySelectorAll('[data-ref="baselines-bars"] li')].filter(shown).map((el) =>
+    [el.querySelector('.bar-name')?.textContent.trim(), el.querySelector('.num')?.textContent.trim()]);
+  if (bars.length) out.bars = bars;
   const said = document.querySelector('.said, [data-ref="said"]');
   if (shown(said)) out.said = said.textContent.replace(/\\s+/g, ' ').trim();
   return out; }"""

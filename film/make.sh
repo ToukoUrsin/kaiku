@@ -1,14 +1,16 @@
 #!/bin/bash
 # Build the film from film/film.json.
 #
-#   film/make.sh v2                      the no-gloves cut, with the stand-in shot 2
-#   film/make.sh v3 --shot2 hand.mp4     the same film with a real shot 2 (film/README.md says what the clip must be)
+#   film/make.sh v3                      shot 1 is the hand film: a real hand's film played into the page as its camera
+#   film/make.sh v4 --shot2 hand.mp4     the same film with a clip of a person's own hand or glove as shot 1
+#                                        (film/README.md says what the clip must be)
 #
 # Only what changed is made again: a voice line whose words changed, a take that is missing.
 # The cut itself renders in a drun sandbox. Result: /bulk3/runs/robotteleop/film/kaiku-nogloves-VERSION.mp4
 set -euo pipefail
-work=${KAIKU_FILM_WORK:-/bulk3/runs/robotteleop/film/work}
-ver=v1; shot2=""
+work=${KAIKU_FILM_WORK:-/bulk3/runs/robotteleop/film/v3/work}
+films=${KAIKU_FILM_OUT:-/bulk3/runs/robotteleop/film}
+ver=v3; shot2=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --shot2) shot2=$2; shift 2 ;;
@@ -17,19 +19,19 @@ while [ $# -gt 0 ]; do
 done
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
-out=$(dirname "$work")/kaiku-$(/usr/bin/python -c "import json;print(json.load(open('film/film.json'))['cut'])")-$ver.mp4
+out=$films/kaiku-$(/usr/bin/python -c "import json;print(json.load(open('film/film.json'))['cut'])")-$ver.mp4
+len=$(/usr/bin/python -c "import json;print(json.load(open('film/film.json'))['shots'][0]['dur'])")
 
-hsec exec --only ELEVENLABS_API_KEY -- python3 film/vo.py "$work"
+hsec exec --only ELEVENLABS_API_KEY,JUNCTION_GEMINI_API_KEY,DEEPGRAM_API_KEY -- python3 film/vo.py "$work"
 nice -n 10 /usr/bin/python film/capture.py "$work"
 
-if [ -n "$shot2" ] && [ "$shot2" != standin ]; then            # a real hand: fitted to the frame, sound dropped
-  nice -n 10 ffmpeg -y -loglevel error -i "$shot2" -an -t 15 -r 30 \
+if [ -n "$shot2" ] && [ "$shot2" != standin ]; then            # a person's own hand: fitted to the frame, sound dropped
+  nice -n 10 ffmpeg -y -loglevel error -i "$shot2" -an -t "$len" -r 30 \
     -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,setsar=1" \
     -c:v libx264 -preset medium -crf 14 -pix_fmt yuv420p "$work/clips/shot2.mp4"
   echo real > "$work/clips/shot2.kind"
 else
-  cp "$work/clips/shot2-standin.mp4" "$work/clips/shot2.mp4"
-  echo standin > "$work/clips/shot2.kind"
+  echo standin > "$work/clips/shot2.kind"                      # the hand film: edit.py puts it together from take hand
 fi
 
 nice -n 10 /usr/bin/python film/edit.py plan "$work"

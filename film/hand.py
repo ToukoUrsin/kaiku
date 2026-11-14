@@ -13,7 +13,8 @@ written, all on this machine's clock, so the edit can put them side by side with
   OUT/hand.jsonl      what the page read off every camera frame, and what the runner said was driving
 
 Film-only styling in this browser: the camera picture fills the window and keeps its colour (the page
-shows it small and grey), and the 3D view is not drawn here (the film draws it from the recorded stream).
+shows it small and grey), nothing else of the page is shown over it, and the 3D view is not drawn here
+(the film draws it from the recorded stream).
 Nothing the page sends to the runner is touched. The turn is handed back at the end.
 """
 from __future__ import annotations
@@ -32,7 +33,8 @@ HERE = Path(__file__).resolve().parent
 W, H = 960, 720
 CSS = (".hand-cam{position:fixed!important;left:0!important;top:0!important;right:auto!important;bottom:auto!important;"
        f"width:{W}px!important;border-radius:0!important;box-shadow:none!important;z-index:99999!important}}"
-       ".hand-cam video{filter:none!important}.hand-cam p{display:none!important}")
+       ".hand-cam video{filter:none!important}.hand-cam p{display:none!important}"
+       "body *{visibility:hidden!important}.hand-cam,.hand-cam video,.hand-cam canvas{visibility:visible!important}")
 HOOK = """() => { const d = window.kaiku.drive, draw = d.draw.bind(d); window.__hand = [];
   d.draw = (camera, hand) => { const o = window.kaiku.hud.hud.operator || {};
     window.__hand.push({e: Date.now(), v: +camera.video.currentTime.toFixed(3), seen: Boolean(hand), grip: d.grip, own: d.own,
