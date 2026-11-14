@@ -20,7 +20,7 @@ Every robot goes through the humanoid challenge's safety filter, and physics dec
 
 What is real: real Smartgloves on a real person, Rokoko's driver and hand solver, and the humanoid challenge's own runner taking the lead robot's commands, 1,800 in a row through its safety filter with none clipped. What is not: it runs in a MuJoCo twin of the sorting station, no real G1 has moved, and while nobody drives the hosted demo it replays the recorded session. The page says what is driving.
 
-Redoing demonstrations in new scenes is known from MimicGen and DexMimicGen, where it runs afterwards on recordings. Kaiku does it live, from the hand stream, with physics and the safety filter deciding what counts.
+Redoing demonstrations in new scenes is known from MimicGen and DexMimicGen, where it runs afterwards on recordings. Kaiku does it live, from the hand stream, with physics and the safety filter deciding what counts. We measured the difference with our own MimicGen-style replay, on the same 16 demonstrations and the same 752 new tables. The replay kept 5 clean demonstrations and the echo kept 214. A policy trained with the replay's five sorted 8% of tables it had not seen. With the echoes, 73%.
 
 ## Deck line
 

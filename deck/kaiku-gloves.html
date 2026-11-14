@@ -37,6 +37,14 @@ h2 { font-size: 76px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 6
 .chart .value { font-size: 44px; font-weight: 600; fill: #f4f5f7; letter-spacing: -0.02em; }
 .chart .name { font-size: 28px; font-weight: 500; fill: #f4f5f7; }
 .chart .quiet { fill: #9a9da6; }
+.bars { margin-top: 84px; max-width: 1620px; }
+.bar { display: grid; grid-template-columns: 640px 1fr 150px; align-items: center; gap: 36px; padding: 26px 0; border-top: 1px solid #ffffff1f; }
+.bar .what { font-size: 34px; color: #b3b7c0; }
+.bar .track { height: 28px; }
+.bar .fill { display: block; height: 28px; min-width: 6px; border-radius: 0 4px 4px 0; background: #9a9da6; }
+.bar .fill.kaiku { background: oklch(0.82 0.17 152); }
+.bar b { font-size: 48px; font-weight: 600; letter-spacing: -0.02em; text-align: right; }
+.figure .kicker { margin-bottom: 24px; }
 .note { position: absolute; left: 150px; bottom: 60px; font-size: 22px; color: #9a9da6; margin: 0; }
 .link { font-size: 64px; letter-spacing: -0.025em; }
 </style><body>
@@ -67,7 +75,7 @@ h2 { font-size: 76px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 6
   </ol>
 </section>
 <section class="slide figure">
-  <h2>16 demonstrations: 0% alone, 81% with echoes.</h2>
+  <h2>16 demonstrations: under 1% alone, 81% with echoes.</h2>
   <p class="lede">32 with echoes beat 128 without. The operator wears the gloves a quarter of the time.</p>
   <svg class="chart" viewBox="0 0 1620 620" width="1620" height="620" role="img" aria-label="Share of new scenes sorted, by number of demonstrations, alone and with echoes">
 <line class="axis" x1="110" x2="1380" y1="520.0" y2="520.0"/>
@@ -102,11 +110,18 @@ h2 { font-size: 76px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 6
 <circle class="dot kaiku" cx="1168.3" cy="58.1" r="7"/>
 <circle class="dot kaiku" cx="1380.0" cy="54.9" r="7"/>
 <text class="value" x="719.0" y="131.72299999999996" text-anchor="end">81%</text>
-<text class="value quiet" x="719.0" y="492.355" text-anchor="end">0%</text>
+<text class="value quiet" x="719.0" y="492.355" text-anchor="end">under 1%</text>
 <text class="name" x="1416" y="50.88799999999998">with echoes</text>
 <text class="name quiet" x="1416" y="115.90800000000002">operator alone</text>
 </svg>
-  <p class="note">Share of 96 scenes nobody had seen in which every part ended in its own bin. Mean of 3 training runs.</p>
+  <p class="note">Share of 96 scenes nobody had seen in which every part ended in its own bin. Mean of 3 training runs. Other sets of 16 gave 0% to 31% alone.</p>
+</section>
+<section class="slide figure">
+  <p class="kicker">Against redoing it afterwards, from recordings</p>
+  <h2>Same 16 demonstrations: 8% or 73%.</h2>
+  <p class="lede">On the same 752 new tables a MimicGen-style replay kept 5 clean demonstrations. Kaiku's echo kept 214.</p>
+  <div class="bars"><div class="bar"><span class="what">The 16 demonstrations alone</span><span class="track"><i class="fill" style="width:9.0%"></i></span><b>9%</b></div><div class="bar"><span class="what">+ the 5 a MimicGen-style replay kept</span><span class="track"><i class="fill" style="width:8.0%"></i></span><b>8%</b></div><div class="bar"><span class="what">+ the 214 Kaiku's echo kept</span><span class="track"><i class="fill kaiku" style="width:72.9%"></i></span><b>73%</b></div></div>
+  <p class="note">Share of 96 held-out tables a policy sorted, 3 training runs each, same model and steps. The replay is our own implementation, not MimicGen's code.</p>
 </section>
 <section class="slide picture" style="background-image:linear-gradient(180deg,#0c0d10e6 0%,#0c0d1099 16%,#0c0d1000 30%),url(img/policy.jpg)">
   <div class="caption">
