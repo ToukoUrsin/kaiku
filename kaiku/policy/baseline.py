@@ -19,12 +19,13 @@ import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from kaiku.sim.scene import Layout, Placement, SHAPE_SYMMETRY, Scene
 
-if False:  # pragma: no cover - type checkers only; importing Session loads MuJoCo.
+if TYPE_CHECKING:  # importing Session at runtime loads MuJoCo.
     from kaiku.app.session import Session
     from kaiku.data.recorder import Recorder
 

@@ -1,7 +1,7 @@
 {
   "about": {
     "date": "2026-11-14",
-    "commit": "5ac9e44212449a4b807bd454544febbb6733e18b",
+    "commit": "f4c8e6b2a25d14a418c03147c99cdac186ae4143",
     "simulator": "MuJoCo twin, the same IK, shaper, safety filter and physics as Session",
     "source": "stand-in operator recordings in /bulk2/runs/robotteleop/policy/demos_snap",
     "status": "partial: generator and smoke measurement complete; the 32x47 generation and policy matrix were not run",
