@@ -209,6 +209,11 @@ export class Drive {
     const overlay = holder.querySelector('canvas');
     video.srcObject = stream;
     await video.play().catch(() => {});
+    // A phone held upright gives a tall picture, a laptop a wide one. The inset takes the picture's own
+    // shape, so none of it is cut away and the hand drawn over it is where the hand is.
+    if (video.videoWidth > 0 && video.videoHeight > 0) {
+      holder.style.setProperty('--cam-aspect', `${video.videoWidth} / ${video.videoHeight}`);
+    }
     this.camera = { stream, landmarker, video, overlay, holder, smooth: null, seen: 0, stamp: -1,
       world: null, right: true, depth: 0, scale0: null, scales: [] };
     holder.hidden = false;
@@ -328,25 +333,32 @@ export class Drive {
 
   draw(camera, hand) {
     const overlay = camera.overlay;
-    const w = overlay.width = overlay.clientWidth * devicePixelRatio;
-    const h = overlay.height = overlay.clientHeight * devicePixelRatio;
+    // the drawing covers the picture exactly: same box, in the screen's own pixels
+    const box = camera.video.getBoundingClientRect();
+    const w = Math.max(1, Math.round(box.width * devicePixelRatio));
+    const h = Math.max(1, Math.round(box.height * devicePixelRatio));
+    if (overlay.width !== w || overlay.height !== h) {
+      overlay.width = w;
+      overlay.height = h;
+    }
     const g = overlay.getContext('2d');
     g.clearRect(0, 0, w, h);
     camera.holder.toggleAttribute('data-lost', !hand);
     if (!hand) return;
+    const at = pictureToBox(camera.video.videoWidth, camera.video.videoHeight, w, h);
     const pinched = this.grip;
     g.lineWidth = 1.5 * devicePixelRatio;
     g.strokeStyle = pinched ? 'rgba(74, 222, 128, 0.95)' : 'rgba(255, 255, 255, 0.9)';
     g.fillStyle = g.strokeStyle;
     g.beginPath();
     for (const [a, b] of BONES) {
-      g.moveTo((1 - hand[a].x) * w, hand[a].y * h);        // mirrored, like the picture under it
-      g.lineTo((1 - hand[b].x) * w, hand[b].y * h);
+      g.moveTo(...at(hand[a]));
+      g.lineTo(...at(hand[b]));
     }
     g.stroke();
     for (const tip of [4, 8]) {
       g.beginPath();
-      g.arc((1 - hand[tip].x) * w, hand[tip].y * h, 3.5 * devicePixelRatio, 0, Math.PI * 2);
+      g.arc(...at(hand[tip]), 3.5 * devicePixelRatio, 0, Math.PI * 2);
       g.fill();
     }
     if (this.own) {
@@ -367,6 +379,20 @@ export function readHand(hand, wasPinched) {
   const length = Math.hypot(hand[9].x - hand[0].x, hand[9].y - hand[0].y) || 1e-6;
   const gap = Math.hypot(hand[8].x - hand[4].x, hand[8].y - hand[4].y) / length;
   return { x: 1 - palm.x, y: palm.y, gap, grip: wasPinched ? gap < PINCH_OFF : gap < PINCH_ON };
+}
+
+/**
+ * Where a point of the camera's picture (0..1 across it and down it) lands in a box that shows the picture
+ * mirrored and scaled to cover: the box keeps the picture's shape, so whatever does not fit is cut away
+ * evenly on both sides, and a point must move with it.
+ */
+export function pictureToBox(pictureW, pictureH, boxW, boxH) {
+  const scale = pictureW > 0 && pictureH > 0 ? Math.max(boxW / pictureW, boxH / pictureH) : 0;
+  const w = scale ? pictureW * scale : boxW;
+  const h = scale ? pictureH * scale : boxH;
+  const left = (boxW - w) / 2;
+  const top = (boxH - h) / 2;
+  return (point) => [left + (1 - point.x) * w, top + point.y * h];       // mirrored, like the picture under it
 }
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
