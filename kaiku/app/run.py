@@ -306,7 +306,8 @@ class Runner:
                             self._end_policy_episode(False) if self.mode == "policy" else self._end_episode(False)
                         self.hold_until = 0.0
                     elif value != self.mode:
-                        self.toast(f"{str(value).capitalize()} takes over at the next scene.", "info")
+                        who = "The operator" if value == "gloves" else "The autopilot"
+                        self.toast(f"{who} takes over at the next scene.", "info")
                 else:
                     self.toast(f"{str(value).capitalize()} mode is not connected in this build.", "warn")
             elif name == "calibrate":
