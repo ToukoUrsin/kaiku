@@ -40,6 +40,14 @@ const DRIVES = {
   policy: { name: 'A trained policy', panel: 'A trained policy. Nobody is driving', tag: 'Policy' },
 };
 const VISITORS = ['pointer', 'camera', 'glove-pointer', 'glove-camera', 'glove-coil'];
+// What a visitor drives with, for everybody else watching: "A visitor is driving, with a pointer."
+const WITH = {
+  pointer: 'with a pointer',
+  camera: 'with their hand, by camera',
+  'glove-pointer': 'with a Smartglove and a pointer',
+  'glove-camera': 'with a Smartglove and a camera',
+  'glove-coil': 'with a Smartglove on a Coil Pro',
+};
 const STAGE_TEXT = { loading: 'Reading the demonstrations', training: 'Training', testing: 'Testing on scenes it has not seen', done: 'Finishing' };
 const TOAST_MS = 4200;
 
@@ -283,10 +291,10 @@ export class Hud {
   /** Why this page's buttons do nothing right now, or null: the runner holds them, so they look held. */
   heldBy() {
     const operator = this.hud.operator || {};
-    if (this.hud.copy?.busy) return { why: 'comparison', text: 'Held until the comparison ends, in about a minute.' };
+    if (this.hud.copy?.busy) return { why: 'comparison', text: 'The comparison is running. Free again in about a minute.' };
     if (operator.driver != null && !this.driveLocal) {
-      const turn = Number.isFinite(operator.turn_left_s) ? `, for ${clock(operator.turn_left_s)} more at most` : '';
-      return { why: 'visitor', text: `Held while a visitor drives${turn}.` };
+      const turn = Number.isFinite(operator.turn_left_s) ? ` in ${clock(operator.turn_left_s)} at most` : ' when their turn ends';
+      return { why: 'visitor', text: `Somebody is driving. Free again${turn}.` };
     }
     return null;
   }
@@ -297,17 +305,23 @@ export class Hud {
 
   /** The comparison: its result stays in the panel, and is said once over the scene when both halves are in. */
   renderCompare() {
-    const last = this.hud.copy?.last;
-    this.show('compare', Boolean(last));
-    if (last) {
-      const robots = last.robots || 0;
-      const both = last.echo != null;
-      const share = (n) => `scaleX(${robots ? Math.min(1, Math.max(0, n / robots)) : 0})`;
-      this.text('compare-copy', `${last.copy} of ${robots}`);
-      this.text('compare-echo', both ? `${last.echo} of ${robots}` : 'Running now');
-      this.el['compare-copy-bar'].style.transform = share(last.copy);
-      this.el['compare-echo-bar'].style.transform = share(both ? last.echo : 0);
-      this.text('compare-when', !both ? '' : last.age_s < 90 ? 'Just now' : `${Math.round(last.age_s / 60)} min ago`);
+    const copy = this.hud.copy || {};
+    const last = copy.last;
+    // A comparison under way shows no older result: the half without Kaiku is running or next, and the
+    // last one's numbers are not this one's.
+    // (A result with no "with Kaiku" half yet is this comparison's own first half.)
+    const fresh = Boolean(copy.on || copy.next) && !(last && last.echo == null);
+    this.show('compare', Boolean(last) || fresh);
+    if (last || fresh) {
+      const robots = last?.robots || this.hud.echo?.robots || 0;
+      const copied = fresh ? null : last.copy;
+      const echoed = fresh ? null : last.echo;
+      const share = (n) => `scaleX(${robots && n != null ? Math.min(1, Math.max(0, n / robots)) : 0})`;
+      this.text('compare-copy', copied != null ? `${copied} of ${robots}` : copy.next ? 'Next' : 'Running now');
+      this.text('compare-echo', echoed != null ? `${echoed} of ${robots}` : copied != null ? 'Running now' : 'After it');
+      this.el['compare-copy-bar'].style.transform = share(copied);
+      this.el['compare-echo-bar'].style.transform = share(echoed);
+      this.text('compare-when', echoed == null ? '' : last.age_s < 90 ? 'Just now' : `${Math.round(last.age_s / 60)} min ago`);
       this.text('compare-note', `Tables sorted, of ${robots}. Without Kaiku every robot gets the operator's joint commands as they are.`);
     }
     if (!last || last.echo == null || last.age_s > 12 || this.compareSaid === last.at || 'opening' in this.app.dataset) return;
@@ -344,8 +358,12 @@ export class Hud {
   renderTopbar() {
     const { mode, perf } = this.hud;
     const held = Boolean(this.heldBy());
+    const why = held ? this.heldBy().text : '';
     for (const button of this.el.mode.children) {
       if (button.disabled !== held) button.disabled = held;
+      button.dataset.title ??= button.title;                      // what it does, said again when it is free
+      const title = held ? why : button.dataset.title;
+      if (button.title !== title) button.title = title;
       const checked = button.dataset.mode === (mode === 'visitor' ? 'gloves' : mode);     // a visitor is an operator too
       // Autopilot is a fallback for a glove session that lost its gloves, not a choice to offer.
       if (button.dataset.mode === 'autopilot') button.hidden = !checked;
@@ -360,12 +378,17 @@ export class Hud {
     const robots = echo.robots ?? Math.max(0, (this.nEnvs || 1) - 1);
     this.text('robots', String(robots));
 
+    // One way of counting everywhere: 1 robot driven, its echoes, and all of them together.
     // With the policy driving there is no operator: the page counts what the robots do alone.
     const alone = this.hud.mode === 'policy';
     const policy = this.hud.policy || {};
     const tally = policy.alone || {};
-    this.text('chain-count', alone ? '0' : '1');
-    this.text('chain-who', alone ? 'operators' : 'operator');
+    const first = alone && !tally.scenes;                 // the policy is still on its first round: nothing to count yet
+    this.text('chain-count', alone ? '' : '1');
+    this.attr('chain-count', 'hidden', alone);
+    this.text('chain-who', alone ? 'Nobody driving' : 'robot driven');
+    this.text('chain-them', alone ? 'robots' : 'echoes');
+    this.attr('demos', 'data-none', first);
 
     // While recording, the count is what is on disk: it carries on where the last session stopped.
     const session = (totals.human_demos || 0) + (totals.robot_demos || 0);
@@ -387,7 +410,7 @@ export class Hud {
       }
     }
     counter.goal = demos;
-    this.text('demos-label', alone ? 'new scenes sorted with nobody driving'
+    this.text('demos-label', first ? 'Driving its first scenes' : alone ? 'new scenes sorted with nobody driving'
       : dataset.recording ? 'demonstrations saved' : 'demonstrations');
 
     const labels = alone ? ['Scenes sorted alone', 'Learned from the operator', 'Learned from echoes']
@@ -398,8 +421,8 @@ export class Hud {
       this.text(`stat${i + 1}-label`, label);
       this.text(`stat${i + 1}-label-2`, short[i]);
     });
-    const share = tally.scenes ? tally.ok / tally.scenes : policy.success;
-    const amplification = alone ? (Number.isFinite(share) ? percent(share) : '0%')
+    // A share of no scenes is no number: none is shown until the first round has ended.
+    const amplification = alone ? (tally.scenes ? percent(tally.ok / tally.scenes) : 'Not yet')
       : Number.isFinite(totals.amplification) ? trim(totals.amplification) : '0';
     const yieldText = alone ? count(policy.humans || 0)
       : Number.isFinite(totals.yield) ? `${Math.round(totals.yield * 100)}%` : '0%';
@@ -429,7 +452,7 @@ export class Hud {
       ? `Nobody is driving. A policy trained on the demonstrations sorts ${robots} scenes it has never seen.`
       : this.hud.copy?.on
         ? `${who} The other ${robots} get the same joint commands, but their parts lie somewhere else.`
-      : `${who} ${robots} robots repeat every motion, each in its own scene.`
+      : `${who} ${robots} echoes repeat every motion, each on its own table.`
         + (this.flags.clean ? '' : ' The clean runs train a policy.'));
   }
 
@@ -536,13 +559,13 @@ export class Hud {
     const waiting = Boolean(this.driving?.waiting) && !taken;
     const turn = Number.isFinite(operator.turn_left_s) ? clock(operator.turn_left_s) : '';
     const busy = Boolean(this.hud.copy?.busy);                    // a comparison runs: the runner holds the turn
-    // a phone's stage has room for a few words beside the camera buttons
-    const ask = taken ? (this.phone.matches ? `In use${turn ? ` · ${turn}` : ''}` : `Somebody is driving${turn ? ` · free in ${turn}` : ''}`)
-      : waiting ? 'Starting' : 'Drive it yourself';
+    // Somebody else drives: this page may ask for the next turn, and then it is in line (the banner says the rest).
+    const place = this.place();
+    const ask = place === 0 ? 'You are next' : place > 0 ? 'In line' : taken ? 'Drive next' : waiting ? 'Starting' : 'Drive it yourself';
     for (const ref of ['drive-stage', 'drive-panel']) {
-      this.text(ref, ref === 'drive-panel' && taken ? 'Somebody is driving' : ask);
-      this.attr(ref, 'disabled', taken || waiting || busy);
-      this.attr(ref, 'title', busy ? 'Held until the comparison ends' : taken ? 'Somebody else has the robots for now' : null);
+      this.text(ref, ask);
+      this.attr(ref, 'disabled', place >= 0 || waiting || busy);
+      this.attr(ref, 'title', busy ? this.heldBy()?.text : taken && place < 0 ? 'Ask for the next turn. Watch until then.' : null);
       this.show(ref, !mine);
     }
     this.show('drive-tools', this.hud.mode !== 'policy' && !('opening' in this.app.dataset));
@@ -568,7 +591,11 @@ export class Hud {
     this.show('drive-own', Boolean(fingers) || camera || Boolean(this.driving?.own));
     this.text('drive-own', this.driving?.own ? 'Help me grasp' : 'Grasp it myself');
     this.attr('drive-own', 'aria-pressed', this.driving?.own ? 'true' : 'false');
-    this.text('drive-left', turn ? `${turn} left` : '');
+    // The clock the driver needs most: the scene's in its last 20 s (it is then replaced), else the turn's.
+    const sceneLeft = Number.isFinite(operator.scene_left_s) ? operator.scene_left_s : null;
+    const ending = sceneLeft != null && sceneLeft <= 20 && !operator.expired;
+    this.text('drive-left', ending ? `New scene in ${Math.max(1, Math.round(sceneLeft))} s` : turn ? `Your turn: ${turn}` : '');
+    this.attr('drive-left', 'data-warn', ending);
     const robots = this.hud.echo?.robots ?? 0;
     const failed = this.hud.echo?.failed ?? 0;
     const table = operator.table;
@@ -582,7 +609,7 @@ export class Hud {
     const now = closure ? `: index ${Math.round(closure.index * 10) * 10}% closed, middle ${Math.round(closure.middle * 10) * 10}%` : '';
     let more = own ? `${fingers === 'glove' ? 'The glove does' : 'Your fingers do'} the grasp${now}. The robot only turns its wrist${coil ? '' : ' and lifts'}.`
       : fingers ? `${whose} move${fingers === 'glove' ? 's' : ''} the robot's${now ? '' : ' fingers'}${now}. The grasp is assisted.`
-        : `${robots} robots redo every move on their own tables.`;
+        : `${robots} echoes redo every move on their own tables.`;
     if (phase === 'wait' || !table) {
       say = 'Your turn starts with the next scene';
     } else if (coil && !operator.placed) {
@@ -595,7 +622,7 @@ export class Hud {
         : near ? `${press}, then close your fingers` : 'Move over a part';
     } else if (settling) {
       say = 'Sorted';
-      more = `Now the ${robots} others finish theirs. Every one that gets it right is a demonstration.`;
+      more = `Now the ${robots} echoes finish theirs. Every one that gets it right is a demonstration.`;
     } else if (phase === 'pick') {
       say = camera || fingers === 'glove' ? 'Keep pinching' : 'Keep holding';
       more = 'The hand goes down and lifts it.';
@@ -609,9 +636,31 @@ export class Hud {
     } else {
       say = camera ? 'Move your hand over a part and pinch' : 'Press on a part and hold';
     }
-    if (failed > 0 && !settling) more = `${failed} of ${robots} robots could not follow that. The rest keep up with you.`;
+    if (failed > 0 && !settling) more = `${failed} of ${robots} echoes could not follow that. The rest keep up with you.`;
+    // What just went wrong, or what changed, comes before the next step.
+    const pinch = camera || fingers === 'glove' ? 'pinch' : 'press';
+    if (operator.expired) {
+      say = 'Time is up for this scene';
+      more = 'A new one is being dealt. Your turn goes on.';
+    } else if (operator.dropped && !held) {
+      say = 'It dropped';
+      more = own ? 'Move over it and grasp it again.' : `Let go, move over it and ${pinch} again.`;
+    } else if (operator.missed && !held && !settling) {
+      say = 'No part under the hand';
+      more = `Move over a part and ${pinch} again.`;
+    } else if (operator.dealt && phase !== 'wait') {
+      more = 'Time was up, so a new scene was dealt.';
+    } else if (operator.dealt) {
+      say = 'A new scene is coming';
+    }
     this.text('drive-say', say);
     this.text('drive-more', more);
+  }
+
+  /** Where this page is in line for the next turn: 0 is next, -1 is not in line. */
+  place() {
+    const queue = this.hud.operator?.queue;
+    return Array.isArray(queue) && this.client != null ? queue.indexOf(this.client) : -1;
   }
 
   onOwn() {
@@ -745,7 +794,8 @@ export class Hud {
       }
     }
     const robots = echo.robots ?? 0;
-    this.text('fleet-note', !robots ? '' : echo.done > 0 ? `${echo.ok ?? 0} of ${robots} sorted` : `${robots} working`);
+    const them = this.hud.mode === 'policy' ? 'robots' : 'echoes';
+    this.text('fleet-note', !robots ? '' : echo.done > 0 ? `${echo.ok ?? 0} of ${robots} ${them} sorted` : `${robots} ${them} working`);
     this.show('lag-pair', this.hud.mode !== 'policy');
     this.text('lag-mean', seconds(echo.lag_s));
     this.text('lag-max', seconds(echo.lag_max_s));
@@ -777,40 +827,29 @@ export class Hud {
     const key = `${state}:${curve.length}:${curve[curve.length - 1]?.kaiku}`;
     if (key !== this.chartKey) {
       this.chartKey = key;
-      // the point where the echoes change the most
-      let widest = null;
-      for (const point of curve) {
-        if (!Number.isFinite(point.kaiku) || !Number.isFinite(point.plain)) continue;
-        if (!widest || point.kaiku - point.plain > widest.kaiku - widest.plain) widest = point;
-      }
-      drawChart(this.el.chart, curve, widest?.demos);
+      const found = finding(curve);
+      const point = found?.point;
+      drawChart(this.el.chart, curve, point?.demos);
       this.show('chart-empty', curve.length === 0);
-      // the same finding where a visitor lands, a click away from the chart
-      this.show('headline', Boolean(widest));
-      if (widest) {
-        this.text('headline-top', `The study: trained on ${widest.demos} demonstrations`);
-        this.text('headline-main', `${cap(percent(widest.plain))} alone, ${percent(widest.kaiku)} with echoes`);
-        drawSpark(this.el['headline-spark'], curve, widest.demos);
-      }
-      const best = curve[curve.length - 1];
-      const at = Number.isFinite(best?.demos) && curve.length > 1 ? ` at ${best.demos}` : '';
-      this.text('policy-kaiku', Number.isFinite(best?.kaiku) ? `${percent(best.kaiku)}${at}` : '');
-      this.text('policy-plain', Number.isFinite(best?.plain) ? `${percent(best.plain)}${at}` : '');
-      this.show('finding', Boolean(widest));
-      if (widest) {
-        // ... and the fewest demonstrations that, echoed, beat the most the operator gave alone
-        const most = curve[curve.length - 1];
-        const enough = curve.find((point) => point.kaiku > most.plain && point.demos < most.demos);
-        this.text('finding', `From ${widest.demos} demonstrations by the operator: `
-          + `${percent(widest.plain)} alone${spread(widest.plain_runs)}, `
-          + `${percent(widest.kaiku)} with echoes${spread(widest.kaiku_runs)}.`
-          + (enough ? ` ${enough.demos} with echoes beat ${most.demos} without.` : ''));
+      // the study's one result, where a visitor lands and at the top of the Policy tab
+      this.show('headline', Boolean(point));
+      this.show('claim', Boolean(point));
+      if (point) {
+        const both = `${cap(percent(point.plain))} alone, ${percent(point.kaiku)} with echoes`;
+        const beat = found.beats ? `${point.demos} with echoes beat ${found.beats.demos} without` : '';
+        this.text('headline-top', `The study, ${point.demos} demonstrations`);
+        this.text('headline-main', both);
+        this.text('headline-tail', beat);
+        drawSpark(this.el['headline-spark'], curve, point.demos);
+        this.text('claim-top', `Trained on ${point.demos} demonstrations by the operator`);
+        this.text('claim-main', both);
+        this.text('claim-more', beat ? `${beat}, ${percent(found.beats.plain)}.` : '');
       }
       this.show('study-note', Boolean(study?.runs && study?.scenes));
       if (study?.runs && study?.scenes) {
-        const ranged = curve.some((point) => Array.isArray(point.plain_runs));
-        this.text('study-note', `Each point is the mean of ${study.runs} training runs, tested on ${study.scenes} scenes neither policy had seen.`
-          + (ranged ? ' The pale bars run from the lowest run to the highest.' : ''));
+        const ranged = curve.some((p) => Array.isArray(p.plain_runs));
+        this.text('study-note', `Each point: the mean of ${study.runs} training runs, tested on ${study.scenes} scenes neither policy had seen.`
+          + (ranged ? ' The pale bars: lowest run to highest.' : ''));
       }
     }
     this.show('policy-badge', Boolean(policy?.sample));
@@ -824,51 +863,60 @@ export class Hud {
     if (has) {
       this.text('drive', driving ? 'Take back control' : 'Let it drive');
       this.attr('drive', 'disabled', Boolean(held));
-      this.text('drive-note', driving
-        ? 'It is driving every robot now. Nobody is wearing gloves.'
-        : 'Hand every robot to the policy. Each one gets a scene it has never seen.');
+      this.attr('drive', 'title', held ? held.text : null);
+      this.show('drive-note', Boolean(held));
+      if (held) this.text('drive-note', held.text);
       const echoes = Math.max(0, (policy.demos || 0) - (policy.humans || 0));
-      // Which policy this is, so its numbers are not taken for the study's.
-      this.text('policy-origin', policy.origin === 'session' ? 'Trained in this session'
-        : policy.origin === 'shipped' ? 'Shipped with Kaiku' : policy.origin === 'file' ? 'A policy file' : 'This session');
-      this.text('policy-data', Number.isFinite(policy.humans)
-        ? `${count(policy.humans)} by the operator, ${count(echoes)} echoes` : 'Demonstrations from this session');
-      this.text('policy-test', `${percent(success)} of ${policy.tested_on || 0} new scenes`);
-      this.text('policy-alone', Number.isFinite(policy.plain) ? percent(policy.plain) : 'Not trained');
+      // Which policy this is, in a few words, so its numbers are not taken for the study's.
+      const origin = policy.origin === 'session' ? 'Trained in this session' : policy.origin === 'file' ? 'From a file'
+        : 'Shipped with Kaiku';
+      this.text('policy-about', `${origin}: one training run`
+        + (Number.isFinite(policy.humans) ? ` on ${count(policy.humans)} demonstrations and their ${count(echoes)} echoes.` : '.'));
+      this.text('policy-test', `${percent(success)} of ${count(policy.tested_on || 0)} new scenes`);
+      // A share of nothing is no number: until a round has ended, it is driving its first scenes.
       const tally = policy.alone || {};
-      this.text('policy-here', tally.scenes ? `${count(tally.ok)} of ${count(tally.scenes)} scenes sorted` : 'Not run yet');
-      this.show('policy-which', Boolean(study?.runs && study?.scenes));
-      if (study?.runs && study?.scenes) {
-        this.text('policy-which', `One policy from one training run, tested once. The study above is ${study.runs} runs `
-          + `at every size on ${study.scenes} scenes, so its numbers are not these.`);
-      }
+      this.text('policy-here', tally.scenes ? `${count(tally.ok)} of ${count(tally.scenes)} sorted`
+        : driving ? 'Its first scenes, now' : 'Not yet');
     }
 
     const training = state === 'training';
     const progress = Math.min(1, Math.max(0, policy?.progress || 0));
     this.show('train-meter', training);
     if (training) this.el['train-fill'].style.transform = `scaleX(${progress})`;
-    this.attr('train', 'disabled', training || held?.why === 'visitor');
+    const trainHeld = !training && held?.why === 'visitor' ? held : null;
+    this.attr('train', 'disabled', training || Boolean(trainHeld));
+    this.attr('train', 'title', trainHeld ? trainHeld.text : null);
     this.text('train', training ? 'Training' : 'Train both');
-    const eta = Number.isFinite(policy?.eta_s) && policy.eta_s > 0 ? ` About ${left(policy.eta_s)} left.` : '';
+    const eta = this.etaLeft(policy);
+    const time = eta != null ? ` About ${left(eta)} left.` : '';
     const long = takes(policy);
     const trained = policy?.trained;
+    const last = Number.isFinite(policy?.last) ? ` ${policy.last}` : '';
     this.text('train-note', training
-      ? `${STAGE_TEXT[policy.stage] || 'Training'}, ${where(policy)}: ${Math.round(progress * 100)}%.${eta}`
-        + (eta || !long ? '' : ` A run takes ${long}.`)
+      ? `${STAGE_TEXT[policy.stage] || 'Training'}, ${where(policy)}: ${Math.round(progress * 100)}%.${time}`
       : policy?.error ? policy.error
-        : 'Trains two policies on the last 16 demonstrations of this session, one with their echoes and one without, '
-          + `then tests both on 48 scenes neither has seen.${long ? ` Takes ${long}.` : ''}`);
+        : trainHeld ? trainHeld.text
+          : `Two policies from the last${last} demonstrations here, with and without their echoes.${long ? ` Takes ${long}.` : ''}`);
     // What the last run here came to, kept apart from the study: other demonstrations, fewer test scenes, one run.
     this.show('train-last', Boolean(trained) && !training);
     if (trained && !training) {
-      const minutes = Number.isFinite(trained.minutes) && trained.minutes >= 1 ? `, in ${Math.round(trained.minutes)} minutes` : '';
-      this.text('train-last', `This session's last training: ${trained.humans || 0} demonstrations, `
-        + `tested on ${trained.scenes || 0} new scenes, one run${minutes}. `
-        + `${cap(percent(trained.kaiku))} with echoes, ${percent(trained.plain)} alone.`
-        + (trained.in_use ? '' : ' The policy that was already here sorts more, so it keeps driving.')
-        + (study?.runs && study?.scenes ? ` The study is ${study.runs} runs on ${study.scenes} scenes.` : ''));
+      this.text('train-last', `Last run here: ${percent(trained.kaiku)} with echoes, ${percent(trained.plain)} alone, `
+        + `from ${trained.humans || 0} demonstrations, on ${trained.scenes || 0} test scenes.`
+        + (trained.in_use ? '' : ' The policy already here sorts more, so it keeps driving.'));
     }
+  }
+
+  /** The training time left, as the runner says it, never more than what was already shown: a clock that
+   *  goes up reads as a broken promise. A new run starts its own count. */
+  etaLeft(policy) {
+    if (policy?.state !== 'training') {
+      this.etaShown = null;
+      return null;
+    }
+    const eta = Number.isFinite(policy.eta_s) && policy.eta_s > 0 ? policy.eta_s : null;
+    if (eta == null) return this.etaShown;
+    this.etaShown = this.etaShown == null ? eta : Math.min(this.etaShown, eta);
+    return this.etaShown;
   }
 
   /** The measured comparison with replayed demonstrations: three ways to train from the same few. */
@@ -937,6 +985,9 @@ export class Hud {
     const held = this.heldBy();
     this.attr('pause', 'disabled', Boolean(held) && !paused);     // resuming is never held
     this.attr('next', 'disabled', Boolean(held));
+    this.attr('pause', 'title', held && !paused ? held.text : null);
+    this.attr('next', 'title', held ? held.text : null);
+    this.attr('parts', 'title', held ? held.text : null);
     for (const button of this.el.parts.children) if (button.disabled !== Boolean(held)) button.disabled = Boolean(held);
     this.show('held', Boolean(held));
     if (held) this.text('held', held.text);
@@ -970,10 +1021,21 @@ export class Hud {
           ? `With Kaiku, ${hud.echo.ok ?? 0} of ${hud.echo.robots} robots sorted their table. Without: ${without}`
           : `The same tables, Kaiku on. Without it: ${without} of ${robots}`,
       };
+    } else if (operator?.driver != null && !this.driveLocal) {
+      const drive = this.drive();
+      const what = WITH[drive];
+      const turn = Number.isFinite(operator.turn_left_s) ? ` ${clock(operator.turn_left_s)} left.` : '';
+      const place = this.place();
+      banner = {
+        level: 'info',
+        text: (operator.starting || !what ? 'A visitor takes over with the next scene.' : `A visitor is driving, ${what}.${turn}`)
+          + (place === 0 ? ' You are next. Watch meanwhile.' : place > 0 ? ' You are in line. Watch meanwhile.' : ''),
+      };
     } else if (hud.policy?.state === 'training') {
       // Training takes minutes and its panel is two clicks away: say it where everybody looks.
-      const { progress = 0, eta_s: eta } = hud.policy;
-      const time = Number.isFinite(eta) && eta > 0 ? `, about ${left(eta)} left` : '';
+      const { progress = 0 } = hud.policy;
+      const eta = this.etaShown;                           // the panel's number: held, never going up
+      const time = eta != null ? `, about ${left(eta)} left` : '';
       // Somebody driving has the table to look at: one short line, and nothing to press by mistake.
       banner = this.driveLocal
         ? { level: 'info', text: `Training ${Math.round(progress * 100)}%${time}` }
@@ -1008,6 +1070,19 @@ export class Hud {
     this.text('banner-text', banner.text);
     this.show('banner-action', Boolean(banner.action));
     if (banner.action) this.text('banner-action', banner.action);
+    this.fitBanner();
+  }
+
+  // A long line at the top of a laptop stage would run under the camera buttons: it then sits just below them.
+  fitBanner() {
+    const banner = this.el.banner;
+    const tools = banner.parentElement.querySelector('.stage-tools');
+    const key = `${this.el['banner-text'].textContent}|${this.el['banner-action'].hidden}|${innerWidth}|${tools.offsetWidth}`;
+    if (this.bannerKey === key) return;
+    this.bannerKey = key;
+    delete banner.dataset.low;
+    if (innerWidth <= 760 || !tools.offsetWidth) return;
+    if (banner.getBoundingClientRect().left < tools.getBoundingClientRect().right + 12) banner.dataset.low = '';
   }
 
   // ------------------------------------------------------------------ camera and focus
@@ -1108,12 +1183,15 @@ export class Hud {
         : name === 'camera' ? 'One hand.'
           : name?.startsWith('glove-') ? 'One glove.'
             : name === 'autopilot' ? 'One script.' : 'One operator.';
-    return [first, `${one} ${robots} robots.`, 'Every table is different.', `Do it once. Robots learn from ${robots}.`];
+    // robots is every robot on the stage: the one driven and its echoes
+    return [first, `${one} ${robots - 1} echoes.`, 'Every table is different.', `Do it once. Get ${robots} demonstrations.`];
   }
 
-  toast(text, level = 'info') {
+  toast(text, level = 'info', key = null) {
     if (!text) return;
     const list = this.el.toasts;
+    // a newer word on the same thing (the visitor's turn) replaces the older one: never both at once
+    if (key) for (const item of [...list.children]) if (item.dataset.key === key && item.textContent !== text) item.remove();
     // the same message again only restarts its clock
     const same = [...list.children].find((item) => item.textContent === text && !item.dataset.leaving);
     if (same) {
@@ -1124,6 +1202,7 @@ export class Hud {
     const item = document.createElement('div');
     item.className = 'toast';
     item.dataset.level = level;
+    if (key) item.dataset.key = key;
     item.textContent = text;
     list.append(item);
     while (list.children.length > MAX_TOASTS) list.firstChild.remove();
@@ -1145,13 +1224,20 @@ function cap(text) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** The spread of a result across its training runs, said only when it is wide: ", 40 to 71% across 3 runs". */
-function spread(runs) {
-  if (!Array.isArray(runs) || runs.length < 2) return '';
-  const low = Math.min(...runs);
-  const high = Math.max(...runs);
-  if (!(high - low >= 0.1)) return '';
-  return ` (${Math.round(low * 100)} to ${Math.round(high * 100)}% across ${runs.length} runs)`;
+/**
+ * The study's one result: the fewest demonstrations that, with their echoes, beat the most the operator gave
+ * alone (32 with echoes beat 128 without). A curve where none does leads with the widest gap instead.
+ * @returns {{point: object, beats: object | null} | null}
+ */
+export function finding(curve) {
+  const points = curve.filter((p) => Number.isFinite(p?.demos) && Number.isFinite(p.kaiku) && Number.isFinite(p.plain))
+    .sort((a, b) => a.demos - b.demos);
+  if (!points.length) return null;
+  const most = points[points.length - 1];
+  const enough = points.find((p) => p.demos < most.demos && p.kaiku > most.plain);
+  if (enough) return { point: enough, beats: most };
+  const widest = points.reduce((a, b) => (b.kaiku - b.plain > a.kaiku - a.plain ? b : a));
+  return { point: widest, beats: null };
 }
 
 /** How fast the simulation runs against a clock, when it is not real time: "0.8× real time". */
