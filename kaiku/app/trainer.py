@@ -7,6 +7,7 @@ into the live container.  Both backends speak the same ``KAIKU {json}`` stdout p
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import signal
@@ -18,6 +19,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WHICH = ("kaiku", "plain")
+SMOOTH_S = 45.0                      # how slowly the time left may change its mind
 MODAL_ABOUT_MIN = 4.0                # what a run on rented GPUs takes, start to result
 MODAL_RUNS = int(os.environ.get("KAIKU_MODAL_RUNS", "40"))     # rented runs a demo may start; after that it trains here
 
@@ -29,8 +31,23 @@ class Trainer:
         self.out = Path(out)
         self.backend, self.steps, self.scenes = backend, steps, scenes
         self.last = last                     # the operator's latest episodes: few enough that the echoes decide it
-        self.about_min = about_min           # what the page may say a run takes here, when somebody has measured it
-        self.marks: list[tuple[float, float]] = []      # (time, progress) of the run, to say how long is left
+        self.clock = time.monotonic          # a test hands in its own
+        # What the page may say a run takes: what somebody measured (--train-about), or else what the
+        # last run took. This machine and rented GPUs are timed apart: one is six times the other.
+        self.about_min = about_min
+        self.rented_min = MODAL_ABOUT_MIN
+        try:
+            timed = json.loads((self.out / "timing.json").read_text())
+            if about_min is None and timed.get("minutes"):
+                self.about_min = float(timed["minutes"])
+            if timed.get("rented_minutes"):
+                self.rented_min = float(timed["rented_minutes"])
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
+        self.started = 0.0                   # when the run began
+        self.total_s: float | None = None    # how long the whole run looks like taking
+        self.total_at = 0.0                  # ... as of when
+        self.took_s: float | None = None     # how long the last finished run took
         self.proc: subprocess.Popen | None = None
         self.lock = threading.Lock()
         self.jobs: dict[str, dict] = {}
@@ -55,10 +72,16 @@ class Trainer:
             return MODAL_RUNS
 
     @property
+    def rented(self) -> bool:
+        """Whether the next run (or the one in hand) trains on rented GPUs rather than on this machine."""
+        if self.busy or (self.jobs and not self.finished):
+            return self.using == "modal"
+        return self.backend == "modal" and self._rented_left() > 0
+
+    @property
     def about(self) -> float | None:
         """Minutes the next run (or the one in hand) takes, for the page to say."""
-        rented = self.using == "modal" if self.busy else self.backend == "modal" and self._rented_left() > 0
-        return MODAL_ABOUT_MIN if rented else self.about_min
+        return self.rented_min if self.rented else self.about_min
 
     def start(self) -> bool:
         if self.busy or self.data is None or (self.jobs and not self.finished):
@@ -92,7 +115,7 @@ class Trainer:
         with self.lock:
             self.jobs = {w: {"stage": "loading", "progress": 0.0} for w in WHICH}
             self.error, self.finished, self.fresh = None, False, False
-            self.marks = []
+            self.started, self.total_s, self.took_s = self.clock(), None, None
         self.proc = subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                                      start_new_session=True)
         threading.Thread(target=self._read, args=(self.proc,), daemon=True, name="kaiku-trainer").start()
@@ -114,9 +137,6 @@ class Trainer:
                     self.error = str(m.get("text", "Training failed."))
                 elif m.get("which") in self.jobs:
                     self.jobs[m["which"]].update(m)
-                    self.marks.append((time.monotonic(), sum(j.get("progress", 0.0) for j in self.jobs.values())
-                                       / len(self.jobs)))
-                    del self.marks[:-600]
         code = proc.wait()
         with self.lock:
             done = all(j.get("stage") == "done" for j in self.jobs.values())
@@ -129,26 +149,72 @@ class Trainer:
         with self.lock:
             if not done and self.error is None:
                 self.error = f"Training stopped ({last[-160:] or f'exit code {code}'})."
+            if done and self.error is None:
+                self._measured(self.clock() - self.started)
             self.finished = self.fresh = True
+
+    def _measured(self, seconds: float) -> None:
+        """A whole run took this long where it ran: the next visitor is told so before pressing Train."""
+        self.took_s = seconds
+        if seconds < 30.0:                   # nothing trains that fast: not a time to promise anybody
+            return
+        if self.using == "modal":
+            self.rented_min = round(seconds / 60.0, 1)
+        else:
+            self.about_min = round(seconds / 60.0, 1)
+        try:
+            (self.out / "timing.json").write_text(json.dumps({"minutes": self.about_min, "rented_minutes": self.rented_min,
+                                                               "steps": self.steps}))
+        except OSError:
+            pass
+
+    def _left(self, progress: float) -> float | None:
+        """Seconds still to go, or None while there is nothing honest to say.
+
+        The whole run is taken to last what was measured before where it runs (this machine, or rented
+        GPUs), and the further it gets the more
+        its own pace counts instead: elapsed time over the share done. That never jumps the way the
+        pace of the last minute does (reading files, training and testing each go at their own). What
+        is said then changes its mind slowly, so the time left drifts and does not leap."""
+        now = self.clock()
+        elapsed = now - self.started
+        about = self.rented_min if self.using == "modal" else self.about_min
+        prior = about * 60.0 if about else None
+        if progress >= 0.05 and elapsed >= 20.0:
+            own = elapsed / progress
+            if prior is None:
+                total = own
+            else:
+                # A run going slower than it was said to is believed sooner: the clock already shows it.
+                # One that looks faster is not, since the first stretch (reading files) always is.
+                weight = progress if own <= prior else min(1.0, progress * (1.0 + 3.0 * math.log(own / prior)))
+                total = (1.0 - weight) * prior + weight * own
+        elif prior is not None:
+            total = prior
+        else:
+            return None
+        if self.total_s is None:
+            self.total_s = total
+        else:
+            self.total_s += (total - self.total_s) * (1.0 - math.exp(-(now - self.total_at) / SMOOTH_S))
+        self.total_at = now
+        return max(0.0, self.total_s - elapsed)
 
     def status(self) -> dict:
         """Where the training is: ``state`` idle, training, done or failed, and the two jobs."""
         with self.lock:
             jobs = {w: dict(j) for w, j in self.jobs.items()}
             error, finished = self.error, self.finished
-            marks = self.marks[-300:]
-        if not jobs:
-            return {"state": "idle"}
-        state = "failed" if error else ("done" if finished else "training")
+            if not jobs:
+                return {"state": "idle"}
+            state = "failed" if error else ("done" if finished else "training")
+            progress = sum(j.get("progress", 0.0) for j in jobs.values()) / len(jobs)
+            eta = self._left(progress) if state == "training" else None
+            took = self.took_s
         k = jobs["kaiku"]
-        # What is left, from how fast the last stretch went. Reading the files and training do not go
-        # at the same pace, so nothing is said until the pace has been steady for a while.
-        eta = None
-        if len(marks) > 20 and marks[-1][1] > marks[0][1] + 0.01:
-            (t0, p0), (t1, p1) = marks[0], marks[-1]
-            eta = round((1.0 - p1) * (t1 - t0) / (p1 - p0))
-        return {"state": state, "error": error, "stage": k.get("stage"), "loss": k.get("loss"), "eta_s": eta,
-                "progress": round(sum(j.get("progress", 0.0) for j in jobs.values()) / len(jobs), 4), "jobs": jobs}
+        return {"state": state, "error": error, "stage": k.get("stage"), "loss": k.get("loss"),
+                "eta_s": None if eta is None else round(eta), "took_s": None if took is None else round(took),
+                "progress": round(progress, 4), "jobs": jobs}
 
     def close(self) -> None:
         self.closed = True

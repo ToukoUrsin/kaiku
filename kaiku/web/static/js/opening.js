@@ -24,18 +24,28 @@ export function wantsOpening(flags) {
  * @param {object} o.wide          the shot that shows every robot
  * @param {() => string[]} o.words four lines: on the hands, on every robot, what makes it more than a copy, why it matters
  * @param {() => void} o.rest      puts the camera where the page normally starts
+ * @returns {{refresh: () => void}} `refresh` says the line on screen again from `words()`: who drives can
+ *   change while a line is up (a visitor's turn starts), and the line must not go on saying who drove before
  */
 export function playOpening({ app, line, rig, wide, words, rest }) {
   const timers = [];
   let over = false;
+  let showing = -1;                 // which of the lines is up, or -1
   const at = (seconds, run) => timers.push(setTimeout(run, seconds * 1000));
-  const say = (text) => {
+  const say = (index) => {
     line.removeAttribute('data-show');
-    if (!text) return;
+    showing = -1;
+    if (index < 0) return;
     timers.push(setTimeout(() => {
-      line.textContent = text;
+      line.textContent = words()[index];
       line.setAttribute('data-show', '');
+      showing = index;
     }, 280));
+  };
+  const refresh = () => {
+    if (over || showing < 0) return;
+    const text = words()[showing];
+    if (text && line.textContent !== text) line.textContent = text;
   };
   const end = () => {
     if (over) return;
@@ -49,13 +59,14 @@ export function playOpening({ app, line, rig, wide, words, rest }) {
   for (const name of ['pointerdown', 'keydown', 'wheel']) window.addEventListener(name, end, { capture: true, passive: true });
 
   app.setAttribute('data-opening', '');
-  at(0.5, () => say(words()[0]));
+  at(0.5, () => say(0));
   at(3.2, () => {
-    say('');
+    say(-1);
     rig.look(wide, 2.4);              // the pull-back is the point: let it take its time
   });
-  at(4.0, () => say(words()[1]));
-  at(7.4, () => say(words()[2]));
-  at(10.6, () => say(words()[3]));
+  at(4.0, () => say(1));
+  at(7.4, () => say(2));
+  at(10.6, () => say(3));
   at(14.0, end);
+  return { refresh };
 }

@@ -255,6 +255,12 @@ kbd {
   box-shadow: 0 1px 2px oklch(0 0 0 / 0.35), inset 0 1px 0 oklch(1 0 0 / 0.06);
 }
 
+.segmented button:disabled {
+  opacity: 0.45;
+  color: var(--text-2);
+  cursor: default;
+}
+
 .segmented button[data-pending] {
   color: var(--text);
   background: oklch(1 0 0 / 0.05);
@@ -501,7 +507,7 @@ a.button {
 }
 
 .drive-say {
-  color: var(--text-1);
+  color: var(--text);
   font-size: 28px;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -527,8 +533,13 @@ a.button {
 
 .drive-left {
   margin-left: var(--s-2);
-  color: var(--text-3);
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(8, 9, 12, 0.62);      /* the tables behind it are white */
+  color: var(--text);
   font-size: var(--t-12);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .hand-cam {
@@ -538,8 +549,8 @@ a.button {
   z-index: 3;
   width: 220px;
   overflow: hidden;
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-3);
+  border-radius: var(--radius-l);
+  box-shadow: 0 0 0 1px var(--line-strong), var(--shadow-pop);
   background: #000;
 }
 
@@ -547,7 +558,7 @@ a.button {
 .hand-cam canvas {
   display: block;
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: var(--cam-aspect, 4 / 3);
 }
 
 .hand-cam video {
@@ -559,6 +570,7 @@ a.button {
 .hand-cam canvas {
   position: absolute;
   inset: 0 0 auto;
+  pointer-events: none;
 }
 
 .hand-cam p {
@@ -569,7 +581,7 @@ a.button {
 
 .hand-cam[data-lost] p::before {
   content: 'No hand in the picture. ';
-  color: var(--text-1);
+  color: var(--text);
 }
 
 /* While somebody drives from this page the table is theirs: the totals and the camera buttons step back. */
@@ -579,6 +591,21 @@ a.button {
 .app[data-driving] .tag {
   opacity: 0;
   pointer-events: none;
+}
+
+/* The top of the stage is the driver's: the words that say what to do next. Anything else waits below them. */
+.app[data-driving] .banner {
+  top: auto;
+  bottom: var(--s-5);
+  animation: none;
+}
+
+.app[data-driving] .toasts {
+  right: auto;
+  left: 50%;
+  bottom: calc(var(--s-5) + 44px);
+  align-items: center;
+  transform: translateX(-50%);
 }
 
 .app[data-driving] #view {
@@ -673,6 +700,15 @@ a.button {
   font-size: var(--t-20);
   font-weight: 600;
   letter-spacing: -0.02em;
+}
+
+/* "47.6 of 48": the number, and what it is out of */
+.story-stats dd small,
+.phone-stats dd small {
+  color: var(--text-3);
+  font-size: var(--t-12);
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .caption {
@@ -884,17 +920,17 @@ a.button {
   font-size: var(--t-11);
 }
 
+/* Above the two buttons, on the side the totals and their caption leave free. */
 .toasts {
   position: absolute;
-  left: 50%;
-  bottom: var(--s-6);
+  right: var(--s-5);
+  bottom: calc(var(--s-6) + 52px);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--s-2);
   width: max-content;
   max-width: min(420px, calc(100% - 32px));
-  transform: translateX(-50%);
   pointer-events: none;
 }
 
@@ -953,13 +989,47 @@ a.button {
 .veil-box {
   display: grid;
   justify-items: center;
-  width: 260px;
+  width: min(300px, calc(100% - 48px));
 }
 
 .veil-mark {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   stroke-width: 1.6;
+}
+
+/* the mark is an echo: while the page loads, it travels outward */
+.veil-mark path {
+  opacity: 0.22;
+  animation: echo 1.6s ease-out infinite;
+}
+
+.veil-mark path:nth-of-type(2) {
+  animation-delay: 0.16s;
+}
+
+.veil-mark path:nth-of-type(3) {
+  animation-delay: 0.32s;
+}
+
+.veil[data-done] .veil-mark path,
+.veil[data-error] .veil-mark path {
+  animation: none;
+}
+
+@keyframes echo {
+  0% { opacity: 0.22; }
+  22% { opacity: 1; }
+  70%, 100% { opacity: 0.22; }
+}
+
+.veil-what {
+  margin-top: var(--s-3);
+  color: var(--text-2);
+  font-size: var(--t-13);
+  line-height: 1.45;
+  text-align: center;
+  text-wrap: balance;
 }
 
 .veil-name {
@@ -987,12 +1057,29 @@ a.button {
   transition: transform 500ms var(--ease-out);
 }
 
+/* before the page's code has arrived there is no progress to show: the bar says only that it is alive */
+.veil:not([data-known]):not([data-error]) .veil-bar span {
+  width: 34%;
+  transform: none;
+  animation: slide 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes slide {
+  from { translate: -10% 0; }
+  to { translate: 204% 0; }
+}
+
 .veil-step {
   margin-top: var(--s-3);
   color: var(--text-2);
   font-size: var(--t-12);
   text-align: center;
   text-wrap: balance;
+}
+
+.veil-step .num {
+  margin-left: 4px;
+  color: var(--text-3);
 }
 
 .veil[data-error] .veil-bar span {
@@ -1526,6 +1613,20 @@ a.button {
   fill: var(--text-3);
 }
 
+.chart .runs {
+  stroke-width: 5;
+  stroke-linecap: round;
+  opacity: 0.3;
+}
+
+.chart .runs-kaiku {
+  stroke: var(--ok);
+}
+
+.chart .runs-plain {
+  stroke: var(--text-2);
+}
+
 .chart .gap {
   stroke: var(--ok);
   stroke-width: 1;
@@ -1609,6 +1710,73 @@ a.button {
   background: var(--ok);
 }
 
+/* A few results side by side: a name, its number, and a bar as long as the number. */
+.bars {
+  display: grid;
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+}
+
+.bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 6px var(--s-3);
+}
+
+.bar-name {
+  color: var(--text-2);
+}
+
+.bar b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.bar-track {
+  position: relative;
+  grid-column: 1 / -1;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--surface-active);
+}
+
+.bar-track > i:first-child {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--text-3);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 700ms var(--ease-out);
+}
+
+.bar-kaiku .bar-track > i:first-child {
+  background: var(--ok);
+}
+
+/* from the lowest training run to the highest */
+.bar-range {
+  position: absolute;
+  top: 2px;
+  height: 2px;
+  min-width: 2px;
+  border-radius: 1px;
+  background: var(--text);
+}
+
+.bar-spread {
+  grid-column: 1 / -1;
+  margin-top: -2px;
+  color: var(--text-3);
+  font-size: var(--t-12);
+}
+
+.compare .note {
+  margin-top: var(--s-3);
+}
+
 .swatch-plain {
   background: var(--text-3);
 }
@@ -1631,6 +1799,7 @@ a.button {
 
 .controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--s-2);
   padding: var(--s-3) var(--s-3) calc(var(--s-3) + env(safe-area-inset-bottom));
@@ -1640,6 +1809,29 @@ a.button {
 
 .controls .segmented {
   margin-left: auto;
+}
+
+/* why the buttons under it do nothing for now */
+.held {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-basis: 100%;
+  color: var(--text-2);
+  font-size: var(--t-12);
+}
+
+.held::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--text-3);
+}
+
+.held[hidden] {
+  display: none;
 }
 
 .phone-stats {
@@ -1829,6 +2021,21 @@ a.button {
     font-size: 22px;
   }
 
+  /* three buttons and the clock do not fit across a phone: the clock goes under them */
+  .drive-row {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .drive-row .button {
+    padding: 0 10px;
+  }
+
+  .drive-left {
+    margin-left: 0;
+  }
+
   .hand-cam {
     right: var(--s-3);
     bottom: var(--s-3);
@@ -1837,6 +2044,19 @@ a.button {
 
   .hand-cam p {
     display: none;
+  }
+
+  /* driving on a phone: what else there is to say sits in the corner the camera inset leaves free */
+  .app[data-driving] .banner {
+    left: var(--s-3);
+    bottom: var(--s-3);
+    max-width: calc(100% - 132px - 3 * var(--s-3));
+    transform: none;
+  }
+
+  .app[data-driving] .toasts {
+    top: auto;
+    bottom: calc(var(--s-3) + 64px);       /* clear of a banner two lines high */
   }
 
   .stage-tools kbd,
@@ -1925,7 +2145,11 @@ a.button {
 
   .toasts {
     top: 92px;
+    right: auto;
     bottom: auto;
+    left: 50%;
+    align-items: center;
+    transform: translateX(-50%);
   }
 
   .panel {

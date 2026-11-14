@@ -45,7 +45,39 @@ export function previewHud(hud, name) {
       d.dataset = { episodes: 0, frames: 0, path: '', recording: false };
       break;
     case 'training':
-      d.policy = { state: 'training', progress: 0.42, loss: 0.0631, success: null, curve: SAMPLE_CURVE.slice(0, 2), sample: true };
+      // a run a third of the way through, with the time left as the runner would say it
+      d.policy = {
+        ...d.policy, state: 'training', stage: 'training', progress: 0.36, loss: 0.0631, last: 16,
+        about_min: d.policy?.about_min ?? 25, eta_s: Math.round((d.policy?.about_min ?? 25) * 60 * 0.64),
+      };
+      break;
+    case 'trained':
+      // a Train run that ended ten minutes ago
+      d.policy = {
+        ...d.policy,
+        trained: { kaiku: 1, plain: 0.9792, humans: 16, demos: 763, scenes: 48, in_use: true, minutes: 24.6, at: 1, age_s: 600 },
+      };
+      break;
+    case 'visitor':
+      // somebody else has the robots, and drives with a pointer
+      d.mode = 'visitor';
+      d.operator = { source: 'visitor', drive: 'pointer', input: 'pointer', fingers: null, own: false, driver: -1, turn_left_s: 205, hands: null };
+      break;
+    case 'comparing':
+      d.copy = { ...d.copy, on: true, busy: true, free: false };
+      break;
+    case 'compared': {
+      const robots = d.echo?.robots ?? 47;
+      d.copy = { ...d.copy, last: { copy: 0, echo: robots - 1, robots, at: 1, age_s: 140 } };
+      break;
+    }
+    case 'slow':
+      // the hosted simulation, which does not keep up with the clock
+      d.perf = { ...d.perf, realtime: 0.7 };
+      break;
+    case 'rented':
+      // the Train button where it trains on rented GPUs
+      d.policy = { ...d.policy, rented: true, about_min: 4 };
       break;
     case 'partial':
       // a runner that only knows the basics
