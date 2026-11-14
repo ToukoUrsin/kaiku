@@ -1,21 +1,14 @@
-# Kaiku exported datasets
+# The dataset
 
-`kaiku.data.export` reads the immutable recorder snapshot at
-`/bulk2/runs/robotteleop/policy/demos_snap/` and writes datasets under
-`/bulk2/runs/robotteleop/export/<name>/`. Each recorder JSONL row becomes one episode;
-the arrays are clipped to `span`, and arm velocity is a 30 Hz central difference of
-measured arm angles. `groot/` is the LeRobot v2.1 + GR00T modality layout and
-`lerobot/` is the direct LeRobot v3-compatible layout. Camera rendering uses the
-MuJoCo twin and the challenge calibration; depth is intentionally omitted until a
-render run is affordable.
-
-For a local low-dimensional check:
+Kaiku's recorder saves every clean run: the operator's and each echo's. `kaiku.data.export` turns a
+recorder folder into the humanoid challenge's two layouts.
 
 ```bash
-.venv/bin/python -m kaiku.data.export /bulk2/runs/robotteleop/policy/demos_snap \
-  /bulk2/runs/robotteleop/export/check20 --limit 20 --overwrite
+python -m kaiku.data.export DEMOS OUT --limit 20      # the first 20 demonstrations
 ```
 
-For the camera export, run `tools/modal_export.py` through `/tmp/kd/modal.sh`; the
-entrypoint uploads the code/model bundle, the Modal volume contains the snapshot at
-`/data/demos`, and the output persists there.
+- `OUT/lerobot/` is LeRobot v3.0, `OUT/groot/` is LeRobot v2.1 with GR00T's modality file.
+- One demonstration is one episode: 28 joint targets and 28 joint states at 30 Hz in the pelvis frame.
+  Arm velocity is the central difference of the measured arm angles.
+- The cameras (head, left and right wrist, 640x480) are rendered from the MuJoCo twin with the
+  challenge's calibration when asked for; `tools/modal_export.py` does it on a GPU. There is no depth yet.

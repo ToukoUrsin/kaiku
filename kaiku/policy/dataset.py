@@ -70,11 +70,14 @@ class Loader:
         return np.concatenate(out_p), np.concatenate(out_R)
 
     def demo(self, state: np.ndarray, action: np.ndarray, parts: np.ndarray, layout: list[dict],
-             mapping: dict[str, str], span=None) -> tuple[np.ndarray, np.ndarray] | None:
+             mapping: dict[str, str], span=None, kinematics=None) -> tuple[np.ndarray, np.ndarray] | None:
         """One demonstration (T ticks) -> (x (T', dim), y (T', HORIZON, ACT_DIM))."""
         T, n = parts.shape[:2]
-        pinch, rot = self.pinch(state[:, :14])
-        cmd_pinch, cmd_rot = self.pinch(action[:, :14])
+        if kinematics is None:
+            pinch, rot = self.pinch(state[:, :14])
+            cmd_pinch, cmd_rot = self.pinch(action[:, :14])
+        else:
+            pinch, rot, cmd_pinch, cmd_rot = kinematics
         pos, yaw = parts[..., :3].astype(float), quat_yaw(parts[..., 3:].astype(float))
         # The plan: parts in the order they left the mat, each with the hand that was at it.
         up = pos[:, :, 2] > self.scene.rest_z + LIFTED
@@ -102,19 +105,34 @@ class Loader:
     def episode(self, root: Path, name: str, group: list[dict], echoes: bool = True, stride: int = 1) -> list[tuple]:
         """One operator episode (a file): its demonstrations as (x, y, the operator's own?)."""
         d = np.load(root / name)
+        # Every row in an episode shares its tick count.  FK used to run once per row (up to
+        # 49 times for the operator plus echoes); batching the file makes the latest-16 remote
+        # load substantially cheaper while producing the exact same arrays.
+        rows = [r for r in group if echoes or r["source"] == "human"]
+        if rows:
+            idx = [int(r["row"]) for r in rows]
+            state = d["state"][idx, :, :14].reshape(-1, 14)
+            action = d["action"][idx, :, :14].reshape(-1, 14)
+            T = d["state"].shape[1]
+            pinch, rot = self.pinch(state)
+            cmd_pinch, cmd_rot = self.pinch(action)
+            batched = (pinch.reshape(len(rows), T, 2, 3), rot.reshape(len(rows), T, 2, 3, 3),
+                       cmd_pinch.reshape(len(rows), T, 2, 3), cmd_rot.reshape(len(rows), T, 2, 3, 3))
+        else:
+            batched = None
         out = []
-        for r in group:
-            if not echoes and r["source"] != "human":
-                continue
+        for i, r in enumerate(rows):
             k = r["row"]
-            got = self.demo(d["state"][k], d["action"][k], d["parts"][k], r["layout"], r["mapping"], d["span"][k])
+            kin = tuple(a[i] for a in batched) if batched is not None else None
+            got = self.demo(d["state"][k], d["action"][k], d["parts"][k], r["layout"], r["mapping"],
+                            d["span"][k], kin)
             if got is not None:
                 out.append((got[0][::stride], got[1][::stride], r["source"] == "human"))
         return out
 
     def load(self, root: Path | str, max_episodes: int | None = None, stride: int = 1, log=None,
              echoes: bool = True, progress=None, workers: int | None = None, skip: int = 0,
-             last: int | None = None) -> Pairs:
+             last: int | None = None, context: str = "spawn") -> Pairs:
         """Every demonstration in a recorder folder (of its first ``max_episodes`` operator
         episodes that the operator's own robot completed). Without ``echoes``, the operator's
         own demonstrations only; ``skip`` leaves out that many of the earliest episodes, and
@@ -136,7 +154,10 @@ class Loader:
         workers = min(workers or min(os.cpu_count() or 1, 16), len(jobs))
         xs, ys, eps, hum = [], [], [], []
         demos = humans = 0
-        pool = ProcessPoolExecutor(workers, mp.get_context("spawn")) if workers > 1 and echoes else None
+        # ``spawn`` is the portable and conservative default.  A Linux Modal worker may opt into
+        # ``fork``: it avoids importing MuJoCo and constructing the kinematics model 16 times
+        # before the episode workers can start, while keeping the live app and local CLI unchanged.
+        pool = ProcessPoolExecutor(workers, mp.get_context(context)) if workers > 1 and echoes else None
         try:
             results = pool.map(_episode, jobs) if pool else (self.episode(*j) for j in jobs)
             for used, (name, got) in enumerate(zip(names, results)):

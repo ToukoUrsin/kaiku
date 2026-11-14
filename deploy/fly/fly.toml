@@ -1,0 +1,25 @@
+# The live demo on Fly: one machine, one simulation, a public address. Everybody who opens it
+# watches (and steers) the same 48 robots. The demonstrations are saved on the volume.
+app = "kaiku-echo"
+primary_region = "arn"
+
+[[mounts]]
+  source = "kaiku_data"
+  destination = "/data"
+  initial_size = "20gb"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 2000
+    hard_limit = 2500
+
+[[vm]]
+  size = "performance-16x"
+  memory = "32gb"

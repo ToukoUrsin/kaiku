@@ -42,7 +42,7 @@ def jitter(x: torch.Tensor, y: torch.Tensor, sl: dict, sigma: float, sigma_asked
 
 def train(data: Pairs, feat: Featurizer, steps: int = 30000, batch: int = 512, lr: float = 1e-3, width: int = 512,
           depth: int = 4, sigma: float = 0.004, sigma_asked: float = 0.002, seed: int = 0, threads: int = 8,
-          log=print, every: int = 2000, on_step=None, device: str | None = None) -> Policy:
+          log=print, every: int = 2000, on_step=None, device: str | None = None, compile: bool = False) -> Policy:
     # 30,000 steps: at 20,000 the same data gave anything from 12 % to 92 % of scenes sorted, depending
     # on which demonstrations were in it; at 30,000 every run we made sorted 96 % or more.
     torch.manual_seed(seed)
@@ -55,7 +55,11 @@ def train(data: Pairs, feat: Featurizer, steps: int = 30000, batch: int = 512, l
     y_mean = y.mean((0, 1))
     y_std = torch.cat([y[..., :6].std().expand(6), y[..., 6:18].std().expand(12), y[..., 18:].std().expand(14)])
     y_std = y_std.clamp_min(1e-3)
-    net = Net(x.shape[1], width, depth).to(dev)
+    raw_net = Net(x.shape[1], width, depth).to(dev)
+    # The remote jobs use a fixed batch and horizon for all 30,000 steps.  Compiling that graph
+    # removes the Python/kernel-launch overhead on a datacenter GPU.  Keep the original module
+    # for the portable policy checkpoint; compiled wrappers prefix state-dict keys.
+    net = torch.compile(raw_net, mode="reduce-overhead") if compile and dev.type == "cuda" else raw_net
     opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=lr, total_steps=steps, pct_start=0.05)
     g = torch.Generator(device=dev).manual_seed(seed)
@@ -77,7 +81,7 @@ def train(data: Pairs, feat: Featurizer, steps: int = 30000, batch: int = 512, l
         if log and (step % every == 0 or step == steps):
             log(f"  step {step:6d}/{steps}  loss {run:.4f}  {time.time() - t0:5.0f} s")
     cpu = lambda t: t.detach().cpu().numpy()                      # noqa: E731
-    return Policy(net.cpu(), cpu(x_mean), cpu(x_std), cpu(y_mean), cpu(y_std),
+    return Policy(raw_net.cpu(), cpu(x_mean), cpu(x_std), cpu(y_mean), cpu(y_std),
                   {"pairs": M, "steps": steps, "loss": round(run, 5), "seconds": round(time.time() - t0, 1)})
 
 

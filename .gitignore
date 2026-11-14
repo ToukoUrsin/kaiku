@@ -1,5 +1,6 @@
 .venv/
-third_party/
+third_party/*
+!third_party/aaltonomous_safety/
 ref/
 __pycache__/
 *.pyc

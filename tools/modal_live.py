@@ -21,7 +21,7 @@ DEMOS = "/data/live1"
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .pip_install("numpy==2.5.4", "mujoco==4.0.1", "pyyaml", "torch", "scipy", "mink==1.4.0", "qpsolvers[daqp]",
-                 "aiohttp", "websockets", "msgpack")
+                 "aiohttp", "websockets", "msgpack", "modal")
     .add_local_dir(ROOT / "kaiku", f"{REMOTE}/kaiku", ignore=["**/__pycache__"])
     .add_local_dir(ROOT / G1, f"{REMOTE}/{G1}")
 )
@@ -43,7 +43,7 @@ def live():
         shutil.copytree("/data/demos", DEMOS)             # start from the demonstrations already collected
         vol.commit()
     subprocess.Popen(["python", "-u", "-m", "kaiku.app.run", "--n", "48", "--port", str(PORT), "--record", DEMOS,
-                      "--train-steps", "30000"], cwd=REMOTE)
+                      "--train", "modal", "--train-steps", "30000"], cwd=REMOTE)
 
     def keep():
         while True:

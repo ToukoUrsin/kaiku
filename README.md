@@ -33,7 +33,7 @@ Redoing a demonstration around the parts of another scene is known from [MimicGe
 
 1. **Gloves to robot.** Smartgloves II stream over RGMP (Rokoko's TCP protocol). Kaiku reads the stream, solves both hands, and retargets them to the G1's arms and Dex3 hands: fingers to the three-finger hand, wrists through arm inverse kinematics.
 2. **Echo.** Copying joint angles only works when every scene is the same. Kaiku copies the motion relative to the things on the table instead. A follower's hand goes where the operator's hand is relative to its own part, using where the parts are right now in both scenes. A follower with further to reach falls a little behind instead of closing its fingers too early.
-3. **Check.** Every command of every robot goes through the challenge's safety filter (arm 1 rad/s, hand 3 rad/s, workspace box, counter keep-out). MuJoCo decides whether the parts really ended in their bins. An echo that drops a part is not saved.
+3. **Check.** Every command of every robot goes through the challenge's safety filter (arm 1 rad/s, hand 3 rad/s, workspace box, counter keep-out). MuJoCo decides whether the parts really ended in their bins. An echo that drops a part is not saved. Kaiku's filter runs all 48 robots at once, so it is checked against the challenge's own code (unchanged, in `third_party/aaltonomous_safety`): 500 saved demonstrations, 504,817 ticks, went through it with no command changed (`tools/check_safety.py`).
 4. **Dataset.** The recorder writes the challenge's interface: 28 joint targets and 28 joint states at 30 Hz in the pelvis frame. `kaiku.data.export` turns a session into LeRobot v3.0 and GR00T datasets, with the twin's cameras rendered on request.
 5. **Policy.** A small network (4 residual layers, 512 wide) reads the robot and the parts and plans the next half second. It is trained in two minutes on a T4 and drives the robots through the same safety filter.
 
@@ -63,7 +63,7 @@ python -m kaiku.rgmp.replay session.rgmp                      # and serve it aga
 python -m kaiku.policy.fit demos --out policies               # train with and without echoes, test both
 python -m kaiku.policy.rollout policies/kaiku.pt              # 48 robots, 48 new scenes, no operator
 python -m kaiku.data.export demos out --limit 20              # LeRobot v3.0 and GR00T
-pytest                                                        # 105 tests
+pytest                                                        # 108 tests
 ```
 
 ## What is real and what is not

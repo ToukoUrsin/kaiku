@@ -1,9 +1,8 @@
-"""Training from the live demo: a process of its own, so the robots keep their 30 Hz.
+"""Training from the live demo in a process of its own, so the robots keep their 30 Hz.
 
-``python -m kaiku.policy.fit`` does the work on this machine; with ``backend="modal"`` the same
-code runs on a rented GPU (``tools/modal_policy.py::live``; needs ``MODAL_TOKEN_ID`` and
-``MODAL_TOKEN_SECRET``). Either way the process reports on stdout and leaves ``kaiku.pt`` and
-``plain.pt`` in the output folder.
+The local backend runs :mod:`kaiku.policy.fit` here.  The Modal backend runs the two policies
+in parallel on the deployed ``kaiku-policy`` functions and copies their small policy files back
+into the live container.  Both backends speak the same ``KAIKU {json}`` stdout protocol.
 """
 from __future__ import annotations
 
@@ -45,7 +44,10 @@ class Trainer:
         common = [str(self.data), "--out", str(self.out), "--steps", str(self.steps), "--scenes", str(self.scenes),
                   "--last", str(self.last)]
         if self.backend == "modal":
-            cmd = ["uvx", "modal", "run", "tools/modal_policy.py::live", "--data", *common]
+            # The live image has the Modal client.  Calling the deployed function from a process
+            # inside the container avoids a second ``modal run`` app and lets the runner stream
+            # generator events while both jobs execute.
+            cmd = [sys.executable, "-u", "-m", "kaiku.policy.modal_runner", *common]
         else:
             # Below the live demo in the queue for the processor, and on a share of the cores.
             cmd = [*(["nice", "-n", "10"] if shutil.which("nice") else []), sys.executable, "-u", "-m",

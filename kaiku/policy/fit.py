@@ -31,18 +31,20 @@ def say(**status) -> None:
 
 def fit(data: Path | str, which: str, out: Path | str, steps: int = 30000, scenes: int = 48, humans: int | None = None,
         seed: int = 0, threads: int | None = None, report=say, eval_seed: int = 100, rounds: int = 1,
-        last: int | None = None) -> Policy:
+        last: int | None = None, loader_workers: int | None = None, loader_context: str = "spawn",
+        train_threads: int | None = None, rollout_threads: int | None = None, compile: bool = False) -> Policy:
     """Train one policy and test it on ``scenes * rounds`` fresh scenes. ``report(**status)`` hears about it.
     ``humans`` uses the operator's first K episodes, ``last`` the latest K."""
     tell = lambda stage, p, **kw: report(which=which, stage=stage, progress=round(p, 4), **kw)      # noqa: E731
     tell("loading", 0.0)
     loader = Loader()
     data = loader.load(data, humans, echoes=which != "plain", progress=lambda i, n: tell("loading", LOAD * i / n),
-                       last=last).sample(MOST_PAIRS, seed)
-    policy = train(data, loader.feat, steps, seed=seed, threads=threads or 8, log=None,
-                   on_step=lambda i, n, loss: tell("training", LOAD + TRAIN * i / n, loss=round(loss, 5)))
+                       last=last, workers=loader_workers, context=loader_context).sample(MOST_PAIRS, seed)
+    policy = train(data, loader.feat, steps, seed=seed, threads=train_threads or threads or 8, log=None,
+                   on_step=lambda i, n, loss: tell("training", LOAD + TRAIN * i / n, loss=round(loss, 5)),
+                   compile=compile)
     policy.info.update(which=which, humans=int(data.human_demos), demos=int(data.demos))
-    res = rollout.run(policy, scenes, rounds, eval_seed, threads=threads,
+    res = rollout.run(policy, scenes, rounds, eval_seed, threads=rollout_threads if rollout_threads is not None else threads,
                       progress=lambda f: tell("testing", LOAD + TRAIN + (1 - LOAD - TRAIN) * f))
     policy.info.update(success=res["clean_rate"], parts=res["parts_rate"], scenes=res["scenes"],
                        clipped=res["clipped"], aborted=res["aborted"])

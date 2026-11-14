@@ -1,4 +1,4 @@
-"""Train and test policies on Modal (a GPU for the training, 16 cores for the robots).
+"""Train and test policies on Modal (a GPU for training, CPU workers for the robots).
 
     modal volume put kaiku-demos DEMOS_DIR /demos            # once: a recorder folder
     modal run tools/modal_policy.py --humans 1,2,4,8,16,32   # the curve: with and without echoes
@@ -7,6 +7,9 @@
 Each job trains one policy on the operator's first K episodes (with their echoes, or without)
 and rolls it out on fresh scenes. Results come back as JSON lines in ``--out``; the policies
 stay on the volume under /policies.
+
+The live demo uses ``fit_remote_stream``: one A100 container per policy, in parallel, with
+status events returned to the live trainer.
 """
 from __future__ import annotations
 
@@ -95,6 +98,62 @@ def fit_remote(cfg: dict) -> dict:
                  last=cfg.get("last"))
     vol.commit()
     return policy.info
+
+
+@app.function(gpu="A100", cpu=32, memory=49152, timeout=3 * 3600, volumes={"/data": vol})
+def fit_remote_stream(cfg: dict):
+    """Train one policy and stream fit stages while the live app remains responsive.
+
+    A generator is used instead of Modal's job logs: the live container can consume both
+    generators concurrently and turn their events into the existing ``KAIKU`` HUD protocol.
+    ``reload`` is intentionally before loading any rows so a Train click sees the live
+    container's preceding volume commit.
+    """
+    import queue
+    import threading
+
+    import sys
+    sys.path.insert(0, REMOTE)
+    from kaiku.policy.fit import fit
+
+    vol.reload()
+    events: queue.Queue[dict] = queue.Queue()
+    state: dict = {"which": cfg["which"], "stage": "loading", "progress": 0.0}
+    result: dict = {}
+
+    def report(**status):
+        state.update(status)
+        events.put({"kind": "status", **status})
+
+    def work():
+        try:
+            policy = fit(cfg["data"], cfg["which"], f"/data/policies/{cfg['name']}.pt",
+                         cfg.get("steps", 30000), cfg.get("scenes", 48),
+                         threads=cfg.get("threads", 32), train_threads=cfg.get("train_threads", 8),
+                         rollout_threads=cfg.get("rollout_threads", 32), last=cfg.get("last"), report=report,
+                         loader_workers=cfg.get("loader_workers", 16), loader_context="spawn",
+                         compile=cfg.get("compile", True))
+            result["policy"] = policy
+        except Exception as exc:
+            result["error"] = repr(exc)[:500]
+
+    worker = threading.Thread(target=work, daemon=True)
+    worker.start()
+    while worker.is_alive() or not events.empty():
+        try:
+            yield events.get(timeout=1.0)
+        except queue.Empty:
+            # Loading and GPU work can both spend a second without a fit callback.
+            yield {"kind": "heartbeat", **state}
+    worker.join()
+    if result.get("error"):
+        yield {"kind": "error", "text": result["error"]}
+        return
+    policy = result["policy"]
+    policy_path = Path(f"/data/policies/{cfg['name']}.pt")
+    vol.commit()
+    yield {"kind": "result", "which": cfg["which"], "info": policy.info,
+           "policy": policy_path.read_bytes()}
 
 
 @app.local_entrypoint()
