@@ -67,6 +67,31 @@ class EpisodeResult:
     lag: np.ndarray = field(default_factory=lambda: np.zeros(0))   # (N-1,) worst echo lag, s
 
 
+def draw_lead(scene, reach: ReachMap, rng: np.random.Generator, n: int | None = None,
+              reachable_only: bool = True) -> Layout:
+    """A scene by the challenge's rule; with ``reachable_only``, one in which the arm that
+    serves each part's bin can pinch it with its open hand clear of the other parts and of
+    the bins (about one draw in three is, for three parts; one in seventy for five)."""
+    for _ in range(4000):
+        lay = scene.sample_layout(rng, n)
+        if not reachable_only:
+            return lay
+        sides = [0 if arm_for(lay.mapping[scene.by_name[p.name].color], p.pos[1]) == "left" else 1
+                 for p in lay.placements]
+        if reach.layout_ok(lay, sides):
+            return lay
+    return lay
+
+
+def draw_scene(scene, reach: ReachMap, rng: np.random.Generator, followers: int, n: int | None = None,
+               spread: float = 0.08, vary_shape: bool = True, reachable_only: bool = True
+               ) -> tuple[Layout, list[Layout]]:
+    """The operator's scene and one variation of it for every follower. Needs no session, so
+    it can be drawn in another process while the robots work (``kaiku.app.sampler``)."""
+    lead = draw_lead(scene, reach, rng, n, reachable_only)
+    return lead, sample_followers(scene, lead, rng, followers, spread, vary_shape, reach)
+
+
 class Session:
     def __init__(self, n_envs: int = 16, seed: int = 0, spread: float = 0.08, vary_shape: bool = True,
                  twin: Twin | None = None, threads: int | None = None, echo: EchoParams | None = None,
@@ -134,28 +159,13 @@ class Session:
         self._obs = None
 
     def sample_lead(self, n: int | None = None, rng: np.random.Generator | None = None) -> Layout:
-        """A scene by the challenge's rule; with ``reachable_only``, one in which the arm that
-        serves each part's bin can pinch it with its open hand clear of the other parts and of
-        the bins (about one draw in three is, for three parts; one in seventy for five)."""
-        sc = self.scene
-        rng = rng or self.rng
-        for _ in range(4000):
-            lay = sc.sample_layout(rng, n)
-            if not self.reachable_only:
-                return lay
-            sides = [0 if arm_for(lay.mapping[sc.by_name[p.name].color], p.pos[1]) == "left" else 1
-                     for p in lay.placements]
-            if self.reach.layout_ok(lay, sides):
-                return lay
-        return lay
+        return draw_lead(self.scene, self.reach, rng or self.rng, n, self.reachable_only)
 
     def sample_scene(self, n: int | None = None, rng: np.random.Generator | None = None
                      ) -> tuple[Layout, list[Layout]]:
-        """The operator's scene and one variation of it for every follower. Touches nothing in
-        the session, so it can run on another thread (with its own ``rng``) while robots work."""
-        rng = rng or self.rng
-        lead = self.sample_lead(n, rng)
-        return lead, sample_followers(self.scene, lead, rng, self.n - 1, self.spread, self.vary_shape, self.reach)
+        """The operator's scene and one variation of it for every follower."""
+        return draw_scene(self.scene, self.reach, rng or self.rng, self.n - 1, n, self.spread, self.vary_shape,
+                          self.reachable_only)
 
     def home_command(self) -> LeadCommand:
         return LeadCommand(self.home_pinch.copy(), self.home_rot.copy(), HOME_HAND.copy())

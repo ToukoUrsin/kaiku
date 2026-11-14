@@ -19,6 +19,7 @@ import argparse
 import json
 import queue
 import signal
+import sys
 import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
@@ -27,9 +28,11 @@ from pathlib import Path
 import numpy as np
 
 from kaiku.app.autopilot import Autopilot
+from kaiku.app.sampler import Sampler
 from kaiku.app.session import FAILED, IDLE, LEAD, RUNNING, SUCCESS, Session
 from kaiku.app.trainer import Trainer
 from kaiku.data.recorder import Recorder
+from kaiku.sim.fetch import ensure
 from kaiku.sim.twin import CONTROL_HZ
 from kaiku.teleop.operator import GloveOperator
 from kaiku.web.server import ViewerServer
@@ -52,8 +55,8 @@ class Runner:
         self.n = n
         self.parts = parts
         self.hold_s, self.lead_timeout = hold_s, int(lead_timeout_s * CONTROL_HZ)
-        self.rng = np.random.default_rng(seed + 1)             # the scene sampler's own, used off-thread
-        self.pool = ThreadPoolExecutor(1, thread_name_prefix="kaiku-scenes")
+        self.sampler = Sampler(n, seed + 1, self.s.spread, self.s.vary_shape)
+        self.pool = ThreadPoolExecutor(1, thread_name_prefix="kaiku-load")
         self.viewer = ViewerServer(self.s.twin.model, n, host=host, port=port, title="Kaiku")
         self.commands: queue.Queue = queue.Queue()
         self.viewer.on_message(self.commands.put)
@@ -77,7 +80,7 @@ class Runner:
         self.tick_ms: deque = deque(maxlen=90)
         self.t_start = time.time()
         self.hud_tick = 0
-        self.next = self.pool.submit(self._sample)
+        self.next = self.sampler.scene(self.parts)
         # The policy: trained here (the Train button) or handed in, and what it has done on its own.
         self.policy = self.pilot = self.next_free = self.loading = None
         self.plain: dict = {}
@@ -110,18 +113,6 @@ class Runner:
         return "smartgloves" if self.gloves else "stand-in (emulated smartgloves)"
 
     # ------------------------------------------------------------------ scenes
-    def _sample(self):
-        n = self.parts
-        if n == "auto":
-            n = int(self.rng.choice([3, 4, 5], p=[0.35, 0.40, 0.25]))
-        return self.s.sample_scene(int(n), self.rng)
-
-    def _sample_free(self):
-        """A scene for every robot, each drawn by the challenge's rule."""
-        def parts():
-            return int(self.rng.choice([3, 4, 5], p=[0.35, 0.40, 0.25])) if self.parts == "auto" else int(self.parts)
-        return [self.s.sample_lead(parts(), self.rng) for _ in range(self.n)]
-
     def _load(self, path: Path):
         from kaiku.policy.model import Policy             # torch: only when there is a policy to run
         from kaiku.policy.rollout import Pilot
@@ -143,7 +134,7 @@ class Runner:
                 self.rec.operator = self._who()
         if self.mode == "policy":
             layouts = self.next_free.result()
-            self.next_free = self.pool.submit(self._sample_free)
+            self.next_free = self.sampler.free(self.parts)
             self.s.free_episode(layouts)
             self.pilot.begin(layouts)
             self.want = self.pilot.present.sum(axis=1)
@@ -153,7 +144,7 @@ class Runner:
             self.phase = "run"
             return
         lead, followers = self.next.result()
-        self.next = self.pool.submit(self._sample)
+        self.next = self.sampler.scene(self.parts)
         self.s.new_episode(lead, followers)
         self.want[:] = len(lead.placements)
         self.op.begin()
@@ -243,7 +234,7 @@ class Runner:
             try:
                 self.policy, self.pilot, self.plain = self.loading.result()
                 if self.next_free is None:
-                    self.next_free = self.pool.submit(self._sample_free)
+                    self.next_free = self.sampler.free(self.parts)
             except Exception as e:                            # a file from another version, a missing torch
                 self.toast(f"The policy could not be loaded: {e}", "warn")
                 if self.want_mode == "policy" and self.mode != "policy":
@@ -278,7 +269,9 @@ class Runner:
                 self.hold_until = 0.0
             elif name == "parts":
                 self.parts = value if value == "auto" else int(value)
-                self.next = self.pool.submit(self._sample)       # the scene already drawn no longer fits
+                self.next = self.sampler.scene(self.parts)       # the scenes already drawn no longer fit
+                if self.next_free is not None:
+                    self.next_free = self.sampler.free(self.parts)
             elif name == "record":
                 self.rec.enabled = bool(value) and self.rec.root is not None
                 if value and self.rec.root is None:
@@ -411,6 +404,9 @@ class Runner:
         return out
 
     def run(self) -> None:
+        # The loop gives the interpreter up many times a tick (numpy, the physics). Whoever else
+        # holds it then (the web server, the glove socket) hands it back within a millisecond, not five.
+        sys.setswitchinterval(0.001)
         self.viewer.start()
         print(f"Kaiku: {self.viewer.url}  ({self.n} robots)", flush=True)
         nxt = time.perf_counter()
@@ -432,6 +428,7 @@ class Runner:
         finally:
             self.viewer.stop()
             self.trainer.close()
+            self.sampler.close()
             self.pool.shutdown(wait=False, cancel_futures=True)
             for op in self.ops.values():
                 if hasattr(op, "close"):
@@ -456,6 +453,7 @@ def main(argv=None) -> None:
     ap.add_argument("--gloves", default=None, metavar="HOST[:PORT]",
                     help="RGMP address of the Rokoko driver; without it the stand-in operator drives")
     a = ap.parse_args(argv)
+    ensure()                                                   # the robot model, fetched on the first run
     r = Runner(a.n, a.port, a.host, a.seed, a.parts if a.parts == "auto" else int(a.parts), a.record,
                threads=a.threads, mode=a.mode, gloves=a.gloves, policy=a.policy, train=a.train,
                train_steps=a.train_steps)

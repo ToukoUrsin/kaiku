@@ -34,10 +34,14 @@ vol = modal.Volume.from_name("kaiku-demos", create_if_missing=True)
 @modal.concurrent(max_inputs=500)
 @modal.web_server(PORT, startup_timeout=300, label="kaiku")
 def live():
+    import shutil
     import subprocess
     import threading
     import time
 
+    if not Path(DEMOS).exists() and Path("/data/demos").exists():
+        shutil.copytree("/data/demos", DEMOS)             # start from the demonstrations already collected
+        vol.commit()
     subprocess.Popen(["python", "-u", "-m", "kaiku.app.run", "--n", "48", "--port", str(PORT), "--record", DEMOS],
                      cwd=REMOTE)
 
