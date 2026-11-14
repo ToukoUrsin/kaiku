@@ -49,6 +49,8 @@ With Smartgloves, point Kaiku at the machine where the Rokoko driver (Device SDK
 .venv/bin/python -m kaiku.app.run --gloves 192.168.1.20:12276 --record demos
 ```
 
+Rokoko's own hand solver gives the fingers when it runs next to the driver, and calibration is one flat-hands pose: [docs/GLOVES.md](docs/GLOVES.md).
+
 Without gloves a stand-in operator drives: a scripted person wearing emulated Smartgloves II, with tremor and sensor noise, sent through the same RGMP socket, hand solver and retargeting as real gloves.
 
 ```bash
@@ -57,13 +59,13 @@ python -m kaiku.rgmp.replay session.rgmp                      # and serve it aga
 python -m kaiku.policy.fit demos --out policies               # train with and without echoes, test both
 python -m kaiku.policy.rollout policies/kaiku.pt              # 48 robots, 48 new scenes, no operator
 python -m kaiku.data.export demos out --limit 20              # LeRobot v3.0 and GR00T
-pytest                                                        # 84 tests
+pytest                                                        # 100 tests
 ```
 
 ## What is real and what is not
 
 - Everything runs in a MuJoCo twin of the Aaltonomous sorting station. No real G1 has moved yet. The commands are the challenge's own (joint targets, 30 Hz, safety limits), so the lead robot's stream can go to the real one.
-- The operator in the study is the stand-in, recorded live at real time on the hosted demo. The glove path is tested against Rokoko's documented protocol with an emulator and recordings.
+- The operator in the study is the stand-in, recorded live at real time on the hosted demo. No real gloves have been worn yet. The glove path runs against Rokoko's real driver and hand solver (Device SDK 2026.10.20) with the driver's emulated Smartgloves II, and against Kaiku's own emulator and recordings.
 - The parts and bins are the challenge's (45 mm cube, cylinder and triangle; red, yellow and blue bins). 3 to 5 parts per scene.
 
 ## Layout
