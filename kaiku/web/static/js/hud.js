@@ -2,7 +2,7 @@
 // The runner's HUD message arrives ten times a second; any part of it may be missing, and the
 // page must still make sense. Elements are found by their data-ref in index.html.
 
-import { drawChart } from './chart.js';
+import { drawChart, drawSpark } from './chart.js';
 import { IDLE } from './markers.js';
 import { samplePolicy } from './sample.js';
 
@@ -21,12 +21,12 @@ const STEP_TEXT = {
   calibrating: 'Calibrating the gloves',
 };
 const SOURCE_TEXT = {
-  'stand-in': 'Stand-in operator · emulated Smartgloves II',
+  'stand-in': 'A scripted hand in emulated Smartgloves II',
   gloves: 'Smartgloves II · live',
   autopilot: 'Autopilot · scripted motion',
   policy: 'Trained policy · nobody is driving',
 };
-const TAG_TEXT = { 'stand-in': 'Stand-in operator', gloves: 'Operator', autopilot: 'Autopilot', policy: 'Policy' };
+const TAG_TEXT = { 'stand-in': 'Scripted hand, emulated gloves', gloves: 'Operator in Rokoko gloves', autopilot: 'Autopilot', policy: 'Policy' };
 const STAGE_TEXT = { loading: 'Reading the demonstrations', training: 'Training', testing: 'Testing on scenes it has not seen', done: 'Finishing' };
 const TOAST_MS = 4200;
 const MAX_TOASTS = 3;
@@ -117,6 +117,7 @@ export class Hud {
       const tab = event.target.closest('[data-tab]');
       if (tab) this.selectTab(tab.dataset.tab);
     });
+    el.headline.addEventListener('click', () => this.selectTab('policy'));
     el.tabs.addEventListener('keydown', (event) => {
       if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
       const tabs = [...el.tabs.children];
@@ -266,14 +267,16 @@ export class Hud {
     this.text('demos-label', alone ? 'new scenes sorted with nobody driving'
       : dataset.recording ? 'demonstrations saved' : 'demonstrations');
 
-    const labels = alone ? ['Success', 'By the operator', 'Echoes'] : ['Amplification', 'Echo yield', 'Per minute'];
+    const labels = alone ? ['Success', 'By the operator', 'Echoes']
+      : ['Each demonstration becomes', 'Echoes that succeed', 'Saved per minute'];
+    const short = alone ? labels : ['Each becomes', 'Echoes right', 'Per minute'];       // a phone has a quarter of the room
     labels.forEach((label, i) => {
       this.text(`stat${i + 1}-label`, label);
-      this.text(`stat${i + 1}-label-2`, label);
+      this.text(`stat${i + 1}-label-2`, short[i]);
     });
     const share = tally.scenes ? tally.ok / tally.scenes : policy.success;
     const amplification = alone ? (Number.isFinite(share) ? percent(share) : '0%')
-      : Number.isFinite(totals.amplification) ? `${trim(totals.amplification)}×` : '0×';
+      : Number.isFinite(totals.amplification) ? trim(totals.amplification) : '0';
     const yieldText = alone ? count(policy.humans || 0)
       : Number.isFinite(totals.yield) ? `${Math.round(totals.yield * 100)}%` : '0%';
     const rate = alone ? count(Math.max(0, (policy.demos || 0) - (policy.humans || 0)))
@@ -293,7 +296,7 @@ export class Hud {
 
     const who = operator.source === 'autopilot'
       ? 'Autopilot drives one robot.'
-      : operator.source === 'gloves' ? 'One operator in Smartgloves II.' : 'Stand-in operator in emulated Smartgloves II.';
+      : operator.source === 'gloves' ? 'One operator in Smartgloves II.' : 'A scripted hand in emulated Smartgloves II drives one robot.';
     // ?clean=1 keeps the film's caption as it was; the page adds where the runs go
     this.text('caption', alone
       ? `Nobody is driving. A policy trained on the demonstrations sorts ${robots} scenes it has never seen.`
@@ -464,6 +467,13 @@ export class Hud {
       }
       drawChart(this.el.chart, curve, widest?.demos);
       this.show('chart-empty', curve.length === 0);
+      // the same finding where a visitor lands, a click away from the chart
+      this.show('headline', Boolean(widest));
+      if (widest) {
+        this.text('headline-top', `Trained on ${widest.demos} demonstrations`);
+        this.text('headline-main', `${percent(widest.plain)} alone, ${percent(widest.kaiku)} with echoes`);
+        drawSpark(this.el['headline-spark'], curve, widest.demos);
+      }
       const best = curve[curve.length - 1];
       const at = Number.isFinite(best?.demos) && curve.length > 1 ? ` at ${best.demos}` : '';
       this.text('policy-kaiku', Number.isFinite(best?.kaiku) ? `${percent(best.kaiku)}${at}` : '');
@@ -640,6 +650,17 @@ export class Hud {
 
   loaded() {
     this.attr('veil', 'data-done', true);
+  }
+
+  /** The opening's three lines, for whoever is driving right now. */
+  openingWords(robots) {
+    if (this.hud.mode === 'policy') {
+      return ['Nobody is driving this robot.', `${robots} robots. Nobody driving.`, 'Every scene is new to them.',
+        'They learned it from the echoes.'];
+    }
+    const first = this.hud.operator?.source === 'gloves' ? 'Rokoko gloves drive this robot.'
+      : 'A hand in emulated Rokoko gloves drives this robot.';
+    return [first, `One pair of gloves. ${robots} robots.`, 'Every table is different.', `Do it once. Robots learn from ${robots}.`];
   }
 
   toast(text, level = 'info') {

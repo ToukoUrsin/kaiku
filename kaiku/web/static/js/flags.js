@@ -9,6 +9,7 @@
 //   ?sheet=tall               phone: start with the panel pulled up
 //   ?quality=high|low         pin the drawing quality instead of adapting to the frame rate
 //   ?preview=NAME             show one state of the page without waiting for it (see sample.js)
+//   ?intro=1|0                play the opening (hands, then every robot) or never; by default once per tab
 
 const SHOTS = ['lead', 'overview', 'top'];
 const TABS = ['live', 'dataset', 'policy'];
@@ -28,5 +29,9 @@ export function readFlags(search = location.search) {
     sheet: oneOf('sheet', ['tall'], ''),
     quality: oneOf('quality', ['high', 'low'], 'auto'),
     preview: params.get('preview') || '',
+    // a link that asks for a view gets that view, not the opening
+    intro: params.get('intro') === '1' ? 'on'
+      : params.get('intro') === '0' || ['shot', 'env', 'clean', 'preview', 'tab', 'sheet'].some((name) => params.has(name)) ? 'off'
+        : 'auto',
   };
 }

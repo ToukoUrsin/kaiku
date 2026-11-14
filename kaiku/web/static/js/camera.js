@@ -37,6 +37,8 @@ export class CameraRig {
       },
       top: { target: [-0.5 * depth + 0.4, 0, 0], azimuth: 0, polar: MIN_POLAR, frame: [width + 2.8, depth + 3.6] },
     };
+    // the opening starts here: the operator's hands and the robot's hands under them, nothing else
+    this.hands = { target: [0.3, 0.0, 0.62], azimuth: -38 * DEG, polar: 70 * DEG, frame: [1.25, 1.05] };
 
     this.current = new Float64Array(6);
     this.goal = new Float64Array(6);
@@ -59,13 +61,23 @@ export class CameraRig {
     this.bind();
   }
 
-  /** Go to a named shot: 'lead', 'overview' or 'top'. */
-  goTo(name) {
+  /** Go to a named shot: 'lead', 'overview' or 'top'. `settle` is the seconds to take over it. */
+  goTo(name, settle) {
     const shot = this.shots[name];
     if (!shot) return;
     this.shot = name;
     this.focus = -1;
     this.aim(shot, 0, 0, 0);
+    if (settle) this.settle = settle;
+    this.onChange();
+  }
+
+  /** Look at something that is not one of the named shots (the page's opening does). */
+  look(shot, settle) {
+    this.shot = 'opening';
+    this.focus = -1;
+    this.aim(shot, 0, 0, 0);
+    if (settle) this.settle = settle;
     this.onChange();
   }
 

@@ -406,7 +406,7 @@ kbd {
 .stage-scrim {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse 62% 78% at 0% 100%, oklch(0.15 0.004 264 / 0.97), oklch(0.15 0.004 264 / 0.72) 40%, transparent 74%);
+  background: radial-gradient(ellipse 78% 80% at 0% 100%, oklch(0.15 0.004 264 / 0.97), oklch(0.15 0.004 264 / 0.74) 42%, transparent 76%);
   pointer-events: none;
 }
 
@@ -487,7 +487,7 @@ kbd {
 
 .story-stats {
   display: flex;
-  gap: var(--s-8);
+  gap: var(--s-6);
   margin-top: var(--s-5);
   padding-top: var(--s-4);
   border-top: 1px solid var(--line-strong);
@@ -513,6 +513,52 @@ kbd {
   color: var(--text-2);
   font-size: var(--t-13);
   text-align: right;
+}
+
+/* the opening: one line at a time over the scene, everything else out of the way */
+.opening {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: clamp(40px, 9vh, 96px) var(--s-6) clamp(64px, 14vh, 160px);
+  background: linear-gradient(180deg, oklch(0.15 0.004 264 / 0.9), oklch(0.15 0.004 264 / 0.55) 46%, transparent);
+  color: var(--text);
+  font-size: clamp(1.625rem, 3.4vw, 3.25rem);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  text-align: center;
+  text-wrap: balance;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.26s var(--ease-out), transform 0.26s var(--ease-out);
+  pointer-events: none;
+}
+
+.opening[data-show] {
+  opacity: 1;
+  transform: none;
+  transition-duration: 0.5s;
+}
+
+.stage > .story,
+.stage > .caption,
+.stage > .stage-tools,
+.stage > .stage-scrim,
+.stage > .toasts {
+  transition: opacity 0.5s var(--ease-out);
+}
+
+.app[data-opening] .story,
+.app[data-opening] .caption,
+.app[data-opening] .stage-tools,
+.app[data-opening] .stage-scrim,
+.app[data-opening] .toasts,
+.app[data-opening] .banner,
+.app[data-opening] .tag {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .banner {
@@ -836,6 +882,84 @@ kbd {
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--surface-active) transparent;
+}
+
+/* the study's finding, where a visitor lands; opens the chart */
+.headline {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  padding: var(--s-4);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  transition: background var(--fast);
+}
+
+.headline:hover {
+  background: var(--surface-hover);
+}
+
+.headline-words {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.headline-top {
+  color: var(--text-3);
+  font-size: var(--t-12);
+}
+
+.headline-main {
+  color: var(--text);
+  font-size: var(--t-13);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  font-variant-numeric: tabular-nums;
+}
+
+.headline-spark {
+  flex: none;
+  width: 72px;
+  height: 34px;
+  overflow: visible;
+}
+
+.headline-spark .series {
+  fill: none;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.headline-spark .series-kaiku,
+.headline-spark .gap {
+  stroke: var(--ok);
+}
+
+.headline-spark .series-plain {
+  stroke: var(--text-3);
+}
+
+.headline-spark .gap {
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.7;
+}
+
+.headline-spark .dot-kaiku {
+  fill: var(--ok);
+}
+
+.headline-spark .dot-plain {
+  fill: var(--text-3);
+}
+
+.headline > .icon {
+  flex: none;
+  color: var(--text-3);
 }
 
 .block {
@@ -1497,6 +1621,10 @@ kbd {
 
   .stage-scrim {
     background: linear-gradient(to top, oklch(0.16 0.004 264 / 0.92), oklch(0.16 0.004 264 / 0.5) 34%, transparent 62%);
+  }
+
+  .opening {
+    padding: var(--s-5) var(--s-4) 96px;
   }
 
   .story {

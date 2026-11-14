@@ -52,6 +52,26 @@ export function drawChart(svg, curve, mark) {
   }
 }
 
+/** The two lines alone, small enough for a button: 72 x 34, the marked point with its dots. */
+export function drawSpark(svg, curve, mark) {
+  svg.replaceChildren();
+  const points = curve.filter((p) => Number.isFinite(p?.demos) && Number.isFinite(p.kaiku) && Number.isFinite(p.plain))
+    .sort((a, b) => a.demos - b.demos);
+  if (points.length < 2) return;
+  const x = (i) => 4 + (i * 64) / (points.length - 1);
+  const y = (share) => 30 - Math.min(1, Math.max(0, share)) * 26;
+  for (const series of ['plain', 'kaiku']) {
+    const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)} ${y(p[series]).toFixed(1)}`).join(' ');
+    svg.append(node('path', { class: `series series-${series}`, d }));
+  }
+  const at = points.findIndex((p) => p.demos === mark);
+  if (at < 0) return;
+  svg.append(node('line', { class: 'gap', x1: x(at), x2: x(at), y1: y(points[at].plain), y2: y(points[at].kaiku) }));
+  for (const series of ['plain', 'kaiku']) {
+    svg.append(node('circle', { class: `dot-${series}`, cx: x(at), cy: y(points[at][series]), r: 2.6 }));
+  }
+}
+
 function yOf(share) {
   return BOTTOM - Math.min(1, Math.max(0, share)) * (BOTTOM - TOP);
 }

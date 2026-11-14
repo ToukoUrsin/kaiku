@@ -82,7 +82,7 @@
         <dl class="focus-facts">
           <div><dt>Parts sorted</dt><dd data-ref="focus-sorted">0 of 0</dd></div>
           <div><dt>Behind the operator</dt><dd data-ref="focus-lag">0.0 s</dd></div>
-          <div><dt>Clipped commands</dt><dd data-ref="focus-clipped">0</dd></div>
+          <div><dt>Unsafe commands</dt><dd data-ref="focus-clipped">0</dd></div>
         </dl>
         <footer class="focus-foot">
           <button type="button" class="button button-quiet" data-ref="focus-prev" aria-label="Previous robot">
@@ -115,13 +115,15 @@
           <div><dt data-ref="stat1-label">Amplification</dt><dd data-ref="amplification">0</dd></div>
           <div><dt data-ref="stat2-label">Echo yield</dt><dd data-ref="yield">0%</dd></div>
           <div><dt data-ref="stat3-label">Per minute</dt><dd data-ref="rate">0</dd></div>
-          <div title="Every command passes the challenge's safety filter. Clipped means the filter had to change one.">
-            <dt>Clipped commands</dt><dd data-ref="clipped">0</dd>
+          <div title="Every command of every robot passes the challenge's safety filter. This counts the ones it had to change.">
+            <dt>Unsafe commands</dt><dd data-ref="clipped">0</dd>
           </div>
         </dl>
       </section>
 
       <p class="caption" data-ref="caption"></p>
+
+      <p class="opening" data-ref="opening" role="status"></p>
 
       <div class="toasts" data-ref="toasts" role="status" aria-live="polite"></div>
 
@@ -146,11 +148,20 @@
 
       <div class="panes">
         <div class="pane" role="tabpanel" id="pane-live" aria-labelledby="tab-live" data-pane="live">
+          <button type="button" class="headline" data-ref="headline" hidden>
+            <span class="headline-words">
+              <span class="headline-top" data-ref="headline-top"></span>
+              <span class="headline-main" data-ref="headline-main"></span>
+            </span>
+            <svg class="headline-spark" data-ref="headline-spark" viewBox="0 0 72 34" aria-hidden="true"></svg>
+            <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+          </button>
+
           <dl class="phone-stats" aria-label="Totals">
             <div><dt data-ref="stat1-label-2">Amplification</dt><dd data-ref="amplification-2">0</dd></div>
             <div><dt data-ref="stat2-label-2">Echo yield</dt><dd data-ref="yield-2">0%</dd></div>
             <div><dt data-ref="stat3-label-2">Per minute</dt><dd data-ref="rate-2">0</dd></div>
-            <div><dt>Clipped</dt><dd data-ref="clipped-2">0</dd></div>
+            <div><dt>Unsafe</dt><dd data-ref="clipped-2">0</dd></div>
           </dl>
 
           <section class="block">

@@ -305,6 +305,9 @@ class Runner:
                         if self.phase == "run":
                             self._end_policy_episode(False) if self.mode == "policy" else self._end_episode(False)
                         self.hold_until = 0.0
+                        # Every visitor shares this session: the others see why the scene changed.
+                        self.toast("Switched to Policy. Nobody is driving now." if value == "policy" else
+                                   "Switched to Operator. One operator drives, the others repeat.", "info")
                     elif value != self.mode:
                         who = "The operator" if value == "gloves" else "The autopilot"
                         self.toast(f"{who} takes over at the next scene.", "info")

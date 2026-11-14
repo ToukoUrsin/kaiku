@@ -9,6 +9,7 @@ import { Hands } from './hands.js';
 import { Hud } from './hud.js';
 import { formation } from './layout.js';
 import { Markers } from './markers.js';
+import { playOpening, wantsOpening } from './opening.js';
 import { previewHud } from './sample.js';
 import { describeScene, fetchPack, fetchScene } from './scene.js';
 import { Stage } from './stage.js';
@@ -156,7 +157,9 @@ async function boot() {
   resize();
 
   rig.orbit = flags.orbit;
+  const opening = flags.env < 0 && wantsOpening(flags);
   if (flags.env >= 0) focusOn(flags.env);
+  else if (opening) rig.look(rig.hands);
   else rig.goTo(flags.shot);
 
   // ---------------------------------------------------------------- frames
@@ -216,6 +219,16 @@ async function boot() {
   while (stream.frames === 0) await sleep(50);
   hud.loading('Ready', 1);
   hud.loaded();
+  if (opening) {
+    playOpening({
+      app,
+      line: hud.el.opening,
+      rig,
+      wide: rig.shots.overview,
+      words: () => hud.openingWords(described.nEnvs),
+      rest: () => rig.goTo(alone ? 'overview' : flags.shot, 1.3),
+    });
+  }
   if (flags.preview === 'toast') {
     hud.toast('Next scene: 4 parts.');
     hud.toast('Left glove is weak. Move closer to the receiver.', 'warn');
