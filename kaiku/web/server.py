@@ -452,6 +452,12 @@ class ViewerServer:
             pass
         finally:
             self._clients.pop(c.id, None)
+            # Let the runner release a visitor turn immediately when its browser disappears.
+            for cb in list(self._callbacks):
+                try:
+                    cb({"type": "disconnect", "client": c.id})
+                except Exception:  # noqa: BLE001
+                    log.exception("on_message disconnect callback failed")
             if c.timer is not None:
                 c.timer.cancel()
             sender.cancel()

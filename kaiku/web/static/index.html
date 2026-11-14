@@ -63,6 +63,11 @@
           <button type="button" role="radio" aria-checked="false" data-shot="top">From above <kbd>3</kbd></button>
         </div>
       </div>
+      <div class="drive-tools" data-ref="drive-tools" hidden>
+        <button type="button" class="button button-primary" data-ref="drive-stage">Drive it yourself</button>
+        <button type="button" class="button" data-ref="drive-back" hidden>Hand it back</button>
+        <p class="drive-hint" data-ref="drive-hint" hidden>Press on a part, drag it to the bin of its colour, let go.</p>
+      </div>
 
       <div class="banner" data-ref="banner" role="status" hidden>
         <span class="banner-dot" aria-hidden="true"></span>
@@ -173,6 +178,10 @@
             <p class="source" data-ref="source">
               <span data-ref="source-text">Waiting for the operator</span>
             </p>
+            <div class="visitor-controls">
+              <button type="button" class="button button-primary" data-ref="drive-panel">Drive it yourself</button>
+              <button type="button" class="button" data-ref="drive-panel-back" hidden>Hand it back</button>
+            </div>
             <dl class="rows">
               <div class="row">
                 <dt>Left glove</dt>

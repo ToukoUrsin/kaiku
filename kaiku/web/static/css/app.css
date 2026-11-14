@@ -420,6 +420,34 @@ a.button {
   left: var(--s-4);
 }
 
+.drive-tools {
+  position: absolute;
+  left: 50%;
+  bottom: var(--s-5);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-2);
+  transform: translateX(-50%);
+}
+
+.drive-hint {
+  color: var(--text-2);
+  font-size: var(--t-12);
+  white-space: nowrap;
+}
+
+.visitor-controls {
+  display: flex;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+
+.app[data-driving] .drive-tools {
+  bottom: var(--s-6);
+}
+
 .story {
   position: absolute;
   left: var(--s-6);
@@ -1621,6 +1649,16 @@ a.button {
   .stage-tools {
     top: var(--s-3);
     left: var(--s-3);
+  }
+
+  .drive-tools {
+    bottom: var(--s-4);
+    max-width: calc(100% - 32px);
+  }
+
+  .drive-hint {
+    white-space: normal;
+    text-align: center;
   }
 
   .stage-tools kbd,

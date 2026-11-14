@@ -635,6 +635,9 @@ def export_scene(model: mujoco.MjModel, cache_dir: str | os.PathLike | None = No
         "lights": _lights(m),
         "bounds": bounds,
         "ground_z": ground_z,
+        # The counter surface is just above the floor in the teleop scene.  Keeping this in the
+        # export lets pointer rays land in the same plane as the lead parts.
+        "table_z": 0.01,
         "meshes": {"hash": mesh_hash, "ids": mesh_ids, "lods": N_LODS},
         "states": ["idle", "running", "success", "failed", "lead"],
     }
