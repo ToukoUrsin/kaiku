@@ -1,6 +1,10 @@
 """The pitch deck: deck/kaiku.html and deck/kaiku.pdf, built from the study's own numbers.
 
-    python deck/build.py            # needs playwright with chromium for the PDF
+    python deck/build.py                # the deck in force: no real gloves were worn
+    python deck/build.py --gloves       # deck/kaiku-gloves.*: only after a person drove in real Smartgloves
+    python deck/build.py --one-glove    # deck/kaiku-one-glove.*: the same, when it was one glove
+
+Needs playwright with chromium for the PDF.
 
 The chart is drawn from kaiku/policy/pretrained/study.json, so the deck cannot disagree with the study.
 """
@@ -14,6 +18,29 @@ STUDY = HERE.parent / "kaiku" / "policy" / "pretrained" / "study.json"
 DEMO = "kaiku-echo.fly.dev"
 SOURCE = "github.com/ToukoUrsin/kaiku"
 W, H = 1920, 1080
+
+# What the deck says about who drove. Nothing says gloves were worn until a real session exists.
+WORDS = {
+    "none": {
+        "title": "One hand,<br>48 robots.",
+        "each": "Every one of them is a person at one robot, at one table.",
+        "quarter": "The operator works a quarter of the time.",
+        "after": "Then nobody drives.",
+        "rokoko": "<b>A person's hand drives the fingers,</b> seen by a camera, down the path Rokoko's gloves use. "
+                  "Rokoko's driver and hand solver feed that path too, tested with its emulated Smartgloves II. No real gloves were worn.",
+    },
+    "gloves": {
+        "title": "One pair of<br>Rokoko gloves,<br>48 robots.",
+        "each": "Every one of them is a person in gloves, at one robot, at one table.",
+        "quarter": "The operator wears the gloves a quarter of the time.",
+        "after": "Then the gloves come off.",
+        "rokoko": "<b>Real Smartgloves on a real person.</b> Rokoko's driver and hand solver read them. Kaiku takes their stream as it is.",
+    },
+}
+WORDS["one-glove"] = {**WORDS["gloves"], "title": "One Rokoko glove,<br>48 robots.",
+                      "quarter": "The operator wears the glove a quarter of the time.", "after": "Then the glove comes off.",
+                      "rokoko": "<b>One real Smartglove on a real person.</b> Rokoko's driver and hand solver read it. "
+                                "Its fingers drive the robot's fingers."}
 
 
 def pct(share: float) -> str:
@@ -55,21 +82,21 @@ def chart(curve: list[dict]) -> str:
     return "\n".join(out)
 
 
-def slides(study: dict) -> list[str]:
+def slides(study: dict, words: dict) -> list[str]:
     curve = [p for p in study["curve"] if p["demos"] >= 2]
     by = {p["demos"]: p for p in study["curve"]}
     about = study["about"]
     return [
         f"""<section class="slide cover" style="background-image:linear-gradient(90deg,#0c0d10 0%,#0c0d10f2 26%,#0c0d1000 56%),url(img/lead.jpg)">
   <div class="mark">Kaiku</div>
-  <h1>One pair of<br>Rokoko gloves,<br>48 robots.</h1>
+  <h1>{words["title"]}</h1>
   <p class="foot">Junction 2026 · The Robot Teleoperation Challenge by Rokoko</p>
 </section>""",
         f"""<section class="slide text">
   <p class="kicker">The problem</p>
   <h2>A robot learns a job by watching a person do it.</h2>
   <p class="lede">Sorting parts took our robot 128 demonstrations to get to {pct(by[128]["plain"])}.<br>
-  Every one of them is a person in gloves, at one robot, at one table.</p>
+  {words["each"]}</p>
 </section>""",
         """<section class="slide picture" style="background-image:linear-gradient(180deg,#0c0d10e6 0%,#0c0d1099 16%,#0c0d1000 30%),url(img/overview.jpg)">
   <div class="caption">
@@ -88,21 +115,21 @@ def slides(study: dict) -> list[str]:
 </section>""",
         f"""<section class="slide figure">
   <h2>16 demonstrations: {pct(by[16]["plain"])} alone, {pct(by[16]["kaiku"])} with echoes.</h2>
-  <p class="lede">32 with echoes beat 128 without. The operator wears the gloves a quarter of the time.</p>
+  <p class="lede">32 with echoes beat 128 without. {words["quarter"]}</p>
   {chart(curve)}
   <p class="note">Share of {about["scenes"]} scenes nobody had seen in which every part ended in its own bin. Mean of {about["runs"]} training runs.</p>
 </section>""",
-        """<section class="slide picture" style="background-image:linear-gradient(180deg,#0c0d10e6 0%,#0c0d1099 16%,#0c0d1000 30%),url(img/policy.jpg)">
+        f"""<section class="slide picture" style="background-image:linear-gradient(180deg,#0c0d10e6 0%,#0c0d1099 16%,#0c0d1000 30%),url(img/policy.jpg)">
   <div class="caption">
-    <h2>Then the gloves come off.</h2>
+    <h2>{words["after"]}</h2>
     <p class="lede">The policy trained on the echoes sorts tables it has never seen. 48 robots, nobody driving.</p>
   </div>
 </section>""",
-        """<section class="slide text">
+        f"""<section class="slide text">
   <p class="kicker">What is real</p>
   <h2>Built on the challenge's own parts.</h2>
   <ol class="points">
-    <li><b>Rokoko's driver and hand solver</b> read the gloves. Kaiku takes their stream as it is.</li>
+    <li>{words["rokoko"]}</li>
     <li><b>The G1 gets its real commands.</b> The challenge's own runner took 1,800 in a row through its safety filter, none clipped.</li>
     <li><b>The data is the challenge's format,</b> LeRobot v3.0 and GR00T, ready to train on.</li>
     <li class="quiet"><b>Not yet: a real G1.</b> Everything runs in a physics twin of the sorting station.</li>
@@ -161,11 +188,11 @@ h2 { font-size: 76px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 6
 """
 
 
-def build() -> Path:
+def build(variant: str = "none") -> Path:
     study = json.loads(STUDY.read_text())
     html = ("<!doctype html><html lang=en><meta charset=utf-8><title>Kaiku</title>"
-            f"<style>{CSS}</style><body>\n" + "\n".join(slides(study)) + "\n</body></html>\n")
-    page = HERE / "kaiku.html"
+            f"<style>{CSS}</style><body>\n" + "\n".join(slides(study, WORDS[variant])) + "\n</body></html>\n")
+    page = HERE / ("kaiku.html" if variant == "none" else f"kaiku-{variant}.html")
     page.write_text(html)
     return page
 
@@ -184,4 +211,5 @@ def pdf(page: Path) -> Path:
 
 
 if __name__ == "__main__":
-    print(pdf(build()))
+    import sys
+    print(pdf(build(next((name for name in ("gloves", "one-glove") if f"--{name}" in sys.argv), "none"))))

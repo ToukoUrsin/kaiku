@@ -1,0 +1,133 @@
+<!doctype html><html lang=en><meta charset=utf-8><title>Kaiku</title><style>
+@page { size: 1920px 1080px; margin: 0; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #0c0d10; }
+body { font-family: "Inter", system-ui, sans-serif; color: #f4f5f7; -webkit-font-smoothing: antialiased;
+       font-feature-settings: "cv11", "ss03"; font-variant-numeric: tabular-nums; }
+.slide { width: 1920px; height: 1080px; padding: 120px 150px; position: relative; overflow: hidden;
+         page-break-after: always; break-after: page; background: #0c0d10 center / cover no-repeat;
+         display: flex; flex-direction: column; justify-content: center; }
+h1 { font-size: 96px; line-height: 1.04; letter-spacing: -0.035em; font-weight: 600; margin: 0; }
+h2 { font-size: 76px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 600; margin: 0; max-width: 1500px; }
+.lede { font-size: 38px; line-height: 1.4; color: #b3b7c0; margin: 40px 0 0; max-width: 1300px; letter-spacing: -0.01em; }
+.kicker { font-size: 26px; color: #9a9da6; margin: 0 0 36px; letter-spacing: 0; }
+.mark { font-size: 34px; font-weight: 600; letter-spacing: -0.01em; position: absolute; top: 96px; left: 150px; }
+.foot { position: absolute; left: 150px; bottom: 96px; font-size: 24px; color: #9a9da6; margin: 0; }
+.picture { justify-content: flex-start; padding-top: 56px; }
+.picture h2 { font-size: 64px; }
+.picture .lede { margin-top: 14px; font-size: 32px; color: #d3d6dc; }
+.points { list-style: none; padding: 0; margin: 64px 0 0; max-width: 1380px; }
+.points li { font-size: 36px; line-height: 1.4; color: #b3b7c0; padding: 30px 0; border-top: 1px solid #ffffff1f; }
+.points li b { color: #f4f5f7; font-weight: 600; }
+.points li.quiet, .points li.quiet b { color: #9a9da6; }
+.figure { justify-content: flex-start; padding-top: 96px; }
+.figure h2 { font-size: 66px; max-width: none; white-space: nowrap; }
+.figure .lede { margin-top: 22px; font-size: 34px; max-width: none; }
+.chart { margin-top: 56px; overflow: visible; }
+.chart .grid { stroke: #ffffff14; stroke-width: 1; }
+.chart .axis { stroke: #ffffff3d; stroke-width: 1; }
+.chart .gap { stroke: #ffffff3d; stroke-width: 1; }
+.chart .tick, .chart .axis-title { font-size: 24px; fill: #9a9da6; }
+.chart .series { fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.chart .series.kaiku { stroke: oklch(0.82 0.17 152); }
+.chart .series.plain { stroke: #9a9da6; }
+.chart .dot { stroke: #0c0d10; stroke-width: 4; }
+.chart .dot.kaiku { fill: oklch(0.82 0.17 152); }
+.chart .dot.plain { fill: #9a9da6; }
+.chart .value { font-size: 44px; font-weight: 600; fill: #f4f5f7; letter-spacing: -0.02em; }
+.chart .name { font-size: 28px; font-weight: 500; fill: #f4f5f7; }
+.chart .quiet { fill: #9a9da6; }
+.note { position: absolute; left: 150px; bottom: 60px; font-size: 22px; color: #9a9da6; margin: 0; }
+.link { font-size: 64px; letter-spacing: -0.025em; }
+</style><body>
+<section class="slide cover" style="background-image:linear-gradient(90deg,#0c0d10 0%,#0c0d10f2 26%,#0c0d1000 56%),url(img/lead.jpg)">
+  <div class="mark">Kaiku</div>
+  <h1>One pair of<br>Rokoko gloves,<br>48 robots.</h1>
+  <p class="foot">Junction 2026 · The Robot Teleoperation Challenge by Rokoko</p>
+</section>
+<section class="slide text">
+  <p class="kicker">The problem</p>
+  <h2>A robot learns a job by watching a person do it.</h2>
+  <p class="lede">Sorting parts took our robot 128 demonstrations to get to 92%.<br>
+  Every one of them is a person in gloves, at one robot, at one table.</p>
+</section>
+<section class="slide picture" style="background-image:linear-gradient(180deg,#0c0d10e6 0%,#0c0d1099 16%,#0c0d1000 30%),url(img/overview.jpg)">
+  <div class="caption">
+    <h2>Sort the parts once.</h2>
+    <p class="lede">47 more robots sort theirs at the same moment, each at a table of its own.</p>
+  </div>
+</section>
+<section class="slide text">
+  <p class="kicker">Kaiku is Finnish for echo</p>
+  <h2>It is not a copy.</h2>
+  <ol class="points">
+    <li><b>Every table is different.</b> The parts lie somewhere else, turned another way, sometimes another shape.</li>
+    <li><b>Each robot redoes your motion</b> around its own parts, while you are still moving.</li>
+    <li><b>Physics checks every robot,</b> and so does the challenge's safety filter. Only the clean runs are saved, in the challenge's dataset format.</li>
+  </ol>
+</section>
+<section class="slide figure">
+  <h2>16 demonstrations: 0% alone, 81% with echoes.</h2>
+  <p class="lede">32 with echoes beat 128 without. The operator wears the gloves a quarter of the time.</p>
+  <svg class="chart" viewBox="0 0 1620 620" width="1620" height="620" role="img" aria-label="Share of new scenes sorted, by number of demonstrations, alone and with echoes">
+<line class="axis" x1="110" x2="1380" y1="520.0" y2="520.0"/>
+<text class="tick" x="86" y="529.0" text-anchor="end">0%</text>
+<line class="grid" x1="110" x2="1380" y1="285.0" y2="285.0"/>
+<text class="tick" x="86" y="294.0" text-anchor="end">50%</text>
+<line class="grid" x1="110" x2="1380" y1="50.0" y2="50.0"/>
+<text class="tick" x="86" y="59.0" text-anchor="end">100%</text>
+<text class="tick" x="110.0" y="568" text-anchor="middle">2</text>
+<text class="tick" x="321.66666666666663" y="568" text-anchor="middle">4</text>
+<text class="tick" x="533.3333333333333" y="568" text-anchor="middle">8</text>
+<text class="tick" x="745.0" y="568" text-anchor="middle">16</text>
+<text class="tick" x="956.6666666666666" y="568" text-anchor="middle">32</text>
+<text class="tick" x="1168.3333333333333" y="568" text-anchor="middle">64</text>
+<text class="tick" x="1380.0" y="568" text-anchor="middle">128</text>
+<text class="axis-title" x="1416" y="568">demonstrations</text>
+<line class="gap" x1="745.0" x2="745.0" y1="504.355" y2="153.72299999999996"/>
+<path class="series plain" d="M110.0 520.0 L321.7 520.0 L533.3 520.0 L745.0 518.4 L956.7 247.5 L1168.3 131.6 L1380.0 85.9"/>
+<circle class="dot plain" cx="110.0" cy="520.0" r="7"/>
+<circle class="dot plain" cx="321.7" cy="520.0" r="7"/>
+<circle class="dot plain" cx="533.3" cy="520.0" r="7"/>
+<circle class="dot plain" cx="745.0" cy="518.4" r="11"/>
+<circle class="dot plain" cx="956.7" cy="247.5" r="7"/>
+<circle class="dot plain" cx="1168.3" cy="131.6" r="7"/>
+<circle class="dot plain" cx="1380.0" cy="85.9" r="7"/>
+<path class="series kaiku" d="M110.0 516.8 L321.7 413.9 L533.3 350.3 L745.0 139.7 L956.7 72.8 L1168.3 58.1 L1380.0 54.9"/>
+<circle class="dot kaiku" cx="110.0" cy="516.8" r="7"/>
+<circle class="dot kaiku" cx="321.7" cy="413.9" r="7"/>
+<circle class="dot kaiku" cx="533.3" cy="350.3" r="7"/>
+<circle class="dot kaiku" cx="745.0" cy="139.7" r="11"/>
+<circle class="dot kaiku" cx="956.7" cy="72.8" r="7"/>
+<circle class="dot kaiku" cx="1168.3" cy="58.1" r="7"/>
+<circle class="dot kaiku" cx="1380.0" cy="54.9" r="7"/>
+<text class="value" x="719.0" y="131.72299999999996" text-anchor="end">81%</text>
+<text class="value quiet" x="719.0" y="492.355" text-anchor="end">0%</text>
+<text class="name" x="1416" y="50.88799999999998">with echoes</text>
+<text class="name quiet" x="1416" y="115.90800000000002">operator alone</text>
+</svg>
+  <p class="note">Share of 96 scenes nobody had seen in which every part ended in its own bin. Mean of 3 training runs.</p>
+</section>
+<section class="slide picture" style="background-image:linear-gradient(180deg,#0c0d10e6 0%,#0c0d1099 16%,#0c0d1000 30%),url(img/policy.jpg)">
+  <div class="caption">
+    <h2>Then the gloves come off.</h2>
+    <p class="lede">The policy trained on the echoes sorts tables it has never seen. 48 robots, nobody driving.</p>
+  </div>
+</section>
+<section class="slide text">
+  <p class="kicker">What is real</p>
+  <h2>Built on the challenge's own parts.</h2>
+  <ol class="points">
+    <li><b>Real Smartgloves on a real person.</b> Rokoko's driver and hand solver read them. Kaiku takes their stream as it is.</li>
+    <li><b>The G1 gets its real commands.</b> The challenge's own runner took 1,800 in a row through its safety filter, none clipped.</li>
+    <li><b>The data is the challenge's format,</b> LeRobot v3.0 and GR00T, ready to train on.</li>
+    <li class="quiet"><b>Not yet: a real G1.</b> Everything runs in a physics twin of the sorting station.</li>
+  </ol>
+</section>
+<section class="slide text last">
+  <p class="kicker">Try it now</p>
+  <h2 class="link">kaiku-echo.fly.dev</h2>
+  <p class="lede">Press Train and the page runs the comparison again, on demonstrations it just recorded.<br>Or download the scene that just finished as a dataset.</p>
+  <p class="foot">github.com/ToukoUrsin/kaiku · MIT</p>
+</section>
+</body></html>

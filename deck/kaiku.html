@@ -42,14 +42,14 @@ h2 { font-size: 76px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 6
 </style><body>
 <section class="slide cover" style="background-image:linear-gradient(90deg,#0c0d10 0%,#0c0d10f2 26%,#0c0d1000 56%),url(img/lead.jpg)">
   <div class="mark">Kaiku</div>
-  <h1>One pair of<br>Rokoko gloves,<br>48 robots.</h1>
+  <h1>One hand,<br>48 robots.</h1>
   <p class="foot">Junction 2026 · The Robot Teleoperation Challenge by Rokoko</p>
 </section>
 <section class="slide text">
   <p class="kicker">The problem</p>
   <h2>A robot learns a job by watching a person do it.</h2>
   <p class="lede">Sorting parts took our robot 128 demonstrations to get to 92%.<br>
-  Every one of them is a person in gloves, at one robot, at one table.</p>
+  Every one of them is a person at one robot, at one table.</p>
 </section>
 <section class="slide picture" style="background-image:linear-gradient(180deg,#0c0d10e6 0%,#0c0d1099 16%,#0c0d1000 30%),url(img/overview.jpg)">
   <div class="caption">
@@ -68,7 +68,7 @@ h2 { font-size: 76px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 6
 </section>
 <section class="slide figure">
   <h2>16 demonstrations: 0% alone, 81% with echoes.</h2>
-  <p class="lede">32 with echoes beat 128 without. The operator wears the gloves a quarter of the time.</p>
+  <p class="lede">32 with echoes beat 128 without. The operator works a quarter of the time.</p>
   <svg class="chart" viewBox="0 0 1620 620" width="1620" height="620" role="img" aria-label="Share of new scenes sorted, by number of demonstrations, alone and with echoes">
 <line class="axis" x1="110" x2="1380" y1="520.0" y2="520.0"/>
 <text class="tick" x="86" y="529.0" text-anchor="end">0%</text>
@@ -110,7 +110,7 @@ h2 { font-size: 76px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 6
 </section>
 <section class="slide picture" style="background-image:linear-gradient(180deg,#0c0d10e6 0%,#0c0d1099 16%,#0c0d1000 30%),url(img/policy.jpg)">
   <div class="caption">
-    <h2>Then the gloves come off.</h2>
+    <h2>Then nobody drives.</h2>
     <p class="lede">The policy trained on the echoes sorts tables it has never seen. 48 robots, nobody driving.</p>
   </div>
 </section>
@@ -118,7 +118,7 @@ h2 { font-size: 76px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 6
   <p class="kicker">What is real</p>
   <h2>Built on the challenge's own parts.</h2>
   <ol class="points">
-    <li><b>Rokoko's driver and hand solver</b> read the gloves. Kaiku takes their stream as it is.</li>
+    <li><b>A person's hand drives the fingers,</b> seen by a camera, down the path Rokoko's gloves use. Rokoko's driver and hand solver feed that path too, tested with its emulated Smartgloves II. No real gloves were worn.</li>
     <li><b>The G1 gets its real commands.</b> The challenge's own runner took 1,800 in a row through its safety filter, none clipped.</li>
     <li><b>The data is the challenge's format,</b> LeRobot v3.0 and GR00T, ready to train on.</li>
     <li class="quiet"><b>Not yet: a real G1.</b> Everything runs in a physics twin of the sorting station.</li>
