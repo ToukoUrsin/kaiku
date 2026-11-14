@@ -1,1 +1,305 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b0e11"><title>Kaiku — Robot Teleoperation</title><link rel="stylesheet" href="/css/app.css"></head><body><script type="module" src="/js/app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0c0d10">
+  <meta name="color-scheme" content="dark">
+  <title>Kaiku</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230c0d10'/%3E%3Cg fill='none' stroke='%23f4f5f7' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M12 11.5a6.4 6.4 0 0 1 0 9'/%3E%3Cpath d='M16.5 8a11.3 11.3 0 0 1 0 16' opacity='.62'/%3E%3Cpath d='M21 4.6a16.2 16.2 0 0 1 0 22.8' opacity='.32'/%3E%3C/g%3E%3Ccircle cx='8' cy='16' r='2.3' fill='%23f4f5f7'/%3E%3C/svg%3E">
+  <link rel="preload" href="/fonts/inter-latin-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <svg width="0" height="0" class="sprite" aria-hidden="true">
+    <symbol id="i-mark" viewBox="0 0 20 20">
+      <circle cx="4" cy="10" r="1.7" fill="currentColor" stroke="none"/>
+      <path d="M7.2 6.9a4.4 4.4 0 0 1 0 6.2"/>
+      <path d="M10.3 4.5a7.8 7.8 0 0 1 0 11" opacity=".62"/>
+      <path d="M13.4 2.1a11.2 11.2 0 0 1 0 15.8" opacity=".32"/>
+    </symbol>
+    <symbol id="i-arrow" viewBox="0 0 16 16"><path d="M2.5 8h10.5M9.5 4.5 13 8l-3.5 3.5"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 16 16"><path d="M5.5 3.5v9M10.5 3.5v9"/></symbol>
+    <symbol id="i-play" viewBox="0 0 16 16"><path d="M5 3.4v9.2L12.4 8z"/></symbol>
+    <symbol id="i-next" viewBox="0 0 16 16"><path d="M3.5 3.6v8.8L10 8zM12.5 3.5v9"/></symbol>
+    <symbol id="i-check" viewBox="0 0 16 16"><path d="m3.5 8.5 3 3 6-7"/></symbol>
+    <symbol id="i-close" viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.8"/><path d="M10.5 3.2H4.3A1.8 1.8 0 0 0 2.5 5v6.2"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 16 16"><path d="m6 3.5 4.5 4.5L6 12.5"/></symbol>
+  </svg>
+
+  <div class="app" id="app" data-conn="connecting" data-tab="live">
+    <header class="topbar">
+      <div class="brand">
+        <svg class="icon brand-mark" aria-hidden="true"><use href="#i-mark"/></svg>
+        <span class="brand-name">Kaiku</span>
+        <span class="brand-line">One operator, many robots</span>
+      </div>
+
+      <div class="segmented" role="radiogroup" aria-label="Who drives the robots" data-ref="mode">
+        <button type="button" role="radio" aria-checked="false" data-mode="gloves">Gloves</button>
+        <button type="button" role="radio" aria-checked="false" data-mode="autopilot">Autopilot</button>
+      </div>
+
+      <div class="topbar-end">
+        <span class="perf" data-ref="perf"></span>
+        <span class="conn" data-ref="conn" role="status">
+          <span class="conn-dot" aria-hidden="true"></span>
+          <span data-ref="conn-text">Connecting</span>
+        </span>
+      </div>
+    </header>
+
+    <main class="stage" id="stage">
+      <canvas class="view" id="view" aria-label="Live view of the robots. Drag to turn, scroll to zoom, select a robot to look closer."></canvas>
+      <div class="stage-scrim" aria-hidden="true"></div>
+
+      <div class="stage-tools">
+        <div class="segmented segmented-quiet" role="radiogroup" aria-label="Camera" data-ref="shots">
+          <button type="button" role="radio" aria-checked="true" data-shot="lead">Operator <kbd>1</kbd></button>
+          <button type="button" role="radio" aria-checked="false" data-shot="overview">All robots <kbd>2</kbd></button>
+          <button type="button" role="radio" aria-checked="false" data-shot="top">From above <kbd>3</kbd></button>
+        </div>
+      </div>
+
+      <div class="banner" data-ref="banner" role="status" hidden>
+        <span class="banner-dot" aria-hidden="true"></span>
+        <span data-ref="banner-text"></span>
+        <button type="button" class="banner-action" data-ref="banner-action" hidden></button>
+      </div>
+
+      <aside class="focus" data-ref="focus" aria-label="Selected robot" hidden>
+        <header class="focus-head">
+          <span class="state-dot" data-ref="focus-dot" aria-hidden="true"></span>
+          <h2 data-ref="focus-title">Robot 1</h2>
+          <button type="button" class="icon-button" data-ref="focus-close" aria-label="Back to all robots (Esc)">
+            <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
+          </button>
+        </header>
+        <p class="focus-state" data-ref="focus-state"></p>
+        <dl class="focus-facts">
+          <div><dt>Parts sorted</dt><dd data-ref="focus-sorted">0 of 0</dd></div>
+          <div><dt>Behind the operator</dt><dd data-ref="focus-lag">0.0 s</dd></div>
+          <div><dt>Clipped commands</dt><dd data-ref="focus-clipped">0</dd></div>
+        </dl>
+        <footer class="focus-foot">
+          <button type="button" class="button button-quiet" data-ref="focus-prev" aria-label="Previous robot">
+            <svg class="icon flip" aria-hidden="true"><use href="#i-chevron"/></svg>
+          </button>
+          <button type="button" class="button button-quiet" data-ref="focus-next" aria-label="Next robot">
+            <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+          </button>
+          <span class="hint"><kbd>Esc</kbd> to return</span>
+        </footer>
+      </aside>
+
+      <div class="tag" data-ref="tag" hidden>
+        <span class="tag-live" aria-hidden="true"></span>
+        <span data-ref="tag-text">Operator</span>
+      </div>
+
+      <section class="story" aria-label="Demonstrations">
+        <p class="story-chain">
+          <b>1</b> operator
+          <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+          <b data-ref="robots">47</b> robots
+        </p>
+        <p class="story-count">
+          <span class="story-number" data-ref="demos">0</span>
+          <span class="story-gain" data-ref="gain" aria-hidden="true"></span>
+        </p>
+        <p class="story-label" data-ref="demos-label">demonstrations saved</p>
+        <dl class="story-stats">
+          <div><dt>Amplification</dt><dd data-ref="amplification">0</dd></div>
+          <div><dt>Echo yield</dt><dd data-ref="yield">0%</dd></div>
+          <div><dt>Per minute</dt><dd data-ref="rate">0</dd></div>
+          <div title="Every command passes the challenge's safety filter. Clipped means the filter had to change one.">
+            <dt>Clipped commands</dt><dd data-ref="clipped">0</dd>
+          </div>
+        </dl>
+      </section>
+
+      <p class="caption" data-ref="caption"></p>
+
+      <div class="toasts" data-ref="toasts" role="status" aria-live="polite"></div>
+
+      <div class="veil" data-ref="veil">
+        <div class="veil-box">
+          <svg class="icon veil-mark" aria-hidden="true"><use href="#i-mark"/></svg>
+          <p class="veil-name">Kaiku</p>
+          <div class="veil-bar" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" data-ref="veil-bar"><span data-ref="veil-fill"></span></div>
+          <p class="veil-step" data-ref="veil-step">Loading the scene</p>
+        </div>
+      </div>
+    </main>
+
+    <aside class="panel" data-ref="panel" aria-label="Details">
+      <button type="button" class="sheet-handle" data-ref="sheet-handle" aria-label="Show more or less of the panel"><span></span></button>
+
+      <div class="tabs" role="tablist" aria-label="Sections" data-ref="tabs">
+        <button type="button" role="tab" aria-selected="true" data-tab="live" id="tab-live" aria-controls="pane-live">Live</button>
+        <button type="button" role="tab" aria-selected="false" data-tab="dataset" id="tab-dataset" aria-controls="pane-dataset" tabindex="-1">Dataset</button>
+        <button type="button" role="tab" aria-selected="false" data-tab="policy" id="tab-policy" aria-controls="pane-policy" tabindex="-1">Policy</button>
+      </div>
+
+      <div class="panes">
+        <div class="pane" role="tabpanel" id="pane-live" aria-labelledby="tab-live" data-pane="live">
+          <dl class="phone-stats" aria-label="Totals">
+            <div><dt>Amplification</dt><dd data-ref="amplification-2">0</dd></div>
+            <div><dt>Echo yield</dt><dd data-ref="yield-2">0%</dd></div>
+            <div><dt>Per minute</dt><dd data-ref="rate-2">0</dd></div>
+            <div><dt>Clipped</dt><dd data-ref="clipped-2">0</dd></div>
+          </dl>
+
+          <section class="block">
+            <header class="block-head">
+              <h2>Operator</h2>
+              <button type="button" class="button" data-ref="calibrate">Calibrate</button>
+            </header>
+            <p class="source" data-ref="source">
+              <span data-ref="source-text">Waiting for the operator</span>
+            </p>
+            <dl class="rows">
+              <div class="row">
+                <dt>Left glove</dt>
+                <dd><span class="state-dot" data-ref="left-dot"></span><span data-ref="left-status">No signal</span><span class="num" data-ref="left-hz"></span></dd>
+              </div>
+              <div class="row">
+                <dt>Right glove</dt>
+                <dd><span class="state-dot" data-ref="right-dot"></span><span data-ref="right-status">No signal</span><span class="num" data-ref="right-hz"></span></dd>
+              </div>
+              <div class="row">
+                <dt>Calibration</dt>
+                <dd><span data-ref="calibrated">Not calibrated</span></dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="block">
+            <header class="block-head">
+              <h2>Scene <span data-ref="scene-index"></span></h2>
+              <span class="num dim" data-ref="elapsed">0:00</span>
+            </header>
+            <div class="sorted">
+              <span class="pips" data-ref="pips" aria-hidden="true"></span>
+              <span data-ref="sorted-text">0 of 0 parts sorted</span>
+            </div>
+            <ol class="steps" data-ref="steps" aria-label="What the operator is doing">
+              <li data-step="approach">Approach</li>
+              <li data-step="descend">Descend</li>
+              <li data-step="grasp">Grasp</li>
+              <li data-step="lift">Lift</li>
+              <li data-step="carry">Carry</li>
+              <li data-step="release">Release</li>
+            </ol>
+            <p class="step-now" data-ref="step-now"></p>
+            <div class="history">
+              <div class="history-head">
+                <h3>Last scenes</h3>
+                <span class="dim" data-ref="history-note"></span>
+              </div>
+              <div class="history-bars" data-ref="history" role="img" aria-label="Echoes that succeeded in each of the last scenes"></div>
+              <p class="empty-line" data-ref="history-empty">The first scene is still running.</p>
+            </div>
+          </section>
+
+          <section class="block">
+            <header class="block-head">
+              <h2>Fleet</h2>
+              <span class="dim" data-ref="fleet-note"></span>
+            </header>
+            <div class="minimap" data-ref="minimap" role="group" aria-label="Robots. Select one to look closer."></div>
+            <dl class="pair">
+              <div><dt>Mean echo delay</dt><dd class="num" data-ref="lag-mean">0.0 s</dd></div>
+              <div><dt>Worst</dt><dd class="num" data-ref="lag-max">0.0 s</dd></div>
+            </dl>
+          </section>
+        </div>
+
+        <div class="pane" role="tabpanel" id="pane-dataset" aria-labelledby="tab-dataset" data-pane="dataset" hidden>
+          <section class="block">
+            <header class="block-head">
+              <h2>Recording</h2>
+              <button type="button" class="switch" role="switch" aria-checked="false" data-ref="record" aria-label="Save demonstrations"><span></span></button>
+            </header>
+            <p class="lede" data-ref="record-note">Every robot that sorts its whole scene without a clipped command is saved as one demonstration.</p>
+            <dl class="figures">
+              <div><dt>Demonstrations</dt><dd data-ref="ds-episodes">0</dd></div>
+              <div><dt>Frames</dt><dd data-ref="ds-frames">0</dd></div>
+              <div><dt>Robot time</dt><dd data-ref="ds-time">0 min</dd></div>
+            </dl>
+          </section>
+          <section class="block">
+            <header class="block-head"><h2>Saved to</h2></header>
+            <div class="path">
+              <code data-ref="ds-path">Not recording to disk</code>
+              <button type="button" class="icon-button" data-ref="ds-copy" aria-label="Copy the path" hidden>
+                <svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>
+              </button>
+            </div>
+          </section>
+          <section class="block">
+            <header class="block-head"><h2>Format</h2></header>
+            <dl class="rows">
+              <div class="row"><dt>Layout</dt><dd>LeRobot, as the challenge asks</dd></div>
+              <div class="row"><dt><code>observation.state</code></dt><dd class="num">28 values</dd></div>
+              <div class="row"><dt><code>action</code></dt><dd class="num">28 values</dd></div>
+              <div class="row"><dt>Rate</dt><dd class="num">30 Hz</dd></div>
+            </dl>
+            <p class="note">14 arm joints and 14 hand joints, the same vector the real G1 takes.</p>
+          </section>
+        </div>
+
+        <div class="pane" role="tabpanel" id="pane-policy" aria-labelledby="tab-policy" data-pane="policy" hidden>
+          <section class="block">
+            <header class="block-head">
+              <h2>Does it train a better policy</h2>
+              <span class="badge" data-ref="policy-badge" hidden>Sample data</span>
+            </header>
+            <p class="lede">Two policies from the same sessions: one sees only the operator's demonstrations, one also sees the echoes.</p>
+            <figure class="chart">
+              <svg data-ref="chart" viewBox="0 0 320 196" role="img" aria-label="Sorting success against the number of operator demonstrations"></svg>
+              <figcaption class="chart-empty" data-ref="chart-empty">
+                <strong>No policy trained yet</strong>
+                <span>Success for each number of operator demonstrations will be drawn here.</span>
+              </figcaption>
+            </figure>
+            <ul class="legend">
+              <li><span class="swatch swatch-kaiku"></span>With Kaiku's echoes<b class="num" data-ref="policy-kaiku"></b></li>
+              <li><span class="swatch swatch-plain"></span>Operator's demonstrations alone<b class="num" data-ref="policy-plain"></b></li>
+            </ul>
+          </section>
+          <section class="block">
+            <header class="block-head">
+              <h2>Training</h2>
+              <button type="button" class="button" data-ref="train">Train both</button>
+            </header>
+            <p class="lede" data-ref="train-note">Nothing is training.</p>
+            <div class="meter" data-ref="train-meter" hidden><span data-ref="train-fill"></span></div>
+          </section>
+        </div>
+      </div>
+
+      <footer class="controls">
+        <button type="button" class="button" data-ref="pause">
+          <svg class="icon" aria-hidden="true"><use href="#i-pause" data-ref="pause-icon"/></svg>
+          <span data-ref="pause-text">Pause</span>
+        </button>
+        <button type="button" class="button" data-ref="next">
+          <svg class="icon" aria-hidden="true"><use href="#i-next"/></svg>
+          <span>Next scene</span>
+        </button>
+        <div class="segmented segmented-small" role="radiogroup" aria-label="Parts per scene" data-ref="parts">
+          <button type="button" role="radio" aria-checked="true" data-parts="auto">Auto</button>
+          <button type="button" role="radio" aria-checked="false" data-parts="3">3</button>
+          <button type="button" role="radio" aria-checked="false" data-parts="4">4</button>
+          <button type="button" role="radio" aria-checked="false" data-parts="5">5</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

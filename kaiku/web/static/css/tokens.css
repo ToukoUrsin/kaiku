@@ -1,0 +1,78 @@
+/* Kaiku design tokens. One dark studio: graphite surfaces, white type, and green for the one
+   thing the product makes (a demonstration that succeeded). The saturated red, yellow and blue
+   belong to the parts on the tables and are not used by the interface. */
+
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/inter-latin-var.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/jetbrains-mono-latin-var.woff2") format("woff2");
+  font-weight: 100 800;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* surfaces (the stage's fog is --bg, see COLORS.background in stage.js) */
+  --bg: #0c0d10;
+  --surface: oklch(0.185 0.006 264);
+  --surface-raised: oklch(0.232 0.007 264);
+  --surface-hover: oklch(0.272 0.008 264);
+  --surface-active: oklch(0.318 0.009 264);
+  --line: oklch(1 0 0 / 0.075);
+  --line-strong: oklch(1 0 0 / 0.14);
+
+  /* type */
+  --text: oklch(0.965 0.003 264);
+  --text-2: oklch(0.755 0.008 264);
+  --text-3: oklch(0.67 0.01 264);
+
+  /* meaning */
+  --ok: oklch(0.82 0.17 152);
+  --ok-soft: oklch(0.82 0.17 152 / 0.16);
+  --fail: oklch(0.72 0.16 32);
+  --fail-soft: oklch(0.72 0.16 32 / 0.16);
+  --warn: oklch(0.83 0.12 82);
+  --working: oklch(0.86 0.012 264);
+  --idle: oklch(0.42 0.01 264);
+
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* type scale (rem, fixed) */
+  --t-11: 0.6875rem;
+  --t-12: 0.75rem;
+  --t-13: 0.8125rem;
+  --t-14: 0.875rem;
+  --t-16: 1rem;
+  --t-20: 1.25rem;
+  --t-hero: 4.5rem;
+
+  /* space */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+
+  --radius-s: 6px;
+  --radius-m: 8px;
+  --radius-l: 12px;
+
+  --topbar: 48px;
+  --panel: 356px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --fast: 140ms;
+  --medium: 240ms;
+
+  --shadow-pop: 0 1px 0 oklch(1 0 0 / 0.05) inset, 0 12px 32px -8px oklch(0 0 0 / 0.6), 0 2px 6px oklch(0 0 0 / 0.35);
+}

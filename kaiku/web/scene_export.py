@@ -45,7 +45,7 @@ import numpy as np
 
 from .protocol import Quantizer
 
-EXPORT_VERSION = 3
+EXPORT_VERSION = 4
 PACK_MAGIC = b"KMSH"
 PACK_VERSION = 1
 VISUAL_GROUPS = (0, 1, 2)
@@ -561,8 +561,7 @@ def export_scene(model: mujoco.MjModel, cache_dir: str | os.PathLike | None = No
     """Describe ``model`` for the browser. Cheap (milliseconds); the mesh pack is built separately."""
     m = model
     geoms, geom_ids, mesh_ids, textures, tex_meta = [], [], [], {}, {}
-    # Resolve the stage height before filtering parked free bodies. Twin scenes use a large
-    # world box named ``floor`` rather than a MuJoCo plane.
+    # Twin scenes use a large world box named ``floor`` rather than a MuJoCo plane.
     ground_z = None
     for g in range(m.ngeom):
         if int(m.geom_bodyid[g]) != 0:
@@ -573,14 +572,15 @@ def export_scene(model: mujoco.MjModel, cache_dir: str | os.PathLike | None = No
             ground_z = float(m.geom_pos[g, 2])
         elif name == "floor" and typ == int(_G.mjGEOM_BOX):
             ground_z = float(m.geom_pos[g, 2] + m.geom_size[g, 2])
+    # Free bodies that rest under the floor (parts waiting for an episode that uses them) are
+    # exported like everything else: the viewer hides whatever is below the floor at the moment.
+    # They only stay out of the bounds, which describe what is on stage.
     parked_bodies = set()
     if ground_z is not None:
         for j in range(m.njnt):
             if int(m.jnt_type[j]) == 0 and float(m.qpos0[int(m.jnt_qposadr[j]) + 2]) < ground_z - 0.35:
                 parked_bodies.add(int(m.jnt_bodyid[j]))
     for g in range(m.ngeom):
-        if int(m.geom_bodyid[g]) in parked_bodies:
-            continue
         gtype = GEOM_TYPES.get(int(m.geom_type[g]))
         if gtype is None or int(m.geom_group[g]) not in VISUAL_GROUPS:
             continue
@@ -616,7 +616,8 @@ def export_scene(model: mujoco.MjModel, cache_dir: str | os.PathLike | None = No
             if mid not in mesh_ids:
                 mesh_ids.append(mid)
         geoms.append(entry)
-        geom_ids.append(g)
+        if int(m.geom_bodyid[g]) not in parked_bodies:
+            geom_ids.append(g)
     mesh_ids.sort()
 
     bounds = _bounds(m, geom_ids)

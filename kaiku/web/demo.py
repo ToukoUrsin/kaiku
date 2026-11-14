@@ -33,7 +33,7 @@ def main(argv=None):
     movable = [int(model.jnt_qposadr[j]) for j in range(model.njnt) if int(model.jnt_type[j]) == 3]
     # Smooth, deterministic echo variation makes the live stream visibly active.
     phase = np.linspace(0, math.tau, max(1, n), endpoint=False)
-    paused = False; mode = "autopilot"; parts = "auto"; recording = True; training = False; train_progress = 0.0
+    paused = False; mode = "autopilot"; parts = "auto"; recording = True; training = False; train_progress = 0.0; cyc = 0
     episode = 1; started = time.monotonic(); last_hud = 0.0; history = []
     def on_message(msg):
         nonlocal paused, mode, parts, recording, training
@@ -80,9 +80,10 @@ def main(argv=None):
                 lag = np.maximum(0, np.linspace(0, 1.7, n) + .18 * np.sin(t + np.arange(n) * .4))
                 hud = {
                     "mode": mode, "status": "paused" if paused else ("settling" if cyc == 2 else "running"),
-                    "operator": {"left": {"connected": True, "hz": 98.2 + .7 * math.sin(t)}, "right": {"connected": True, "hz": 97.9 + .5 * math.cos(t)}, "calibrated": nonlocal_vars["calibrated"],
+                    "operator": {"source": "autopilot" if mode == "autopilot" else "stand-in", "stand_in": mode != "autopilot",
+                                 "left": {"connected": True, "hz": 98.2 + .7 * math.sin(t), "status": "tracking"}, "right": {"connected": True, "hz": 97.9 + .5 * math.cos(t), "status": "tracking"}, "calibrated": nonlocal_vars["calibrated"],
                                  "hands": {"left": [[0.01 * j, 0.002 * math.sin(t + j), .02 + .001 * j] for j in range(21)], "right": [[-.01 * j, 0.002 * math.cos(t + j), .02 + .001 * j] for j in range(21)]}},
-                    "episode": {"index": episode, "parts": 4 if parts == "auto" else int(parts), "sorted": sorted_, "elapsed_s": elapsed, "step": ["reach", "grasp", "carry", "release"][int(t * .6) % 4]},
+                    "episode": {"index": episode, "parts": 4 if parts == "auto" else int(parts), "sorted": sorted_, "elapsed_s": elapsed, "step": ["approach", "descend", "grasp", "lift", "carry", "release"][int(t * .6) % 6]},
                     "echo": {"robots": n, "done": done, "ok": int(done * .92), "failed": max(0, int(done * .08)), "lag_s": float(np.median(lag)), "lag_max_s": float(lag.max())},
                     "envs": {"lag_s": lag.tolist(), "sorted": [sorted_] * n, "clipped": [0] * n},
                     "totals": {"episodes": episode, "human_demos": episode, "robot_demos": episode * n + done, "amplification": round(n + .2, 1), "yield": .91 + .04 * math.sin(t * .2), "demos_per_min": 120 + 8 * math.sin(t), "clipped_steps": int(abs(math.sin(t * .2)) * 3), "minutes": t / 60},
