@@ -845,9 +845,21 @@ export class Hud {
       return ['Nobody is driving this robot.', `${robots} robots. Nobody driving.`, 'Every scene is new to them.',
         'They learned it from the echoes.'];
     }
-    const first = this.hud.operator?.source === 'gloves' ? 'Rokoko gloves drive this robot.'
-      : 'A hand in emulated Rokoko gloves drives this robot.';
-    return [first, `One pair of gloves. ${robots} robots.`, 'Every table is different.', `Do it once. Robots learn from ${robots}.`];
+    // Said from what is driving right now, never from what could be.
+    const operator = this.hud.operator || {};
+    const source = operator.source;
+    let first = 'A hand in emulated Rokoko gloves drives this robot.';
+    let one = 'One operator.';
+    if (source === 'gloves') {
+      first = 'Rokoko gloves drive this robot.';
+      one = 'One pair of gloves.';
+    } else if (source === 'recorded') {
+      first = 'A recorded session drives this robot.';
+    } else if (source === 'visitor') {
+      first = `${visitorSource(operator)} drives this robot.`;
+      one = operator.fingers === 'glove' ? 'One glove.' : 'One hand.';
+    }
+    return [first, `${one} ${robots} robots.`, 'Every table is different.', `Do it once. Robots learn from ${robots}.`];
   }
 
   toast(text, level = 'info') {

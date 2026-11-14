@@ -457,8 +457,12 @@ class Runner:
             elif name == "drive_end" and client == self.driver_client:
                 self._end_visitor_turn("handback")
             elif name == "hand" and client == self.driver_client and self.mode == "visitor":
+                was = (self.visitor.command.copy(), self.visitor.grip, self.visitor.own)
                 self.visitor.set_command(value if isinstance(value, dict) else {})
-                self.last_visitor_command = time.monotonic()
+                # An open page keeps saying where the hand is. Only a hand that does something keeps the turn.
+                if self.visitor.grip != was[1] or self.visitor.own != was[2] \
+                        or float(np.abs(self.visitor.command - was[0]).max()) > 1e-4:
+                    self.last_visitor_command = time.monotonic()
             elif self.driver_client is not None and client != self.driver_client:
                 continue                                       # a visitor has the robots: nobody else's buttons count
             elif name == "pause":
