@@ -43,7 +43,7 @@ def live():
         shutil.copytree("/data/demos", DEMOS)             # start from the demonstrations already collected
         vol.commit()
     subprocess.Popen(["python", "-u", "-m", "kaiku.app.run", "--n", "48", "--port", str(PORT), "--record", DEMOS,
-                      "--train", "modal", "--train-steps", "30000"], cwd=REMOTE)
+                      "--train", "modal", "--train-steps", "30000", "--train-about", "3", "--shared"], cwd=REMOTE)
 
     def keep():
         while True:

@@ -133,6 +133,7 @@
           <p class="veil-name">Kaiku</p>
           <div class="veil-bar" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" data-ref="veil-bar"><span data-ref="veil-fill"></span></div>
           <p class="veil-step" data-ref="veil-step">Loading the scene</p>
+          <button type="button" class="button veil-retry" data-ref="veil-retry" hidden onclick="location.reload()">Load it again</button>
         </div>
       </div>
     </main>
@@ -327,6 +328,17 @@
     </aside>
   </div>
 
+  <script>
+    // A file of the page that did not arrive (a dropped connection) would leave "Loading" up for ever.
+    addEventListener('error', (event) => {
+      const node = event.target;
+      if (!node || !['SCRIPT', 'LINK'].includes(node.tagName) || document.querySelector('.veil[data-done]')) return;
+      const veil = document.querySelector('.veil');
+      veil.setAttribute('data-error', '');
+      veil.querySelector('[data-ref="veil-step"]').textContent = 'Part of the page did not arrive.';
+      veil.querySelector('[data-ref="veil-retry"]').hidden = false;
+    }, true);
+  </script>
   <script type="module" src="/js/main.js"></script>
 </body>
 </html>

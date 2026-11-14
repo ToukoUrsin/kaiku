@@ -820,6 +820,10 @@ kbd {
   background: var(--fail);
 }
 
+.veil-retry {
+  margin-top: var(--s-4);
+}
+
 /* ---------------------------------------------------------------- panel */
 
 .panel {
@@ -1076,7 +1080,6 @@ kbd {
 
 .pips i[data-on] {
   background: var(--ok);
-  transition: background var(--medium);
 }
 
 .steps {

@@ -29,6 +29,11 @@ const SOURCE_TEXT = {
 const TAG_TEXT = { 'stand-in': 'Scripted hand, emulated gloves', gloves: 'Operator in Rokoko gloves', autopilot: 'Autopilot', policy: 'Policy' };
 const STAGE_TEXT = { loading: 'Reading the demonstrations', training: 'Training', testing: 'Testing on scenes it has not seen', done: 'Finishing' };
 const TOAST_MS = 4200;
+
+/** Seconds as something a person waits for: "40 s", "3 min". */
+function left(seconds) {
+  return seconds < 90 ? `${Math.max(5, Math.round(seconds / 5) * 5)} s` : `${Math.round(seconds / 60)} min`;
+}
 const MAX_TOASTS = 3;
 
 export class Hud {
@@ -441,6 +446,7 @@ export class Hud {
     const dataset = this.hud.dataset || {};
     const recording = Boolean(dataset.recording);
     this.attr('record', 'aria-checked', String(recording));
+    this.attr('record', 'disabled', Boolean(this.hud.shared));       // one session for everybody: it stays on
     this.text('record-note', recording
       ? 'Every robot that sorts its whole scene without a clipped command is saved as one demonstration.'
       : 'Recording is off. Robots still sort, and nothing is written to disk.');
@@ -519,16 +525,17 @@ export class Hud {
     if (training) this.el['train-fill'].style.transform = `scaleX(${progress})`;
     this.attr('train', 'disabled', training);
     this.text('train', training ? 'Training' : 'Train both');
-    const loss = Number.isFinite(policy?.loss) && policy?.stage === 'training' ? `, loss ${policy.loss.toFixed(4)}` : '';
+    const eta = Number.isFinite(policy?.eta_s) && policy.eta_s > 0 ? `, ${left(policy.eta_s)} left` : '';
+    const about = Number.isFinite(policy?.about_min) ? ` About ${Math.round(policy.about_min)} minutes.` : '';
     const trained = policy?.trained;
     this.text('train-note', training
-      ? `${STAGE_TEXT[policy.stage] || 'Training'}: ${Math.round(progress * 100)}%${loss}.`
+      ? `${STAGE_TEXT[policy.stage] || 'Training'}: ${Math.round(progress * 100)}%${eta}.`
       : policy?.error ? policy.error
         : trained ? `Last run, from ${trained.humans || 0} demonstrations, on ${trained.scenes || 0} new scenes: `
           + `${percent(trained.kaiku)} with the echoes, ${percent(trained.plain)} without.`
           + (trained.in_use ? '' : ' The policy that was already here sorts more, so it keeps driving.')
           : 'Trains two policies on the last 16 demonstrations of this session, one with their echoes and one without, '
-            + 'then tests both on 48 scenes neither has seen. About five minutes.');
+            + `then tests both on 48 scenes neither has seen.${about}`);
   }
 
   renderControls() {
@@ -551,6 +558,15 @@ export class Hud {
       banner = { level: 'warn', text: 'The runner has stopped sending. Waiting for it' };
     } else if (hud.status === 'paused') {
       banner = { level: 'info', text: 'Paused', action: 'Resume', run: () => this.togglePause() };
+    } else if (hud.policy?.state === 'training') {
+      // Training takes minutes and its panel is two clicks away: say it where everybody looks.
+      const { progress = 0, eta_s: eta } = hud.policy;
+      banner = {
+        level: 'info',
+        text: `Training two policies: ${Math.round(progress * 100)}%`
+          + (Number.isFinite(eta) && eta > 0 ? `, ${left(eta)} left` : ''),
+        action: 'Show', run: () => this.selectTab('policy'),
+      };
     } else if (operator && operator.source === 'gloves' && !(operator.left?.connected && operator.right?.connected)) {
       banner = {
         level: 'warn', text: 'No gloves connected', action: 'Use autopilot',
@@ -646,6 +662,7 @@ export class Hud {
   loadingFailed(step) {
     this.attr('veil', 'data-error', true);
     this.text('veil-step', step);
+    this.el['veil-retry'].hidden = false;
   }
 
   loaded() {

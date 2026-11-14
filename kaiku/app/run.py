@@ -39,6 +39,7 @@ from kaiku.web.server import ViewerServer
 
 DT = 1.0 / CONTROL_HZ
 HUD_EVERY = 3                 # ticks between HUD updates (10 Hz)
+PAUSE_S = 20.0                # how long a pause lasts on a session that everybody shares
 MODES = ("gloves", "autopilot", "policy")
 HERE = Path(__file__).resolve().parents[1]
 PRETRAINED = HERE / "policy" / "pretrained" / "kaiku.pt"
@@ -52,7 +53,8 @@ class Runner:
                  threads: int | None = None, mode: str = "gloves", gloves: str | None = None,
                  hand_solver: str | None = None,
                  policy: Path | str | None = None, train: str = "local", train_steps: int = 30000,
-                 policy_timeout_s: float = 80.0, stall_s: float = 15.0):
+                 policy_timeout_s: float = 80.0, stall_s: float = 15.0, shared: bool = False,
+                 train_about: float | None = None):
         if seed is None:                                       # other scenes every time it is started
             seed = int(np.random.SeedSequence().generate_state(1)[0] % 2 ** 30)
         self.s = Session(n, seed=seed, threads=threads)
@@ -73,6 +75,8 @@ class Runner:
         self.op = self._operator(self.mode)
         self.rec = Recorder(self.s, record, operator=self._who())
         self.paused = False
+        self.shared = shared                                   # one session for everybody who opens the page
+        self.resume_at: float | None = None
         self.stop = False
         self.phase = "run"                                     # run -> hold -> run ...
         self.hold_until = 0.0
@@ -97,7 +101,7 @@ class Runner:
         self.trained: dict | None = None                       # what the last press of Train came to
         self.study = json.loads(STUDY.read_text()) if STUDY.exists() else {}
         out = Path(record) / "policies" if record else None
-        self.trainer = Trainer(record, out or "policies", train, train_steps)
+        self.trainer = Trainer(record, out or "policies", train, train_steps, about_min=train_about)
         policy = policy or (PRETRAINED if PRETRAINED.exists() else None)
         if policy:
             self.loading = self.pool.submit(self._load, Path(policy))
@@ -171,9 +175,13 @@ class Runner:
         self.states[1:] = np.where(ok[1:], SUCCESS, FAILED)
         self.states[0] = LEAD
         self.sorted = s.progress()
-        kept = self.rec.end(r) if record else {"kept": 0, "human": 0, "dropped": 0}
-        if not record:
+        if not record:                                         # cut short by a visitor: nobody's result, nothing to count
             self.rec.begin()
+            self.states[1:] = IDLE
+            self.phase = "hold"
+            self.hold_until = time.perf_counter() + self.hold_s
+            return
+        kept = self.rec.end(r)
         clean = ok & (r.clipped == 0)
         t = self.tot
         t["episodes"] += 1
@@ -282,6 +290,10 @@ class Runner:
             name, value = m.get("name"), m.get("value")
             if name == "pause":
                 self.paused = bool(value)
+                # One page for everybody: a visitor who pauses and leaves must not leave it paused.
+                self.resume_at = time.perf_counter() + PAUSE_S if self.paused and self.shared else None
+                if self.resume_at:
+                    self.toast(f"Paused for everyone. It carries on by itself in {PAUSE_S:.0f} seconds.", "info")
             elif name == "next_scene":
                 if self.phase == "run":
                     self._end_policy_episode(False) if self.mode == "policy" else self._end_episode(record=False)
@@ -291,6 +303,8 @@ class Runner:
                 self.next = self.sampler.scene(self.parts)       # the scenes already drawn no longer fit
                 if self.next_free is not None:
                     self.next_free = self.sampler.free(self.parts)
+            elif name == "record" and self.shared:
+                self.toast("Recording stays on here. Everybody who opens this page shares the session.", "info")
             elif name == "record":
                 self.rec.enabled = bool(value) and self.rec.root is not None
                 if value and self.rec.root is None:
@@ -389,6 +403,7 @@ class Runner:
         return {
             "mode": self.mode,
             "status": status,
+            "shared": self.shared,
             "operator": self.op.hud() if isinstance(self.op, GloveOperator) and not alone else
             {"left": {"connected": False, "hz": 0.0}, "right": {"connected": False, "hz": 0.0},
              "calibrated": False, "stand_in": not alone, "source": "policy" if alone else "autopilot", "hands": None},
@@ -430,8 +445,10 @@ class Runner:
                "error": st.get("error") if st["state"] == "failed" else None,
                "alone": {"rounds": p["rounds"], "scenes": p["scenes"], "ok": p["ok"], "parts": p["parts"],
                          "sorted": p["sorted"], "clipped": p["clipped"]}}
+        out["about_min"] = self.trainer.about_min
         if st["state"] == "training":
-            out.update(state="training", progress=st["progress"], stage=st["stage"], loss=st["loss"])
+            out.update(state="training", progress=st["progress"], stage=st["stage"], loss=st["loss"],
+                       eta_s=st.get("eta_s"), last=self.trainer.last)
         elif self.policy is not None:
             out["state"] = "running" if self.mode == "policy" else "ready"
         return out
@@ -447,6 +464,8 @@ class Runner:
             while not self.stop:
                 self._commands()
                 self._policy_news()
+                if self.paused and self.resume_at and time.perf_counter() > self.resume_at:
+                    self.paused, self.resume_at = False, None
                 if not self.paused:
                     self._step()
                 self.hud_tick += 1
@@ -483,6 +502,10 @@ def main(argv=None) -> None:
     ap.add_argument("--train", default="local", choices=("local", "modal"),
                     help="where the Train button trains: this machine, or a rented GPU through Modal")
     ap.add_argument("--train-steps", type=int, default=30000)
+    ap.add_argument("--train-about", type=float, default=None, metavar="MINUTES",
+                    help="how long the Train button takes on this machine, for the page to say")
+    ap.add_argument("--shared", action="store_true",
+                    help="a public page: a pause ends by itself and recording cannot be switched off")
     ap.add_argument("--gloves", default=None, metavar="HOST[:PORT]",
                     help="RGMP address of the Rokoko driver; without it the stand-in operator drives")
     ap.add_argument("--hand-solver", default=None, metavar="HOST:PORT|off",
@@ -495,7 +518,7 @@ def main(argv=None) -> None:
     ensure()                                                   # the robot model, fetched on the first run
     r = Runner(a.n, a.port, a.host, a.seed, a.parts if a.parts == "auto" else int(a.parts), a.record,
                threads=a.threads, mode=a.mode, gloves=a.gloves, hand_solver=a.hand_solver, policy=a.policy, train=a.train,
-               train_steps=a.train_steps)
+               train_steps=a.train_steps, shared=a.shared, train_about=a.train_about)
     if a.g1:
         from kaiku.app import g1
         r.lead = g1.Lead()

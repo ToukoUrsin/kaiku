@@ -13,6 +13,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,11 +22,13 @@ WHICH = ("kaiku", "plain")
 
 class Trainer:
     def __init__(self, data: Path | str | None, out: Path | str, backend: str = "local", steps: int = 30000,
-                 scenes: int = 48, last: int = 16):
+                 scenes: int = 48, last: int = 16, about_min: float | None = None):
         self.data = Path(data) if data else None
         self.out = Path(out)
         self.backend, self.steps, self.scenes = backend, steps, scenes
         self.last = last                     # the operator's latest episodes: few enough that the echoes decide it
+        self.about_min = about_min           # what the page may say a run takes here, when somebody has measured it
+        self.marks: list[tuple[float, float]] = []      # (time, progress) of the run, to say how long is left
         self.proc: subprocess.Popen | None = None
         self.lock = threading.Lock()
         self.jobs: dict[str, dict] = {}
@@ -55,6 +58,7 @@ class Trainer:
         with self.lock:
             self.jobs = {w: {"stage": "loading", "progress": 0.0} for w in WHICH}
             self.error, self.finished, self.fresh = None, False, False
+            self.marks = []
         self.proc = subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                                      start_new_session=True)
         threading.Thread(target=self._read, args=(self.proc,), daemon=True, name="kaiku-trainer").start()
@@ -77,6 +81,9 @@ class Trainer:
                     self.error = str(m.get("text", "Training failed."))
                 elif m.get("which") in self.jobs:
                     self.jobs[m["which"]].update(m)
+                    self.marks.append((time.monotonic(), sum(j.get("progress", 0.0) for j in self.jobs.values())
+                                       / len(self.jobs)))
+                    del self.marks[:-600]
         code = proc.wait()
         with self.lock:
             done = all(j.get("stage") == "done" for j in self.jobs.values())
@@ -89,11 +96,18 @@ class Trainer:
         with self.lock:
             jobs = {w: dict(j) for w, j in self.jobs.items()}
             error, finished = self.error, self.finished
+            marks = self.marks[-300:]
         if not jobs:
             return {"state": "idle"}
         state = "failed" if error else ("done" if finished else "training")
         k = jobs["kaiku"]
-        return {"state": state, "error": error, "stage": k.get("stage"), "loss": k.get("loss"),
+        # What is left, from how fast the last stretch went. Reading the files and training do not go
+        # at the same pace, so nothing is said until the pace has been steady for a while.
+        eta = None
+        if len(marks) > 20 and marks[-1][1] > marks[0][1] + 0.01:
+            (t0, p0), (t1, p1) = marks[0], marks[-1]
+            eta = round((1.0 - p1) * (t1 - t0) / (p1 - p0))
+        return {"state": state, "error": error, "stage": k.get("stage"), "loss": k.get("loss"), "eta_s": eta,
                 "progress": round(sum(j.get("progress", 0.0) for j in jobs.values()) / len(jobs), 4), "jobs": jobs}
 
     def close(self) -> None:
