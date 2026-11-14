@@ -67,7 +67,7 @@ class Recorder:
         self._action.append(np.concatenate([arm, hand], axis=1).astype(np.float32))
         self._parts.append(np.concatenate([obs.obj_pos[rows, idx], obs.obj_quat[rows, idx]], axis=-1).astype(np.float32))
 
-    def end(self, result, source: str | None = None) -> dict:
+    def end(self, result, source: str | None = None, source_label: str | None = None) -> dict:
         """Close the episode: write the robots that made a clean demonstration. Returns counts."""
         out = {"kept": 0, "human": 0, "dropped": 0}
         if not self.enabled or not self._state:
@@ -98,9 +98,10 @@ class Recorder:
             for row, i in enumerate(keep):
                 lay = result.layouts[i]
                 who = (source or self.operator) if i == 0 else "echo"
+                label = ("human" if i == 0 else "echo") if source_label is None else source_label
                 rec = {
                     "demo": self.demos, "file": name, "row": row, "episode": ep, "env": int(i),
-                    "source": "human" if i == 0 else "echo", "operator": who,
+                    "source": label, "operator": who,
                     "frames": int(span[row, 1] - span[row, 0]), "fps": FPS, "success": True, "clipped": 0,
                     "lag_s": 0.0 if i == 0 else round(float(result.lag[i - 1]), 2),
                     "task": "sort_fixed", "instruction": instruction(lay.mapping), "mapping": lay.mapping,
@@ -114,7 +115,7 @@ class Recorder:
                 f.write(json.dumps(rec) + "\n")
                 self.demos += 1
                 self.frames += rec["frames"]
-                if i == 0:
+                if label == "human":
                     self.human += 1
                     out["human"] = 1
         self.episodes += 1

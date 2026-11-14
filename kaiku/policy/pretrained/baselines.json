@@ -1,0 +1,91 @@
+{
+  "about": {
+    "date": "2026-11-14",
+    "commit": "5ac9e44212449a4b807bd454544febbb6733e18b",
+    "simulator": "MuJoCo twin, the same IK, shaper, safety filter and physics as Session",
+    "source": "stand-in operator recordings in /bulk2/runs/robotteleop/policy/demos_snap",
+    "status": "partial: generator and smoke measurement complete; the 32x47 generation and policy matrix were not run",
+    "notes": "MimicGen is our re-implementation, not MimicGen or DexMimicGen code or their benchmark. DexMimicGen coordination subtasks do not arise because the two hands never hold one part together."
+  },
+  "generation": {
+    "attempts_requested": 1504,
+    "source_scenes_requested": 32,
+    "tables_per_scene_requested": 47,
+    "arms": "both arms in one G1 task; the simulator does not expose independent clean-run verdicts per arm",
+    "kaiku": {
+      "attempts": null,
+      "clean": 13092,
+      "yield": null,
+      "clean_recorded_echoes": 13092,
+      "recording": "/bulk2/runs/robotteleop/policy/live1_snap",
+      "live": true,
+      "offline": false,
+      "needs_lead_episode_complete": false
+    },
+    "mimicgen": {
+      "attempts": 3,
+      "clean": 0,
+      "yield": 0.0,
+      "seconds_per_attempt": 33.4,
+      "seconds_per_clean_demo": null,
+      "same_shape": null,
+      "by_distance_and_shape": {
+        "mid_other_shape": {
+          "attempts": 1,
+          "clean": 0,
+          "yield": 0.0
+        },
+        "far_other_shape": {
+          "attempts": 2,
+          "clean": 0,
+          "yield": 0.0
+        }
+      },
+      "live": false,
+      "offline": true,
+      "needs_lead_episode_complete": true,
+      "run": "/bulk2/runs/robotteleop/baseline/smoke3",
+      "note": "one lead scene x three target tables smoke test; full requested generation was not run"
+    },
+    "copy": {
+      "attempts": null,
+      "clean": null,
+      "yield": null,
+      "live": false,
+      "offline": true,
+      "needs_lead_episode_complete": true,
+      "status": "not_run"
+    }
+  },
+  "policy": {
+    "evaluation_scenes": 96,
+    "source_demonstrations": 16,
+    "sets_requested": 5,
+    "steps": 30000,
+    "runs": [],
+    "status": "not_run: heavy training was not started on this host; Modal was unavailable and no Fly machines were created"
+  },
+  "existing_16_demo_reference": {
+    "fixed_study_plain_runs": [
+      0.0,
+      0.0104,
+      0.0
+    ],
+    "fixed_study_plain_mean": 0.0035,
+    "fixed_study_kaiku_runs": [
+      0.7917,
+      0.8438,
+      0.7917
+    ],
+    "fixed_study_kaiku_mean": 0.8091,
+    "independent_plain_runs_seen_in_logs": [
+      0.1771,
+      0.1979,
+      0.0312,
+      0.0,
+      0.0104,
+      0.0
+    ],
+    "warning": "These historical policy runs use earlier data snapshots and are not the requested matched MimicGen comparison."
+  }
+}
