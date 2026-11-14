@@ -23,7 +23,11 @@ The same operator, the same model, the same training, the same test. The only di
 
 From 16 demonstrations a policy sorts nothing on its own and 81% of new scenes with echoes. 32 demonstrations with echoes beat 128 without, so the operator wears the gloves a quarter of the time.
 
-Each number is the mean of 3 training runs, each tested on 96 scenes neither policy had seen. A scene counts only when every part rests in its own bin and the safety filter clipped no command. The runs are in [`kaiku/policy/pretrained/study.json`](kaiku/policy/pretrained/study.json), and the Train button in the demo repeats the comparison on the last 16 demonstrations of the session while you watch.
+Each number is the mean of 3 training runs, each tested on 96 scenes neither policy had seen. A scene counts only when every part rests in its own bin and the safety filter clipped no command. The numbers are in [`study.json`](kaiku/policy/pretrained/study.json) and all 48 runs, with every count behind them, in [`study_runs.jsonl`](kaiku/policy/pretrained/study_runs.jsonl). The Train button in the demo repeats the comparison on the last 16 demonstrations of the session while you watch.
+
+## What is new
+
+Redoing a demonstration around the parts of another scene is known from [MimicGen](https://mimicgen.github.io) and [DexMimicGen](https://dexmimicgen.github.io). There it runs afterwards, on recorded demonstrations. Kaiku does it during teleoperation: the 47 echoes move while the operator moves, from the glove stream itself, so the operator sees at once on which tables the motion works. Every echo passes the challenge's safety filter and physics before it counts, and what is saved is already the challenge's dataset.
 
 ## How it works
 
@@ -59,12 +63,13 @@ python -m kaiku.rgmp.replay session.rgmp                      # and serve it aga
 python -m kaiku.policy.fit demos --out policies               # train with and without echoes, test both
 python -m kaiku.policy.rollout policies/kaiku.pt              # 48 robots, 48 new scenes, no operator
 python -m kaiku.data.export demos out --limit 20              # LeRobot v3.0 and GR00T
-pytest                                                        # 100 tests
+pytest                                                        # 105 tests
 ```
 
 ## What is real and what is not
 
-- Everything runs in a MuJoCo twin of the Aaltonomous sorting station. No real G1 has moved yet. The commands are the challenge's own (joint targets, 30 Hz, safety limits), so the lead robot's stream can go to the real one.
+- Everything runs in a MuJoCo twin of the Aaltonomous sorting station. No real G1 has moved yet. The way there is built: `--g1 8000` serves the lead robot to the humanoid challenge's own runner as a policy server ([`kaiku/app/g1.py`](kaiku/app/g1.py)). With the runner's mock robot it followed the operator for 60 seconds through the official safety filter: 1,800 ticks, 29.2 commands a second, none clipped.
+- The policy reads where the parts are from the simulator, not from cameras. On the real station that has to come from the head camera.
 - The operator in the study is the stand-in, recorded live at real time on the hosted demo. No real gloves have been worn yet. The glove path runs against Rokoko's real driver and hand solver (Device SDK 2026.10.20) with the driver's emulated Smartgloves II, and against Kaiku's own emulator and recordings.
 - The parts and bins are the challenge's (45 mm cube, cylinder and triangle; red, yellow and blue bins). 3 to 5 parts per scene.
 
@@ -78,7 +83,7 @@ kaiku/fanout    the echo
 kaiku/sim       MuJoCo twin, batch physics, arm IK, safety filter
 kaiku/data      recorder, LeRobot and GR00T export
 kaiku/policy    features, training, rollout, the shipped policy and study
-kaiku/app       the 30 Hz runner behind the demo
+kaiku/app       the 30 Hz runner behind the demo, the lead robot as a policy server for a real G1
 kaiku/web       the page
 tools/          Modal jobs: the hosted demo, the study, the camera export
 ```

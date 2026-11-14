@@ -67,6 +67,7 @@ class Runner:
         self.gloves = gloves                                   # HOST[:PORT] of a Rokoko driver, or None: the stand-in
         self.hand_solver = hand_solver                         # HOST:PORT of rkk-hand-solver, "off", or None: the default
         self.ops: dict = {}
+        self.lead = None                                       # kaiku.app.g1.Lead while a challenge runner follows
         self.mode = mode if mode in ("gloves", "autopilot") else "gloves"
         self.want_mode = mode if mode in MODES else "gloves"
         self.op = self._operator(self.mode)
@@ -318,6 +319,11 @@ class Runner:
             elif name == "train":
                 self._train()
 
+    def _publish(self) -> None:
+        if self.lead is not None:                              # the lead robot's command, for a real G1 to follow
+            arm, hand = self.s.last_action
+            self.lead.put(arm[0], hand[0])
+
     def toast(self, text: str, level: str = "info") -> None:
         self.viewer.send_event({"type": "toast", "text": text, "level": level})
 
@@ -330,6 +336,7 @@ class Runner:
         t0 = time.perf_counter()
         if self.mode == "policy":
             self._policy_step()
+            self._publish()
             self.tick_ms.append(1000.0 * (time.perf_counter() - t0))
             self.walls.append(time.perf_counter())
             return
@@ -339,6 +346,7 @@ class Runner:
             s.finish_lead()
         s.tick(cmd)
         self.rec.add(obs, *s.last_action)
+        self._publish()
         if s.tick_no % 6 == 0:
             self._refresh()
         self.tick_ms.append(1000.0 * (time.perf_counter() - t0))
@@ -476,11 +484,18 @@ def main(argv=None) -> None:
     ap.add_argument("--hand-solver", default=None, metavar="HOST:PORT|off",
                     help="where rkk-hand-solver serves solved hands (default: port 12277 on the gloves' host); "
                          "the fingers come from it while it runs, from kaiku's own solver otherwise")
+    ap.add_argument("--g1", type=int, default=None, metavar="PORT",
+                    help="serve the lead robot's commands to the humanoid challenge's runner (its policy-server "
+                         "protocol, port 8000 there), so a real G1 follows the operator; see kaiku/app/g1.py")
     a = ap.parse_args(argv)
     ensure()                                                   # the robot model, fetched on the first run
     r = Runner(a.n, a.port, a.host, a.seed, a.parts if a.parts == "auto" else int(a.parts), a.record,
                threads=a.threads, mode=a.mode, gloves=a.gloves, hand_solver=a.hand_solver, policy=a.policy, train=a.train,
                train_steps=a.train_steps)
+    if a.g1:
+        from kaiku.app import g1
+        r.lead = g1.Lead()
+        g1.start(r.lead, a.g1, a.host)
 
     def quit_(*_):
         r.stop = True
