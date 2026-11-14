@@ -425,6 +425,13 @@ a.button {
   right: var(--s-5);
   bottom: var(--s-6);
   z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.drive-tools[hidden] {
+  display: none;
 }
 
 .button-large {
@@ -687,6 +694,7 @@ a.button {
 }
 
 .app[data-saying] .stage-tools,
+.app[data-saying] .drive-tools .button,
 .app[data-saying] .banner,
 .app[data-saying] .tag {
   opacity: 0;
@@ -1759,10 +1767,30 @@ a.button {
     left: var(--s-3);
   }
 
+  /* a small stage: the turn at the robots is asked for at the top, the comparison at the bottom */
   .drive-tools {
-    top: var(--s-3);
+    display: contents;
+  }
+
+  .drive-tools[hidden] {
+    display: none;
+  }
+
+  .drive-tools .button-large {
+    position: absolute;
+    z-index: 2;
     right: var(--s-3);
-    bottom: auto;
+    height: 34px;
+    padding: 0 var(--s-3);
+    font-size: var(--t-13);
+  }
+
+  .drive-ask {
+    top: var(--s-3);
+  }
+
+  .copy-ask {
+    bottom: var(--s-5);
   }
 
   .drive-card {
@@ -1855,6 +1883,11 @@ a.button {
 
   .banner {
     top: 52px;
+    width: max-content;
+    max-width: calc(100% - 24px);
+    border-radius: 14px;
+    line-height: 1.3;
+    white-space: normal;
   }
 
   /* one caption at a time over a small stage */

@@ -119,6 +119,7 @@ export class Hud {
     el.train.addEventListener('click', () => command('train'));
     el['ds-copy'].addEventListener('click', () => this.copyPath());
     el['banner-action'].addEventListener('click', () => this.bannerRun?.());
+    el['copy-stage']?.addEventListener('click', () => command('copy_scene'));
     el['drive-stage']?.addEventListener('click', () => this.onDriveStart());
     el['drive-panel']?.addEventListener('click', () => this.onDriveStart());
     el['drive-back']?.addEventListener('click', () => this.onDriveEnd());
@@ -235,10 +236,27 @@ export class Hud {
     this.renderBanner();
     this.renderFocus();
     this.renderResult();
+    this.renderCompare();
   }
 
   setDrive(drive) {
     this.driving = drive;
+  }
+
+  /** The comparison, once both halves are in, is said once over the scene: the same tables without Kaiku and with it. */
+  renderCompare() {
+    const last = this.hud.copy?.last;
+    if (!last || last.echo == null || last.age_s > 12 || this.compareSaid === last.at || 'opening' in this.app.dataset) return;
+    this.compareSaid = last.at;
+    const line = this.el.opening;
+    line.textContent = `Without Kaiku: ${last.copy} of ${last.robots} tables sorted.\nWith Kaiku: ${last.echo} of ${last.robots}.`;
+    line.setAttribute('data-show', '');
+    this.app.dataset.saying = '';
+    clearTimeout(this.resultTimer);
+    this.resultTimer = setTimeout(() => {
+      line.removeAttribute('data-show');
+      delete this.app.dataset.saying;
+    }, 7000);
   }
 
   /** A Train run that just ended is said once over the scene, where everybody looks. */
@@ -338,6 +356,8 @@ export class Hud {
     // ?clean=1 keeps the film's caption as it was; the page adds where the runs go
     this.text('caption', alone
       ? `Nobody is driving. A policy trained on the demonstrations sorts ${robots} scenes it has never seen.`
+      : this.hud.copy?.on
+        ? `${who} The other ${robots} get the same joint commands, but their parts lie somewhere else.`
       : `${who} ${robots} robots repeat every motion, each in its own scene.`
         + (this.flags.clean ? '' : ' The clean runs train a policy.'));
   }
@@ -380,6 +400,11 @@ export class Hud {
       this.show(ref, !mine);
     }
     this.show('drive-tools', operator.source !== 'policy' && !('opening' in this.app.dataset));
+    // the comparison: one scene with Kaiku off, for whoever wants to see what it is for
+    const copy = this.hud.copy || {};
+    this.show('copy-stage', Boolean(copy.free) && !mine && !taken && !copy.on && !copy.again);   // the banner says the rest
+    this.text('copy-stage', copy.next ? 'Starting' : 'See it without Kaiku');
+    this.attr('copy-stage', 'disabled', Boolean(copy.next));
     this.show('drive-back', mine);
     this.show('drive-panel-back', mine);
     this.show('drive-card', mine);
@@ -651,6 +676,21 @@ export class Hud {
       banner = { level: 'warn', text: 'The runner has stopped sending. Waiting for it' };
     } else if (hud.status === 'paused') {
       banner = { level: 'info', text: 'Paused', action: 'Resume', run: () => this.togglePause() };
+    } else if (hud.copy?.on && hud.echo?.robots) {
+      banner = {
+        level: 'warn',
+        text: hud.copy.over
+          ? `Without Kaiku, ${hud.echo.ok ?? 0} of ${hud.echo.robots} robots sorted their table`
+          : `Kaiku is off. All ${hud.echo.robots} robots get the operator's joint commands`,
+      };
+    } else if (hud.copy?.again && hud.copy.last && hud.echo?.robots) {
+      const { copy: without, robots } = hud.copy.last;
+      banner = {
+        level: 'ok',
+        text: hud.copy.over
+          ? `With Kaiku, ${hud.echo.ok ?? 0} of ${hud.echo.robots} robots sorted their table. Without: ${without}`
+          : `The same tables, Kaiku on. Without it: ${without} of ${robots}`,
+      };
     } else if (hud.policy?.state === 'training') {
       // Training takes minutes and its panel is two clicks away: say it where everybody looks.
       const { progress = 0, eta_s: eta } = hud.policy;

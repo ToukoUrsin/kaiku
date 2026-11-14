@@ -11,6 +11,7 @@
 //   ?preview=NAME             show one state of the page without waiting for it (see sample.js)
 //   ?intro=1|0                play the opening (hands, then every robot) or never; by default once per tab
 //   ?result=1                 say the last Train result over the scene again, however old it is (for filming)
+//   ?reset=1                  start the session over (first scenes again, counts at zero); not on a shared session
 
 const SHOTS = ['lead', 'overview', 'top'];
 const TABS = ['live', 'dataset', 'policy'];
@@ -31,6 +32,7 @@ export function readFlags(search = location.search) {
     quality: oneOf('quality', ['high', 'low'], 'auto'),
     preview: params.get('preview') || '',
     result: on('result'),
+    reset: on('reset'),
     // a link that asks for a view gets that view, not the opening
     intro: params.get('intro') === '1' ? 'on'
       : params.get('intro') === '0' || ['shot', 'env', 'clean', 'preview', 'tab', 'sheet'].some((name) => params.has(name)) ? 'off'

@@ -73,6 +73,7 @@ async function boot() {
   let lag = null;
   let running = false;
   let alone = false;              // the policy is driving: no operator, so no echo to draw
+  let comparing = null;           // the shot to go back to after the scene without Kaiku and its second half
   stream.onHud = (message) => {
     const data = flags.preview ? previewHud(message, flags.preview) : message;
     lag = Array.isArray(data.envs?.lag_s) ? data.envs.lag_s : null;
@@ -81,6 +82,15 @@ async function boot() {
       // The policy drives every robot, so look at all of them; with an operator, look at the operator.
       alone = data.mode === 'policy';
       if (rig.focus < 0 && rig.shot in rig.shots) rig.goTo(alone ? 'overview' : flags.shot);
+    }
+    // The scene without Kaiku is about all the robots: look at all of them, then back to where the visitor was.
+    const compare = Boolean(data.copy?.on || data.copy?.again);
+    if (compare && comparing === null && rig.focus < 0 && rig.shot in rig.shots) {
+      comparing = rig.shot;
+      if (rig.shot !== 'overview' && rig.shot !== 'top') rig.goTo('overview', 1.2);
+    } else if (!compare && comparing !== null) {
+      if (rig.focus < 0 && rig.shot === 'overview' && comparing !== 'overview') rig.goTo(comparing, 1.2);
+      comparing = null;
     }
     hands.setHands(data.operator?.hands || null, performance.now());
     // the runner says whose turn it is: this page drives only while it is named
@@ -94,6 +104,14 @@ async function boot() {
   };
   stream.onStatus = (status) => {
     if (flags.preview !== 'reconnecting' && flags.preview !== 'connecting') hud.setConnection(status);
+    if (status === 'live' && flags.reset) {
+      // ?reset=1 starts the session over once, then leaves the address: a reload must not do it again
+      flags.reset = false;
+      stream.send({ type: 'cmd', name: 'reset' });
+      const url = new URL(location.href);
+      url.searchParams.delete('reset');
+      history.replaceState(null, '', url);
+    }
   };
   stream.onModelChanged = () => reloadOnce();
   hud.onRetry = () => stream.connect();

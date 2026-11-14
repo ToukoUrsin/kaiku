@@ -45,6 +45,7 @@ HUD_EVERY = 3                 # ticks between HUD updates (10 Hz)
 PAUSE_S = 20.0                # how long a pause lasts on a session that everybody shares
 MODES = ("gloves", "autopilot", "policy", "visitor")
 TURN_S, IDLE_S = 240.0, 45.0                      # a visitor's turn at the robots, and how long it may sit untouched
+COPY_EVERY_S = 30.0                               # everybody shares the page: the scene without the echo is not the only one shown
 HERE = Path(__file__).resolve().parents[1]
 PRETRAINED = HERE / "policy" / "pretrained" / "kaiku.pt"
 STUDY = HERE / "policy" / "pretrained" / "study.json"
@@ -67,7 +68,7 @@ class Runner:
         if seed is None:                                       # other scenes every time it is started
             seed = int(np.random.SeedSequence().generate_state(1)[0] % 2 ** 30)
         self.s = Session(n, seed=seed, threads=threads)
-        self.n = n
+        self.n, self.seed = n, seed
         self.parts = parts
         self.hold_s, self.lead_timeout = hold_s, int(lead_timeout_s * CONTROL_HZ)
         self.sampler = Sampler(n, seed + 1, self.s.spread, self.s.vary_shape)
@@ -83,6 +84,11 @@ class Runner:
         self.turn_started = 0.0
         self.last_visitor_command = 0.0
         self._visitor_expired = False
+        self.copy_next = False                                 # the next scene is the comparison: the echo is off
+        self.again = None                                      # its tables, for the same scene once more with the echo
+        self.replaying = False                                 # this scene is that second half
+        self.copy_at = 0.0                                     # when the last comparison ended
+        self.compare: dict | None = None                       # what it came to: without the echo, and with it
         self.lead = None                                       # kaiku.app.g1.Lead while a challenge runner follows
         self.mode = mode if mode in ("gloves", "autopilot") else "gloves"
         self.want_mode = mode if mode in MODES else "gloves"
@@ -132,6 +138,7 @@ class Runner:
             self.loading = self.pool.submit(self._load, Path(policy))
         elif self.want_mode == "policy":
             self.want_mode = self.mode
+        self.home_mode = self.want_mode
 
     # ------------------------------------------------------------------ operators
     def _operator(self, mode: str):
@@ -187,9 +194,20 @@ class Runner:
             self.last_gain = 0
             self.phase = "run"
             return
-        lead, followers = self.next.result()
-        self.next = self.sampler.scene(self.parts)
-        self.s.new_episode(lead, followers)
+        if self.mode == "visitor":                             # a visitor's turn is not the comparison
+            self.copy_next, self.again = False, None
+        self.replaying = self.again is not None
+        if self.replaying:                                     # the same tables as the scene without the echo
+            (lead, followers), copy, self.again = self.again, False, None
+        else:
+            lead, followers = self.next.result()
+            self.next = self.sampler.scene(self.parts)
+            copy, self.copy_next = self.copy_next, False
+            self.again = (lead, followers) if copy else None
+        self.s.new_episode(lead, followers, copy=copy)
+        if copy:
+            self.toast(f"Kaiku is off for this scene. All {self.n - 1} robots get the same joint commands as "
+                       "the operator's robot.", "warn")
         self.want[:] = len(lead.placements)
         self.op.begin()
         self.rec.begin()
@@ -222,6 +240,58 @@ class Runner:
         self.hold_until = 0.0
         self.toast("Your turn has started. Press on a part, drag it to the bin of its colour, let go.", "info")
 
+    def _reset(self) -> None:
+        """Back to the start, for filming: the first scenes again, this session's counts at zero."""
+        if self.shared:
+            self.toast("Everybody who opens this page shares it, so it is not started over.", "info")
+            return
+        if self.driver_client is not None:
+            self._end_visitor_turn("reset")
+        self.sampler.close()
+        self.sampler = Sampler(self.n, self.seed + 1, self.s.spread, self.s.vary_shape)
+        self.parts = "auto"
+        self.next = self.sampler.scene(self.parts)
+        if self.next_free is not None:
+            self.next_free = self.sampler.free(self.parts)
+        self.want_mode = self.home_mode if self.home_mode != "policy" or self.policy is not None else "gloves"
+        self.paused, self.resume_at = False, None
+        self.copy_next, self.again, self.replaying, self.compare, self.copy_at = False, None, False, None, 0.0
+        self.tot = {k: 0 for k in self.tot}
+        self.pol = {k: 0 for k in self.pol}
+        self.history.clear()
+        if self.phase == "run":
+            self._end_policy_episode(False) if self.mode == "policy" else self._end_episode(record=False)
+        self.hold_until = 0.0
+        self.toast("Started over.", "info")
+
+    def _copy_scene(self) -> None:
+        """Somebody asked to see it without the echo: the next scene, every robot is sent what the lead is sent."""
+        if self.mode not in ("gloves", "autopilot") or self.want_mode != self.mode:
+            self.toast("That comparison runs while an operator drives. Switch to Operator first.", "info")
+        elif self.s.copy or self.copy_next or self.again is not None or self.replaying:
+            self.toast("That comparison is running now.", "info")
+        elif time.monotonic() - self.copy_at < COPY_EVERY_S:
+            self.toast("That was just shown. It can run again in half a minute.", "info")
+        else:
+            self.copy_next = True
+            # A scene with every part it can have: with one part alone, half the copies get lucky.
+            self.next = self.sampler.scene(3 if self.parts == "auto" else self.parts)
+            if self.phase == "run":                            # nobody waits a whole scene for it
+                self._end_episode(record=False)
+            self.hold_until = 0.0
+
+    def _end_copy(self, r) -> None:
+        """The scene without the echo is over: say what came of it. It is nobody's demonstration."""
+        ok = int((r.success & ~r.aborted)[1:].sum())
+        self.compare = {"copy": ok, "robots": self.n - 1, "echo": None, "parts": len(r.layouts[0].placements),
+                        "at": round(time.time(), 1)}
+        self.toast(f"Without Kaiku {ok} of {self.n - 1} robots sorted their table. Now the same tables with Kaiku.",
+                   "info")
+        self.copy_at = time.monotonic()
+        self.rec.begin()
+        self.phase = "hold"
+        self.hold_until = time.perf_counter() + self.hold_s + 3.0     # long enough to read the red tables
+
     def _end_episode(self, record: bool = True) -> None:
         s = self.s
         r = s.result()
@@ -229,7 +299,10 @@ class Runner:
         self.states[1:] = np.where(ok[1:], SUCCESS, FAILED)
         self.states[0] = LEAD
         self.sorted = s.progress()
+        if s.copy and record:
+            return self._end_copy(r)
         if not record:                                         # cut short by a visitor: nobody's result, nothing to count
+            self.again, self.replaying = None, False
             self.rec.begin()
             self.states[1:] = IDLE
             self.phase = "hold"
@@ -250,6 +323,13 @@ class Runner:
                                  "saved": kept["kept"], "seconds": round(s.tick_no * DT, 1)})
         self.phase = "hold"
         self.hold_until = time.perf_counter() + self.hold_s
+        if self.replaying and self.compare is not None:        # the comparison's second half: the same tables, echoed
+            c = self.compare
+            c["echo"], c["done"] = int(ok[1:].sum()), round(time.time(), 1)
+            self.toast(f"Same tables with Kaiku: {c['echo']} of {c['robots']} robots sorted theirs. "
+                       f"Without: {c['copy']} of {c['robots']}.", "info")
+            self.copy_at = time.monotonic()
+            self.hold_until += 3.0
 
     def _end_policy_episode(self, count: bool = True) -> None:
         s = self.s
@@ -408,6 +488,10 @@ class Runner:
                     self.toast("The stand-in operator calibrates itself. Connect gloves to calibrate yours.", "info")
             elif name == "train":
                 self._train()
+            elif name == "copy_scene":
+                self._copy_scene()
+            elif name == "reset":
+                self._reset()
 
     def _publish(self) -> None:
         if self.lead is not None:                              # the lead robot's command, for a real G1 to follow
@@ -443,7 +527,8 @@ class Runner:
                 self._visitor_expired = True
             s.finish_lead()
         s.tick(cmd)
-        self.rec.add(obs, *s.last_action)
+        if not s.copy:
+            self.rec.add(obs, *s.last_action)
         self._publish()
         if s.tick_no % 6 == 0:
             self._refresh()
@@ -457,7 +542,14 @@ class Runner:
         s = self.s
         self.sorted = s.progress()
         parts = len(s.layouts[0].placements)
-        if self.n > 1:
+        if self.n > 1 and s.copy:
+            # No echo to ask: a robot whose table is behind the lead's for a while has missed its part.
+            behind = self.sorted[1:] < self.sorted[0]
+            self.done_ticks[1:] = np.where(behind, self.done_ticks[1:] + 6, 0)
+            st = np.where(self.sorted[1:] >= parts, SUCCESS, RUNNING)
+            st = np.where(behind & (self.done_ticks[1:] > 30), FAILED, st)
+            self.states[1:] = np.where(s.safety.aborted[1:], FAILED, st)
+        elif self.n > 1:
             done = s.echo.done
             self.done_ticks[1:] = np.where(done, self.done_ticks[1:] + 6, 0)
             started = s.echo.tau > 1.0
@@ -472,7 +564,7 @@ class Runner:
         alone = self.mode == "policy"
         F = self.n - 1
         parts = len(s.layouts[0].placements)
-        lag = s.echo.lag if F and not alone else np.zeros(F)
+        lag = s.echo.lag if F and not alone and not s.copy else np.zeros(F)
         working = self.phase == "run"
         status = "paused" if self.paused else ("running" if working and not s.lead_done else "settling")
         minutes = (t["ticks"] + (s.tick_no if working else 0)) * DT / 60.0
@@ -491,6 +583,11 @@ class Runner:
             "status": status,
             "shared": self.shared,
             "operator": operator,
+            # The comparison: is the echo off in this scene, may it be asked for, what the last one came to.
+            "copy": {"on": bool(s.copy), "next": self.copy_next, "again": self.replaying, "over": self.phase == "hold",
+                     "free": self.mode in ("gloves", "autopilot") and self.want_mode == self.mode,
+                     "last": self.compare and dict(self.compare, age_s=round(time.time() - self.compare.get(
+                         "done", self.compare["at"])))},
             "episode": {"index": self.pol["rounds"] + 1, "parts": int(self.want.sum()), "sorted": int(self.sorted.sum()),
                         "elapsed_s": round(s.tick_no * DT, 1), "step": "Policy"} if alone else
             {"index": t["episodes"] + 1, "parts": parts, "sorted": int(self.sorted[0]),

@@ -115,12 +115,17 @@ class Session:
         self.home_rot = home_R[0]
         self.home_pinch = home_p[0] + np.einsum("sij,sj->si", home_R[0], self.off)
         self.episode = 0
+        self.copy = False                 # this scene every follower gets the lead's own command: no echo
         self.timing = {"ik": 0.0, "echo": 0.0, "safety": 0.0, "physics": 0.0, "observe": 0.0}
         self.new_episode()
 
     # ------------------------------------------------------------------ episodes
-    def new_episode(self, layout: Layout | None = None, followers: list[Layout] | None = None) -> None:
+    def new_episode(self, layout: Layout | None = None, followers: list[Layout] | None = None,
+                    copy: bool = False) -> None:
+        """``copy``: the comparison. The followers do not echo, they are sent what the lead is sent, so
+        every robot gets the same joint targets whatever lies on its own table."""
         sc = self.scene
+        self.copy = copy
         lead = layout or self.sample_lead()
         fol = followers or sample_followers(sc, lead, self.rng, self.n - 1, self.spread, self.vary_shape, self.reach)
         self.layouts = [lead] + list(fol)
@@ -149,6 +154,7 @@ class Session:
             self.sim.reset(i, lay, hand=HOME_HAND)
             self.safety.reset(i, HOME_ARM, HOME_HAND)
         self.echo.begin(Layout([]), [Layout([]) for _ in range(self.n - 1)])
+        self.copy = False
         self.tick_no = 0
         self.lead_done = False
         self.after_done = self.rest_ticks = 0
@@ -183,7 +189,7 @@ class Session:
             return False
         if self.after_done >= self.timeout_ticks:
             return True
-        if self.n > 1 and not self.echo.done.all():
+        if self.n > 1 and not self.copy and not self.echo.done.all():
             return False
         return self.rest_ticks >= self.settle_ticks
 
@@ -232,7 +238,9 @@ class Session:
         t0 = time.perf_counter()
         if not self.lead_done:
             self.echo.push(self.lead_tick(obs))
-        if F:
+        if F and self.copy:
+            pinch_t[1:], rot_t[1:], hand_t[1:] = cmd.pinch, cmd.rot, cmd.hand
+        elif F:
             rows = np.arange(1, n)[:, None]
             fpos = obs.obj_pos[rows, self.echo.foll_idx]                              # (F, n, 3)
             fyaw = obs.obj_yaw[rows, self.echo.foll_idx]
