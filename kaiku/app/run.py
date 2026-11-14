@@ -37,6 +37,7 @@ from kaiku.app.visitor import VisitorOperator
 from kaiku.data.recorder import Recorder
 from kaiku.sim.fetch import ensure
 from kaiku.sim.twin import CONTROL_HZ
+from kaiku.teleop.fingers import GloveFingers
 from kaiku.teleop.operator import GloveOperator, ReplayOperator
 from kaiku.fanout.echo import sample_followers
 from kaiku.web.server import ViewerServer
@@ -62,7 +63,7 @@ class Runner:
                  parts: str | int = "auto",
                  record: Path | str | None = None, hold_s: float = 1.6, lead_timeout_s: float = 90.0,
                  threads: int | None = None, mode: str = "gloves", gloves: str | None = None,
-                 hand_solver: str | None = None,
+                 hand_solver: str | None = None, glove_fingers: str | None = None,
                  policy: Path | str | None = None, train: str = "local", train_steps: int = 30000,
                  policy_timeout_s: float = 80.0, stall_s: float = 15.0, shared: bool = False,
                  train_about: float | None = None):
@@ -70,6 +71,8 @@ class Runner:
             seed = int(np.random.SeedSequence().generate_state(1)[0] % 2 ** 30)
         self.s = Session(n, seed=seed, threads=threads)
         self.n, self.seed = n, seed
+        if glove_fingers and parts == "auto":
+            parts = 3                                          # one hand, one part at a time: short scenes
         self.parts = parts
         self.hold_s, self.lead_timeout = hold_s, int(lead_timeout_s * CONTROL_HZ)
         self.sampler = Sampler(n, seed + 1, self.s.spread, self.s.vary_shape)
@@ -80,6 +83,7 @@ class Runner:
         self.gloves = gloves                                   # HOST[:PORT] of a Rokoko driver, or None: the stand-in
         self.session_dir = None
         self.hand_solver = hand_solver                         # HOST:PORT of rkk-hand-solver, "off", or None: the default
+        self.glove_fingers = glove_fingers                     # HOST[:PORT] of a driver with one glove on it: a visitor's fingers
         self.ops: dict = {}
         self.visitor: VisitorOperator | None = None
         self.driver_client: int | None = None
@@ -148,7 +152,11 @@ class Runner:
             if mode == "autopilot":
                 self.ops[mode] = Autopilot(self.s)
             elif mode == "visitor":
-                self.ops[mode] = VisitorOperator(self.s)
+                glove = None
+                if self.glove_fingers:                         # one Smartglove on the visitor's hand
+                    host, _, port = self.glove_fingers.partition(":")
+                    glove = GloveFingers(host or "127.0.0.1", int(port) if port else 12276, solver=self.hand_solver)
+                self.ops[mode] = VisitorOperator(self.s, glove=glove)
                 self.visitor = self.ops[mode]
             else:
                 if self.session_dir:
@@ -161,7 +169,7 @@ class Runner:
 
     def _who(self) -> str:
         if self.mode == "visitor":
-            return "visitor"
+            return self.visitor.who() if self.visitor is not None else "visitor"
         if self.mode == "autopilot":
             return "autopilot"
         return "smartgloves" if self.gloves else "stand-in (emulated smartgloves)"
@@ -234,7 +242,7 @@ class Runner:
         self.viewer.send_event({"type": "toast", "text": "Your turn has ended. The stand-in is driving again.", "level": "info"})
         self.driver_client = None
         self.turn_started = self.last_visitor_command = 0.0
-        self.want_mode = "gloves"
+        self.want_mode = "visitor" if self.glove_fingers else "gloves"   # a glove on this machine keeps the robots
         if self.phase == "run":
             self._end_episode(record=False)
         self.hold_until = 0.0
@@ -319,6 +327,8 @@ class Runner:
             self.phase = "hold"
             self.hold_until = time.perf_counter() + self.hold_s
             return
+        if self.mode == "visitor":                             # what drove is known once it has driven
+            self.rec.operator = self._who()
         kept = self.rec.end(r)
         clean = ok & (r.clipped == 0)
         if record:
@@ -491,7 +501,10 @@ class Runner:
                 else:
                     self.toast(f"{str(value).capitalize()} mode is not connected in this build.", "warn")
             elif name == "calibrate":
-                if isinstance(self.op, GloveOperator) and not self.op.person:
+                if self.mode == "visitor" and self.visitor is not None and self.visitor.glove is not None:
+                    self.visitor.recentre()
+                    self.toast("Hold your gloved hand flat and still. Where you hold it is the middle of the table.", "info")
+                elif isinstance(self.op, GloveOperator) and not self.op.person:
                     ok = self.op.calibrate()
                     self.toast("Calibrated. The robot follows your hands." if ok else
                                "Hold both hands flat over the Coil Pro, then calibrate again.", "info" if ok else "warn")
@@ -527,7 +540,8 @@ class Runner:
             return
         if self.driver_client is not None:
             now = time.monotonic()
-            if now - self.last_visitor_command > IDLE_S or now - self.turn_started > TURN_S:
+            # a glove on this machine is one person's sitting, not a queue of visitors: it has no clock
+            if not self.glove_fingers and (now - self.last_visitor_command > IDLE_S or now - self.turn_started > TURN_S):
                 self._end_visitor_turn("timeout")
                 return
         obs = s.observe()
@@ -589,7 +603,8 @@ class Runner:
              "calibrated": False, "stand_in": not alone, "source": "policy" if alone else "autopilot", "hands": None}
         if self.driver_client is not None:                     # whose turn it is, and how long it still lasts
             operator["driver"] = self.driver_client
-            operator["turn_left_s"] = round(max(0.0, TURN_S - (time.monotonic() - self.turn_started)))
+            if not self.glove_fingers:
+                operator["turn_left_s"] = round(max(0.0, TURN_S - (time.monotonic() - self.turn_started)))
         return {
             "mode": self.mode,
             "status": status,
@@ -727,6 +742,9 @@ def main(argv=None) -> None:
     ap.add_argument("--hand-solver", default=None, metavar="HOST:PORT|off",
                     help="where rkk-hand-solver serves solved hands (default: port 12277 on the gloves' host); "
                          "the fingers come from it while it runs, from kaiku's own solver otherwise")
+    ap.add_argument("--one-glove", "--glove-fingers", dest="glove_fingers", default=None, metavar="HOST[:PORT]",
+                    help="one Smartglove on whoever drives: its fingers drive the robot's. With a Coil Pro the "
+                         "glove also says where the hand is; without one, the camera or the pointer does")
     ap.add_argument("--session", default=None, metavar="DIR", help="replay a recorded human session")
     ap.add_argument("--g1", type=int, default=None, metavar="PORT",
                     help="serve the lead robot's commands to the humanoid challenge's runner (its policy-server "
@@ -734,7 +752,8 @@ def main(argv=None) -> None:
     a = ap.parse_args(argv)
     ensure()                                                   # the robot model, fetched on the first run
     r = Runner(a.n, a.port, a.host, a.seed, a.parts if a.parts == "auto" else int(a.parts), a.record,
-               threads=a.threads, mode=a.mode, gloves=a.gloves, hand_solver=a.hand_solver, policy=a.policy, train=a.train,
+               threads=a.threads, mode=a.mode, gloves=a.gloves, hand_solver=a.hand_solver,
+               glove_fingers=a.glove_fingers, policy=a.policy, train=a.train,
                train_steps=a.train_steps, shared=a.shared, train_about=a.train_about)
     if a.session:
         r.session_dir = Path(a.session)

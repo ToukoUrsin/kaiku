@@ -1,6 +1,8 @@
 // A visitor drives the lead robot: with a pointer on the table, or with a hand in front of the
-// camera. The page says where the hand is and whether it pinches; the runner does the rest. The
-// runner decides whose turn it is, so everything here follows what it last said.
+// camera. The page says where the hand is and whether it pinches; with a camera it also sends the
+// hand's 21 landmarks in metres and how near the hand is, and the runner turns those into the robot's
+// fingers the way it does for gloves. The runner decides whose turn it is, so everything here follows
+// what it last said.
 
 import * as THREE from '../vendor/three/three.module.min.js';
 
@@ -30,6 +32,8 @@ export class Drive {
     this.last = 0;
     this.dirty = false;
     this.camera = null;               // {video, stream, landmarker, canvas} while a camera hand drives
+    this.own = false;                 // the visitor does the grasp themselves: nothing scripted
+    this.fingers = null;              // whose fingers the runner has: 'camera', 'glove' or null
     this.origin = new THREE.Vector3();
     this.direction = new THREE.Vector3();
     this.point = new THREE.Vector3();
@@ -54,6 +58,7 @@ export class Drive {
   follow(mine, operator) {
     this.table = mine ? operator?.table || null : null;
     this.want = mine ? operator?.want || null : null;
+    this.fingers = mine ? operator?.fingers || null : null;
     if (mine === this.active) return;
     this.active = mine;
     this.rig.driving = mine;
@@ -62,7 +67,12 @@ export class Drive {
       this.pointer = null;
       this.at = null;
       this.grip = false;
+      this.own = false;
       this.stopCamera();
+    } else if (operator?.glove?.coil) {
+      // a glove on a Coil Pro says where the hand is and does the grasp: the page only keeps the turn
+      this.own = true;
+      this.at = this.at || { x: 0.28, y: 0 };
     }
     this.onState(mine);
   }
@@ -94,7 +104,16 @@ export class Drive {
       this.last = now;
       this.dirty = false;
       const value = { x: this.at.x, y: this.at.y, grip: this.grip };
-      if (this.camera) value.input = 'camera';
+      if (this.own) value.own = true;
+      const camera = this.camera;
+      if (camera) {
+        value.input = 'camera';
+        if (camera.world && now - camera.seen < 400) {       // the hand itself, for the robot's fingers
+          value.world = camera.world;
+          value.right = camera.right;
+          value.depth = camera.depth;
+        }
+      }
       this.send({ type: 'cmd', name: 'hand', value });
     }
     this.marks.update(this.active ? this : null, seconds);
@@ -190,7 +209,8 @@ export class Drive {
     const overlay = holder.querySelector('canvas');
     video.srcObject = stream;
     await video.play().catch(() => {});
-    this.camera = { stream, landmarker, video, overlay, holder, smooth: null, seen: 0, stamp: -1 };
+    this.camera = { stream, landmarker, video, overlay, holder, smooth: null, seen: 0, stamp: -1,
+      world: null, right: true, depth: 0, scale0: null, scales: [] };
     holder.hidden = false;
     this.pointer = null;
     this.grip = false;
@@ -222,8 +242,10 @@ export class Drive {
     if (video.readyState < 2 || video.currentTime === camera.stamp) return;
     camera.stamp = video.currentTime;
     let hand = null;
+    let seen = null;
     try {
-      hand = camera.landmarker.detectForVideo(video, performance.now()).landmarks?.[0] || null;
+      seen = camera.landmarker.detectForVideo(video, performance.now());
+      hand = seen.landmarks?.[0] || null;
     } catch {
       return;
     }
@@ -234,9 +256,15 @@ export class Drive {
         this.grip = false;
         this.dirty = true;
       }
+      if (performance.now() - camera.seen > 1500) {           // gone: wherever it comes back is level again
+        camera.scale0 = null;
+        camera.scales.length = 0;
+        camera.world = null;
+      }
       return;
     }
     camera.seen = performance.now();
+    this.measure(camera, hand, seen, video.videoWidth / Math.max(1, video.videoHeight));
     const reading = readHand(hand, this.grip);
     const s = camera.smooth || { x: reading.x, y: reading.y };
     s.x += (reading.x - s.x) * 0.4;
@@ -247,6 +275,41 @@ export class Drive {
     const u = clamp01((s.x - 0.2) / 0.6);
     const v = clamp01((s.y - 0.25) / 0.55);
     this.aim(box.left + u * box.width, box.top + v * box.height, reading.grip);
+  }
+
+  /** The hand itself, for the robot's fingers: its landmarks in metres, which hand it is, how near it is. */
+  measure(camera, hand, seen, aspect) {
+    const world = seen.worldLandmarks?.[0];
+    if (!world || world.length !== 21) {
+      camera.world = null;
+      return;
+    }
+    camera.world = world.flatMap((p) => [round4(p.x), round4(p.y), round4(p.z)]);
+    // the picture is not mirrored when the model reads it, so its "Left" is the visitor's right hand
+    const label = (seen.handedness || seen.handednesses)?.[0]?.[0]?.categoryName;
+    camera.right = label !== 'Right';
+    // How large the hand is in the picture, from its own shape: twice as large is half as far.
+    let ax = 0; let ay = 0; let bx = 0; let by = 0;
+    for (let i = 0; i < 21; i++) {
+      ax += world[i].x / 21; ay += world[i].y / 21;
+      bx += hand[i].x * aspect / 21; by += hand[i].y / 21;
+    }
+    let dot = 0; let size = 0;
+    for (let i = 0; i < 21; i++) {
+      const wx = world[i].x - ax; const wy = world[i].y - ay;
+      dot += wx * (hand[i].x * aspect - bx) + wy * (hand[i].y - by);
+      size += wx * wx + wy * wy;
+    }
+    const scale = dot / Math.max(size, 1e-9);
+    if (!(scale > 0)) return;
+    if (camera.scale0 === null) {                               // where the hand is first held is level
+      camera.scales.push(scale);
+      if (camera.scales.length >= 12) camera.scale0 = camera.scales.sort((a, b) => a - b)[6];
+      camera.depth = 0;
+      return;
+    }
+    camera.depth += (Math.log(scale / camera.scale0) - camera.depth) * 0.35;
+    this.dirty = true;
   }
 
   /** Where the hand may go, as a box on the page: the hand in the picture moves over this. */
@@ -286,6 +349,15 @@ export class Drive {
       g.arc((1 - hand[tip].x) * w, hand[tip].y * h, 3.5 * devicePixelRatio, 0, Math.PI * 2);
       g.fill();
     }
+    if (this.own) {
+      // how far down the hand is: pushed towards the camera, it fills
+      const down = clamp01(camera.depth / 0.30);
+      const x = w - 9 * devicePixelRatio; const top = 8 * devicePixelRatio; const tall = h - 16 * devicePixelRatio;
+      g.fillStyle = 'rgba(255, 255, 255, 0.28)';
+      g.fillRect(x, top, 3 * devicePixelRatio, tall);
+      g.fillStyle = 'rgba(255, 255, 255, 0.95)';
+      g.fillRect(x, top + tall * (1 - down), 3 * devicePixelRatio, tall * down);
+    }
   }
 }
 
@@ -298,6 +370,7 @@ export function readHand(hand, wasPinched) {
 }
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
+const round4 = (v) => Math.round(v * 10000) / 10000;
 
 // The marks on the driver's table: where the hand is asked to be, the part a press would take,
 // the bin the part in the hand belongs in.

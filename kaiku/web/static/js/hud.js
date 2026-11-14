@@ -126,6 +126,7 @@ export class Hud {
     el['drive-back']?.addEventListener('click', () => this.onDriveEnd());
     el['drive-panel-back']?.addEventListener('click', () => this.onDriveEnd());
     el['drive-camera']?.addEventListener('click', () => this.onCamera());
+    el['drive-own']?.addEventListener('click', () => this.onOwn());
 
     el['focus-close'].addEventListener('click', () => this.onFocus(-1));
     el['focus-prev'].addEventListener('click', () => this.onFocus(this.focus - 1));
@@ -355,6 +356,7 @@ export class Hud {
       ? 'A recorded human session drives this robot.'
       : operator.source === 'autopilot'
       ? 'Autopilot drives one robot.'
+      : operator.source === 'visitor' ? `${visitorSource(operator)} drives one robot.`
       : operator.source === 'gloves' ? 'One operator in Smartgloves II.' : 'A scripted hand in emulated Smartgloves II drives one robot.';
     // ?clean=1 keeps the film's caption as it was; the page adds where the runs go
     this.text('caption', alone
@@ -372,6 +374,7 @@ export class Hud {
     const sourceText = source === 'gloves' && !linked ? 'Smartgloves II · not connected'
       : source === 'recorded' && Number.isFinite(operator.date)
         ? `Recorded session · ${new Date(operator.date * 1000).toLocaleDateString()}`
+        : source === 'visitor' ? visitorParts(operator)
         : SOURCE_TEXT[source];
     this.text('source-text', sourceText || 'Waiting for the operator');
     this.attr('source', 'data-live', source === 'gloves' && linked);
@@ -418,6 +421,12 @@ export class Hud {
 
     const camera = Boolean(this.driving?.camera);
     this.text('drive-camera', camera ? 'Use the pointer' : 'Use my hand');
+    // Their own grasp needs their fingers: a camera that sees the hand, or a glove on it.
+    const fingers = operator.fingers || null;
+    const own = Boolean(operator.own);
+    this.show('drive-own', Boolean(fingers) || Boolean(this.driving?.own));
+    this.text('drive-own', this.driving?.own ? 'Help me grasp' : 'Grasp it myself');
+    this.attr('drive-own', 'aria-pressed', this.driving?.own ? 'true' : 'false');
     this.text('drive-left', turn ? `${turn} left` : '');
     const robots = this.hud.echo?.robots ?? 0;
     const failed = this.hud.echo?.failed ?? 0;
@@ -426,26 +435,48 @@ export class Hud {
     const phase = this.hud.mode === 'visitor' ? operator.phase : 'wait';
     const settling = this.hud.status === 'settling';
     let say;
-    let more = `${robots} robots redo every move on their own tables.`;
+    const whose = fingers === 'glove' ? 'The glove' : 'Your fingers';
+    const coil = operator.input === 'coil' || (fingers === 'glove' && Boolean(operator.glove?.coil));
+    let more = own ? `${fingers === 'glove' ? 'The glove does' : 'Your fingers do'} the grasp. The robot only turns its wrist${coil ? '' : ' and lifts'}.`
+      : fingers ? `${whose} move${fingers === 'glove' ? 's' : ''} the robot's fingers. The grasp itself is assisted.`
+        : `${robots} robots redo every move on their own tables.`;
     if (phase === 'wait' || !table) {
       say = 'Your turn starts with the next scene';
+    } else if (coil && !operator.placed) {
+      say = 'Hold your gloved hand flat and still';
+      more = 'Where you hold it is the middle of the table.';
+    } else if (own && !settling) {
+      const near = coil ? true : this.driving?.nearest?.();
+      const press = coil ? 'Lower your hand onto a part' : camera ? 'Over it: push your hand towards the camera' : 'Over it: hold the button down';
+      say = held ? (operator.over && operator.over === held.bin ? 'Open your hand' : `Take it to the ${held.color} bin`)
+        : near ? `${press}, then close your fingers` : 'Move over a part';
     } else if (settling) {
       say = 'Sorted';
       more = `Now the ${robots} others finish theirs. Every one that gets it right is a demonstration.`;
     } else if (phase === 'pick') {
-      say = camera ? 'Keep pinching' : 'Keep holding';
+      say = camera || fingers === 'glove' ? 'Keep pinching' : 'Keep holding';
       more = 'The hand goes down and lifts it.';
     } else if (phase === 'carry' && held) {
       const over = operator.over && operator.over === held.bin;
-      say = over ? (camera ? 'Open your hand' : 'Let go') : `Take it to the ${held.color} bin`;
+      say = over ? (camera || fingers === 'glove' ? 'Open your hand' : 'Let go') : `Take it to the ${held.color} bin`;
     } else if (phase === 'release') {
       say = 'In it goes';
+    } else if (fingers === 'glove') {
+      say = coil ? 'Move your hand over a part and pinch' : 'Point at a part and pinch';
     } else {
       say = camera ? 'Move your hand over a part and pinch' : 'Press on a part and hold';
     }
     if (failed > 0 && !settling) more = `${failed} of ${robots} robots could not follow that. The rest keep up with you.`;
     this.text('drive-say', say);
     this.text('drive-more', more);
+  }
+
+  onOwn() {
+    if (!this.driving) return;
+    this.driving.own = !this.driving.own;
+    this.driving.at = this.driving.at || { x: 0.28, y: 0 };
+    this.driving.dirty = true;
+    this.renderDrive();
   }
 
   setDriveActive(active) {
@@ -867,4 +898,25 @@ function clock(s) {
 
 function sentence(word) {
   return word.charAt(0).toUpperCase() + word.slice(1).replace(/[_-]/g, ' ');
+}
+
+/** Who is driving, when it is a visitor: from what the runner says it is reading. */
+function visitorSource(operator) {
+  if (operator.fingers === 'glove' || operator.glove?.connected) return 'A person wearing one Smartglove';
+  if (operator.fingers === 'camera') return "A person's hand, seen by a camera,";
+  return operator.input === 'camera' ? "A person's hand, seen by a camera," : "A person's pointer";
+}
+
+/** The same, part by part: where the fingers come from and where the position. */
+function visitorParts(operator) {
+  const position = operator.input === 'camera' ? 'camera' : 'pointer';
+  const glove = operator.glove || {};
+  if (operator.fingers === 'glove') {
+    const side = glove.side ? `${glove.side} ` : '';
+    const rate = Number.isFinite(glove.hz) && glove.hz > 0 ? `, ${Math.round(glove.hz)} Hz` : '';
+    if (operator.input === 'coil') return `Fingers and position: one ${side}Smartglove on a Coil Pro${rate}`;
+    return `Fingers: one ${side}Smartglove${rate} · Position: ${position}`;
+  }
+  if (operator.fingers === 'camera') return "Fingers and position: a person's hand, seen by a camera";
+  return `A person is driving · ${position}`;
 }

@@ -2,7 +2,8 @@
 # Record whatever Rokoko gloves are plugged into this Mac. Runs on the Mac, started over ssh from the
 # box (tools/booth.sh). Opens no window. Starts Rokoko's driver and hand solver, records the driver's
 # raw bytes (--record-raw, replayable through the driver), the driver's RGMP stream and the solved
-# stream, each into ~/kaiku-sessions/booth-YYYYMMDD-HHMMSS/.
+# stream, each into ~/kaiku-sessions/booth-YYYYMMDD-HHMMSS/. It also starts Kaiku with that one glove
+# driving (page on http://127.0.0.1:8651, demonstrations saved into the same folder).
 #
 #   booth_mac.sh start [--emulated one|two]     booth_mac.sh status     booth_mac.sh stop
 set -u
@@ -13,6 +14,7 @@ ROOT="$HOME/kaiku-sessions"
 CUR="$ROOT/booth-current"
 PORT=12276
 SOLVED=12277
+PAGE=8651
 
 port_open() { nc -z 127.0.0.1 "$1" >/dev/null 2>&1; }
 
@@ -29,7 +31,8 @@ def up(p):
         socket.create_connection(("127.0.0.1", p), timeout=0.3).close(); return True
     except OSError:
         return False
-print("driver", "up" if up(port) else "DOWN", "| solver", "up" if up(solved) else "DOWN")
+print("driver", "up" if up(port) else "DOWN", "| solver", "up" if up(solved) else "DOWN",
+      "| page", "http://127.0.0.1:8651" if up(8651) else "not up yet")
 if up(port):
     g = GloveStream("127.0.0.1", port).start()
     time.sleep(3.0)
@@ -76,6 +79,11 @@ case "${1:-}" in
       nohup "$PY" -m kaiku.rgmp.record --host 127.0.0.1 --port "$SOLVED" --out "$S/solved.rgmp" > "$S/solved.log" 2>&1 < /dev/null &
       echo $! > "$S/solved.pid"
     fi
+    # The same glove drives sixteen robots on this Mac, for whoever opens http://127.0.0.1:8651 here. With
+    # a Coil Pro the hand alone drives; without one the page's pointer or camera says where the hand is.
+    nohup "$PY" -m kaiku.app.run --n 16 --host 127.0.0.1 --port "$PAGE" --mode visitor --one-glove "127.0.0.1:$PORT" \
+      --record "$S/demos" > "$S/run.log" 2>&1 < /dev/null &
+    echo $! > "$S/run.pid"
     echo "recording into $S"
     status
     ;;
@@ -83,7 +91,7 @@ case "${1:-}" in
   stop)
     if [ ! -L "$CUR" ]; then echo "nothing is recording"; exit 0; fi
     S="$(readlink "$CUR")"
-    for name in raw solved solver; do
+    for name in run raw solved solver; do
       [ -f "$S/$name.pid" ] && kill "$(cat "$S/$name.pid")" 2>/dev/null
     done
     n=0; until ! kill -0 "$(cat "$S/solver.pid" 2>/dev/null)" 2>/dev/null || [ $n -ge 5 ]; do sleep 1; n=$((n+1)); done
