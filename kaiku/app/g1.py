@@ -18,6 +18,11 @@ so an answer is never the lead's command itself. It is the next steps from the l
 it, inside the safety filter's rate limits, which leaves the filter nothing to clip. When the lead
 has said nothing for half a second the robot holds.
 
+Where the challenge's safety filter is at hand (next to its runner, or the copy in Kaiku's
+third_party) every step is put through it before it is sent. The runner's filter then gets what
+its own code has already passed: a lead that reaches into the counter makes the robot stop at the
+edge instead of collecting clipped commands until the runner gives up.
+
 An answer holds two ticks of targets. The runner asks for the next ones while the last of them
 runs, so a request may take a whole tick (33 ms) before the robot has to wait; with one target
 an answer it would have half of that, and the camera images alone take about 20 ms to arrive.
@@ -25,9 +30,12 @@ an answer it would have half of that, and the camera images alone take about 20 
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import logging
+import sys
 import threading
 import time
+from pathlib import Path
 
 import msgpack
 import numpy as np
@@ -127,12 +135,39 @@ class Remote:
         self._stop.set()
 
 
+def official_filter():
+    """The humanoid challenge's safety filter with its own limits, never giving up: from its package
+    when this runs next to the runner, else the copy in Kaiku's third_party. None when neither is here."""
+    try:
+        try:
+            from aaltonomous.interface import safety
+            spec = safety.JointSpec()
+        except ImportError:
+            here = Path(__file__).resolve().parents[2] / "third_party" / "aaltonomous_safety"
+            name = "kaiku_official_safety"
+            safety = sys.modules.get(name)
+            if safety is None:
+                found = importlib.util.spec_from_file_location(name, here / "safety.py")
+                safety = importlib.util.module_from_spec(found)
+                sys.modules[name] = safety
+                found.loader.exec_module(safety)
+                safety.WorkspaceChecker.__init__.__defaults__ = (here / "g1_body29_hand14.urdf",)
+                safety.log.setLevel(logging.ERROR)                    # a step it shortens is no news here
+            spec = safety.JointSpec(here / "joint_spec.yaml")
+        return safety.SafetyFilter(spec, safety.SafetyConfig(dt=1.0 / HZ, max_clipped_steps=10 ** 9))
+    except Exception as e:
+        log.warning("the challenge's safety filter is not here (%s): steps are rate-limited only", e)
+        return None
+
+
 class Follow:
     """Answers for one runner: a step a tick from where the robot is toward the lead."""
 
-    def __init__(self, lead, horizon: int = HORIZON) -> None:
+    def __init__(self, lead, horizon: int = HORIZON, check=official_filter) -> None:
         self.lead, self.horizon = lead, horizon
+        self.filter = check() if check else None
         self.arm = self.hand = None
+        self.ticks = 0
 
     def reset(self) -> None:
         self.arm = self.hand = None
@@ -141,12 +176,20 @@ class Follow:
         # An arm's step is scaled as a whole, so a slowed arm keeps to the lead's path.
         step = (arm - self.arm).reshape(2, 7)
         biggest = np.abs(step).max(axis=1, keepdims=True)
-        self.arm = self.arm + (step * np.minimum(1.0, ARM_STEP / np.maximum(biggest, 1e-12))).reshape(N)
-        self.hand = self.hand + np.clip(hand - self.hand, -HAND_STEP, HAND_STEP)
+        arm = self.arm + (step * np.minimum(1.0, ARM_STEP / np.maximum(biggest, 1e-12))).reshape(N)
+        hand = self.hand + np.clip(hand - self.hand, -HAND_STEP, HAND_STEP)
+        if self.filter is not None:
+            self.ticks += 1
+            passed = self.filter.filter({"arm_q_target": arm, "hand_q_target": hand}, self.ticks / HZ)
+            arm, hand = passed.arm_q_cmd, passed.hand_q_cmd
+        self.arm, self.hand = arm, hand
 
     def act(self, obs: dict) -> dict:
         if self.arm is None:                                          # an episode starts where the robot is
             self.arm, self.hand = np.array(obs["arm_q"], float), np.array(obs["hand_q"], float)
+            if self.filter is not None:
+                self.ticks = 0
+                self.filter.reset(self.arm, self.hand, 0.0)
         got = self.lead.get()
         live = got is not None and got[2] < STALE_S and np.isfinite(got[0]).all() and np.isfinite(got[1]).all()
         arms, hands = [], []

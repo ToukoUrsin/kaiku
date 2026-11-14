@@ -23,7 +23,7 @@ def obs_at(arm, hand) -> dict:
 
 def test_an_episode_starts_where_the_robot_is_and_never_steps_past_the_rate_limits():
     lead = g1.Lead()
-    follow = g1.Follow(lead, horizon=1)
+    follow = g1.Follow(lead, horizon=1, check=None)                   # the steps alone
     start_arm, start_hand = np.full(14, 0.4), np.full(14, 0.2)
     first = follow.act(obs_at(start_arm, start_hand))                 # no lead yet: the robot stays put
     np.testing.assert_allclose(first["arm_q_target"], start_arm, atol=1e-6)
@@ -45,7 +45,7 @@ def test_an_episode_starts_where_the_robot_is_and_never_steps_past_the_rate_limi
 
 def test_an_arm_is_slowed_as_a_whole_so_it_keeps_to_the_leads_path():
     lead = g1.Lead()
-    follow = g1.Follow(lead, horizon=1)
+    follow = g1.Follow(lead, horizon=1, check=None)                   # the steps alone
     goal = np.zeros(14)
     goal[:7] = [0.7, 0.35, 0.0, -0.7, 0.07, 0.0, 0.0]
     lead.put(goal, np.zeros(14))
@@ -56,7 +56,7 @@ def test_an_arm_is_slowed_as_a_whole_so_it_keeps_to_the_leads_path():
 
 def test_the_robot_holds_when_the_lead_goes_quiet(monkeypatch):
     lead = g1.Lead()
-    follow = g1.Follow(lead, horizon=1)
+    follow = g1.Follow(lead, horizon=1, check=None)                   # the steps alone
     lead.put(np.ones(14), np.ones(14))
     moving = follow.act(obs_at(np.zeros(14), np.zeros(14)))
     assert moving["arm_q_target"].max() > 0.0
@@ -110,9 +110,27 @@ def test_the_wire_is_the_challenges_protocol_and_a_relay_follows_over_it():
             relay.shutdown()
 
 
+def swinging(t: float) -> tuple[np.ndarray, np.ndarray]:
+    """A lead at Kaiku's home pose that lifts its forearms, turns its wrists and closes its hands, all faster
+    than the real robot may move."""
+    arm = HOME_ARM.copy()
+    arm[[3, 10]] -= 0.3 * (0.5 - 0.5 * np.cos(5.0 * t))               # elbows: the hands rise
+    arm[[4, 11]] += 0.8 * np.sin(7.0 * t)                             # wrist roll
+    return arm, HOME_HAND * (0.5 + 0.5 * np.sin(9.0 * t))
+
+
+def reaching_into_the_counter(t: float) -> tuple[np.ndarray, np.ndarray]:
+    """A lead that swings its arms through the table, which the challenge's workspace rule forbids."""
+    arm = np.zeros(14)
+    arm[[0, 7]] = -0.6 + 0.5 * np.sin(3.0 * t)                        # shoulder pitch
+    arm[[3, 10]] = 0.4 + 0.4 * np.sin(5.0 * t)                        # elbows
+    return arm, np.zeros(14)
+
+
 @pytest.mark.skipif(not (REF / "aaltonomous" / "deploy" / "runner.py").exists() or not URDF.exists(),
                     reason="the humanoid challenge's repository is not checked out under ref/")
-def test_the_challenges_own_runner_follows_the_lead_without_one_clipped_command(tmp_path, monkeypatch):
+@pytest.mark.parametrize("motion", [swinging, reaching_into_the_counter])
+def test_the_challenges_own_runner_follows_the_lead_without_one_clipped_command(tmp_path, monkeypatch, motion):
     pytest.importorskip("pinocchio")
     monkeypatch.syspath_prepend(str(REF))
     from aaltonomous.deploy import runner
@@ -125,16 +143,9 @@ def test_the_challenges_own_runner_follows_the_lead_without_one_clipped_command(
     stop = threading.Event()
 
     def operator() -> None:
-        """A lead at Kaiku's home pose that lifts its forearms, turns its wrists and closes its hands, all
-        faster than the real robot may move and on a clock of its own."""
         t0 = time.monotonic()
-        while not stop.is_set():
-            t = time.monotonic() - t0
-            arm = HOME_ARM.copy()
-            arm[[3, 10]] -= 0.3 * (0.5 - 0.5 * np.cos(5.0 * t))       # elbows: the hands rise
-            arm[[4, 11]] += 0.8 * np.sin(7.0 * t)                     # wrist roll
-            hand = HOME_HAND * (0.5 + 0.5 * np.sin(9.0 * t))
-            lead.put(arm, hand)
+        while not stop.is_set():                                      # on a clock of its own, twice the runner's
+            lead.put(*motion(time.monotonic() - t0))
             time.sleep(1.0 / 60.0)
 
     thread = threading.Thread(target=operator, daemon=True)

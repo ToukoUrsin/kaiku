@@ -68,7 +68,7 @@ pytest                                                        # 105 tests
 
 ## What is real and what is not
 
-- Everything runs in a MuJoCo twin of the Aaltonomous sorting station. No real G1 has moved yet. The way there is built: `--g1 8000` serves the lead robot to the humanoid challenge's own runner as a policy server ([`kaiku/app/g1.py`](kaiku/app/g1.py)). With the runner's mock robot it followed the operator for 60 seconds through the official safety filter: 1,800 ticks, 29.2 commands a second, none clipped.
+- Everything runs in a MuJoCo twin of the Aaltonomous sorting station. No real G1 has moved yet. The way there is built: `--g1 8000` serves the lead robot to the humanoid challenge's own runner as a policy server ([docs/G1.md](docs/G1.md)). With the runner's mock robot it followed the operator for 60 seconds through the official safety filter: 1,800 ticks, 29.6 commands a second, none clipped.
 - The policy reads where the parts are from the simulator, not from cameras. On the real station that has to come from the head camera.
 - The operator in the study is the stand-in, recorded live at real time on the hosted demo. No real gloves have been worn yet. The glove path runs against Rokoko's real driver and hand solver (Device SDK 2026.10.20) with the driver's emulated Smartgloves II, and against Kaiku's own emulator and recordings.
 - The parts and bins are the challenge's (45 mm cube, cylinder and triangle; red, yellow and blue bins). 3 to 5 parts per scene.
