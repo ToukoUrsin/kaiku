@@ -44,6 +44,7 @@ DT = 1.0 / CONTROL_HZ
 HUD_EVERY = 3                 # ticks between HUD updates (10 Hz)
 PAUSE_S = 20.0                # how long a pause lasts on a session that everybody shares
 MODES = ("gloves", "autopilot", "policy", "visitor")
+TURN_S, IDLE_S = 240.0, 45.0                      # a visitor's turn at the robots, and how long it may sit untouched
 HERE = Path(__file__).resolve().parents[1]
 PRETRAINED = HERE / "policy" / "pretrained" / "kaiku.pt"
 STUDY = HERE / "policy" / "pretrained" / "study.json"
@@ -431,7 +432,7 @@ class Runner:
             return
         if self.driver_client is not None:
             now = time.monotonic()
-            if now - self.last_visitor_command > 25.0 or now - self.turn_started > 240.0:
+            if now - self.last_visitor_command > IDLE_S or now - self.turn_started > TURN_S:
                 self._end_visitor_turn("timeout")
                 return
         obs = s.observe()
@@ -479,13 +480,17 @@ class Runner:
         hz = 0.0
         if len(self.walls) > 1 and self.walls[-1] > self.walls[0]:
             hz = (len(self.walls) - 1) / (self.walls[-1] - self.walls[0])
+        operator = self.op.hud() if (isinstance(self.op, GloveOperator) or self.mode == "visitor") and not alone else \
+            {"left": {"connected": False, "hz": 0.0}, "right": {"connected": False, "hz": 0.0},
+             "calibrated": False, "stand_in": not alone, "source": "policy" if alone else "autopilot", "hands": None}
+        if self.driver_client is not None:                     # whose turn it is, and how long it still lasts
+            operator["driver"] = self.driver_client
+            operator["turn_left_s"] = round(max(0.0, TURN_S - (time.monotonic() - self.turn_started)))
         return {
             "mode": self.mode,
             "status": status,
             "shared": self.shared,
-            "operator": self.op.hud() if (isinstance(self.op, GloveOperator) or self.mode == "visitor") and not alone else
-            {"left": {"connected": False, "hz": 0.0}, "right": {"connected": False, "hz": 0.0},
-             "calibrated": False, "stand_in": not alone, "source": "policy" if alone else "autopilot", "hands": None},
+            "operator": operator,
             "episode": {"index": self.pol["rounds"] + 1, "parts": int(self.want.sum()), "sorted": int(self.sorted.sum()),
                         "elapsed_s": round(s.tick_no * DT, 1), "step": "Policy"} if alone else
             {"index": t["episodes"] + 1, "parts": parts, "sorted": int(self.sorted[0]),

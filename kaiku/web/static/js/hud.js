@@ -72,8 +72,10 @@ export class Hud {
     this.onLayout = () => {};
     this.bannerRun = null;
     this.driveLocal = false;
+    this.driving = null;            // the Drive, for what the driver is told
     this.onDriveStart = () => {};
     this.onDriveEnd = () => {};
+    this.onCamera = () => {};
 
     if (flags.clean) app.dataset.clean = '';
     if (flags.sheet) app.dataset.sheet = flags.sheet;
@@ -121,6 +123,7 @@ export class Hud {
     el['drive-panel']?.addEventListener('click', () => this.onDriveStart());
     el['drive-back']?.addEventListener('click', () => this.onDriveEnd());
     el['drive-panel-back']?.addEventListener('click', () => this.onDriveEnd());
+    el['drive-camera']?.addEventListener('click', () => this.onCamera());
 
     el['focus-close'].addEventListener('click', () => this.onFocus(-1));
     el['focus-prev'].addEventListener('click', () => this.onFocus(this.focus - 1));
@@ -232,7 +235,10 @@ export class Hud {
     this.renderBanner();
     this.renderFocus();
     this.renderResult();
-    if (this.hud.mode !== 'visitor' && this.driveLocal) this.setDriveActive(false);
+  }
+
+  setDrive(drive) {
+    this.driving = drive;
   }
 
   /** A Train run that just ended is said once over the scene, where everybody looks. */
@@ -255,7 +261,7 @@ export class Hud {
   renderTopbar() {
     const { mode, perf } = this.hud;
     for (const button of this.el.mode.children) {
-      const checked = button.dataset.mode === mode;
+      const checked = button.dataset.mode === (mode === 'visitor' ? 'gloves' : mode);     // a visitor is an operator too
       // Autopilot is a fallback for a glove session that lost its gloves, not a choice to offer.
       if (button.dataset.mode === 'autopilot') button.hidden = !checked;
       if (checked) delete button.dataset.pending;
@@ -357,23 +363,64 @@ export class Hud {
     const calibrating = this.hud.episode?.step === 'calibrating';
     this.text('calibrate', calibrating ? 'Calibrating' : operator.calibrated ? 'Recalibrate' : 'Calibrate');
     this.attr('calibrate', 'disabled', calibrating || source === 'autopilot' || source === 'policy');
-    const visitorBusy = source === 'visitor' && !this.driveLocal;
-    this.attr('drive-stage', 'disabled', visitorBusy);
-    this.attr('drive-panel', 'disabled', visitorBusy);
-    this.attr('drive-stage', 'title', visitorBusy ? 'A visitor is driving' : null);
-    this.attr('drive-panel', 'title', visitorBusy ? 'A visitor is driving' : null);
-    this.show('drive-tools', source !== 'policy');
-    this.show('drive-hint', this.driveLocal);
-    this.show('drive-back', this.driveLocal);
-    this.show('drive-panel-back', this.driveLocal);
-    this.show('drive-stage', !this.driveLocal);
-    this.text('drive-hint', 'Press on a part, drag it to the bin of its colour, let go.');
+    this.renderDrive();
+  }
+
+  /** The visitor's own turn at the robots: the button that asks for it, and what to do next. */
+  renderDrive() {
+    const operator = this.hud.operator || {};
+    const mine = this.driveLocal;
+    const taken = operator.driver != null && !mine;               // somebody else has the robots
+    const waiting = Boolean(this.driving?.waiting) && !taken;
+    const turn = Number.isFinite(operator.turn_left_s) ? clock(operator.turn_left_s) : '';
+    const ask = taken ? `Somebody is driving${turn ? ` · free in ${turn}` : ''}` : waiting ? 'Starting' : 'Drive it yourself';
+    for (const ref of ['drive-stage', 'drive-panel']) {
+      this.text(ref, ref === 'drive-panel' && taken ? 'Somebody is driving' : ask);
+      this.attr(ref, 'disabled', taken || waiting);
+      this.show(ref, !mine);
+    }
+    this.show('drive-tools', operator.source !== 'policy' && !('opening' in this.app.dataset));
+    this.show('drive-back', mine);
+    this.show('drive-panel-back', mine);
+    this.show('drive-card', mine);
+    if (!mine) return;
+
+    const camera = Boolean(this.driving?.camera);
+    this.text('drive-camera', camera ? 'Use the pointer' : 'Use my hand');
+    this.text('drive-left', turn ? `${turn} left` : '');
+    const robots = this.hud.echo?.robots ?? 0;
+    const failed = this.hud.echo?.failed ?? 0;
+    const table = operator.table;
+    const held = table?.parts.find((part) => part.held);
+    const phase = this.hud.mode === 'visitor' ? operator.phase : 'wait';
+    const settling = this.hud.status === 'settling';
+    let say;
+    let more = `${robots} robots redo every move on their own tables.`;
+    if (phase === 'wait' || !table) {
+      say = 'Your turn starts with the next scene';
+    } else if (settling) {
+      say = 'Sorted';
+      more = `Now the ${robots} others finish theirs. Every one that gets it right is a demonstration.`;
+    } else if (phase === 'pick') {
+      say = camera ? 'Keep pinching' : 'Keep holding';
+      more = 'The hand goes down and lifts it.';
+    } else if (phase === 'carry' && held) {
+      const over = operator.over && operator.over === held.bin;
+      say = over ? (camera ? 'Open your hand' : 'Let go') : `Take it to the ${held.color} bin`;
+    } else if (phase === 'release') {
+      say = 'In it goes';
+    } else {
+      say = camera ? 'Move your hand over a part and pinch' : 'Press on a part and hold';
+    }
+    if (failed > 0 && !settling) more = `${failed} of ${robots} robots could not follow that. The rest keep up with you.`;
+    this.text('drive-say', say);
+    this.text('drive-more', more);
   }
 
   setDriveActive(active) {
     this.driveLocal = Boolean(active);
     this.app.toggleAttribute('data-driving', this.driveLocal);
-    this.renderOperator();
+    this.renderDrive();
   }
 
   renderEpisode() {

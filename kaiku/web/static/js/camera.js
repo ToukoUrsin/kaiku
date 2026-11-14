@@ -31,7 +31,8 @@ export class CameraRig {
     // so a shot holds its subject on a wide laptop and on a tall phone alike.
     this.shots = {
       lead: { target: [0.25, 0.0, 0.38], azimuth: -30 * DEG, polar: 76 * DEG, frame: [2.1, 1.9] },
-      drive: { target: [0.18, 0.0, 0.04], azimuth: -2 * DEG, polar: 76 * DEG, frame: [1.45, 1.35] },
+      // the driver's: down on the table from across it, the robots that redo it behind
+      drive: { target: [0.3, 0.0, 0.24], azimuth: 0, polar: 63 * DEG, frame: [1.85, 1.6] },
       overview: {
         target: [-0.5 * depth, 0, 0.45 + 0.05 * depth], azimuth: -12 * DEG, polar: 64 * DEG,
         frame: [width * 0.95 + 1.0, depth * 0.5 + 2.6],

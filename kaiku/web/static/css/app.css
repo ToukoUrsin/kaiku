@@ -422,20 +422,15 @@ a.button {
 
 .drive-tools {
   position: absolute;
-  left: 50%;
-  bottom: var(--s-5);
+  right: var(--s-5);
+  bottom: var(--s-6);
   z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--s-2);
-  transform: translateX(-50%);
 }
 
-.drive-hint {
-  color: var(--text-2);
-  font-size: var(--t-12);
-  white-space: nowrap;
+.button-large {
+  height: 40px;
+  padding: 0 var(--s-5);
+  font-size: var(--t-14);
 }
 
 .visitor-controls {
@@ -444,8 +439,116 @@ a.button {
   margin-top: var(--s-3);
 }
 
-.app[data-driving] .drive-tools {
-  bottom: var(--s-6);
+/* What the driver is told, a step at a time, over the table they drive. */
+.drive-card {
+  position: absolute;
+  top: var(--s-5);
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-2);
+  width: max-content;
+  max-width: calc(100% - 32px);
+  text-align: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* the words sit on the robots behind the table: a shade under them keeps them readable */
+.drive-card::before {
+  content: '';
+  position: absolute;
+  inset: -24px -120px -28px;
+  z-index: -1;
+  background: radial-gradient(closest-side, rgba(8, 9, 12, 0.78), rgba(8, 9, 12, 0));
+  pointer-events: none;
+}
+
+.drive-say {
+  color: var(--text-1);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  text-shadow: 0 1px 18px rgba(0, 0, 0, 0.7);
+}
+
+.drive-more {
+  max-width: 44ch;
+  color: var(--text-2);
+  font-size: var(--t-13);
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.8);
+}
+
+.drive-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+  pointer-events: auto;
+}
+
+.drive-left {
+  margin-left: var(--s-2);
+  color: var(--text-3);
+  font-size: var(--t-12);
+}
+
+.hand-cam {
+  position: absolute;
+  right: var(--s-4);
+  bottom: var(--s-4);
+  z-index: 3;
+  width: 220px;
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-3);
+  background: #000;
+}
+
+.hand-cam video,
+.hand-cam canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+}
+
+.hand-cam video {
+  object-fit: cover;
+  transform: scaleX(-1);
+  filter: grayscale(1) brightness(0.75);
+}
+
+.hand-cam canvas {
+  position: absolute;
+  inset: 0 0 auto;
+}
+
+.hand-cam p {
+  padding: var(--s-2) var(--s-3);
+  color: var(--text-3);
+  font-size: var(--t-11);
+}
+
+.hand-cam[data-lost] p::before {
+  content: 'No hand in the picture. ';
+  color: var(--text-1);
+}
+
+/* While somebody drives from this page the table is theirs: the totals and the camera buttons step back. */
+.app[data-driving] .story,
+.app[data-driving] .stage-tools,
+.app[data-driving] .caption,
+.app[data-driving] .tag {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.app[data-driving] #view {
+  cursor: crosshair;
+  touch-action: none;
 }
 
 .story {
@@ -1606,6 +1709,11 @@ a.button {
     grid-template-rows: var(--topbar) 24dvh minmax(0, 1fr);
   }
 
+  /* driving: the table takes the phone */
+  .app[data-driving] {
+    grid-template-rows: var(--topbar) 74dvh minmax(0, 1fr);
+  }
+
   .app[data-clean] {
     grid-template-rows: minmax(0, 1fr);
   }
@@ -1652,13 +1760,27 @@ a.button {
   }
 
   .drive-tools {
-    bottom: var(--s-4);
-    max-width: calc(100% - 32px);
+    top: var(--s-3);
+    right: var(--s-3);
+    bottom: auto;
   }
 
-  .drive-hint {
-    white-space: normal;
-    text-align: center;
+  .drive-card {
+    top: var(--s-3);
+  }
+
+  .drive-say {
+    font-size: 22px;
+  }
+
+  .hand-cam {
+    right: var(--s-3);
+    bottom: var(--s-3);
+    width: 132px;
+  }
+
+  .hand-cam p {
+    display: none;
   }
 
   .stage-tools kbd,

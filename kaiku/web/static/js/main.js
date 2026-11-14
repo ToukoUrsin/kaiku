@@ -53,7 +53,10 @@ async function boot() {
   const markers = new Markers(stage, layout, described.nEnvs, described.groundZ);
   const hands = new Hands(stage);
   const rig = new CameraRig(stage, canvas, layout);
-  const drive = new Drive({ canvas, rig, send: (message) => link.send(message), tableZ: described.tableZ });
+  const drive = new Drive({
+    stage, canvas, rig, send: (message) => link.send(message), tableZ: described.tableZ,
+    onNote: (text) => hud.toast(text, 'warn'),
+  });
   const stream = new Stream({ nEnvs: described.nEnvs, nq: described.kin.nq, modelHash: described.modelHash });
   link.send = (message) => stream.send(message);
   hud.setStates(stream.state, described.nEnvs, layout);
@@ -80,8 +83,11 @@ async function boot() {
       if (rig.focus < 0 && rig.shot in rig.shots) rig.goTo(alone ? 'overview' : flags.shot);
     }
     hands.setHands(data.operator?.hands || null, performance.now());
+    // the runner says whose turn it is: this page drives only while it is named
+    const driver = data.operator?.driver;
+    drive.follow(driver != null && driver === stream.client, data.mode === 'visitor' ? data.operator : null);
+    hud.setDrive(drive);
     hud.setHud(data);
-    if (data.mode === 'visitor' && drive.active && rig.shot !== 'drive') rig.goTo('drive', 0.6);
   };
   stream.onEvent = (event) => {
     if (event.type === 'toast') hud.toast(event.text, event.level);
@@ -111,20 +117,17 @@ async function boot() {
   };
   hud.onShot = (name) => rig.goTo(name);
   hud.onFocus = focusOn;
-  hud.onDriveStart = () => {
-    drive.start();
-    rig.goTo('drive', 0.6);
-  };
+  const phone = window.matchMedia('(max-width: 760px)');
+  hud.onDriveStart = () => drive.start();
   hud.onDriveEnd = () => drive.stop();
+  hud.onCamera = () => (drive.camera ? drive.stopCamera() : drive.startCamera(hud.el['hand-cam']));
   drive.onState = (active) => {
     hud.setDriveActive(active);
-    if (active) {
-      rig.goTo('drive', 0.6);
-      app.dataset.sheet = 'tall';
-    } else if (rig.shot === 'drive') {
-      rig.goTo('lead', 0.6);
-      delete app.dataset.sheet;
-    }
+    // a phone is tall: the table has to fill its width, the robots behind get what is left
+    rig.shots.drive.frame = phone.matches ? [1.15, 1.5] : [1.85, 1.6];
+    if (active) rig.goTo('drive', 0.9);
+    else if (rig.shot === 'drive') rig.goTo(flags.shot, 0.9);
+    place();
   };
 
   const origin = new THREE.Vector3();
@@ -146,6 +149,10 @@ async function boot() {
   window.addEventListener('keydown', (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     const onPage = event.target === document.body || event.target === canvas;
+    if (drive.active) {
+      if (event.key === 'Escape') drive.stop();
+      return;
+    }
     if (event.key === '1') rig.goTo('lead');
     else if (event.key === '2') rig.goTo('overview');
     else if (event.key === '3') rig.goTo('top');
@@ -159,10 +166,10 @@ async function boot() {
   });
 
   // Where the subject sits in the picture, so the totals laid over the stage do not cover it.
-  const phone = window.matchMedia('(max-width: 760px)');
   function place() {
     const close = rig.shot === 'lead' || rig.shot === 'focus';
-    if (phone.matches) rig.shiftGoal.set(0, close ? 0.24 : 0.14);
+    if (rig.shot === 'drive') rig.shiftGoal.set(0, phone.matches ? -0.12 : -0.28);   // the table low, the others above it
+    else if (phone.matches) rig.shiftGoal.set(0, close ? 0.24 : 0.14);
     else rig.shiftGoal.set(close ? 0.15 : 0.05, close ? 0.1 : 0.06);
   }
   const resize = () => {
@@ -201,6 +208,7 @@ async function boot() {
     fleet.chooseLods(stage.camera.position);
     fleet.update(stream, now);
     hands.update(fleet.leadWrist, flowing && running, now, dt);
+    drive.frame(now, seconds);
 
     markers.hovered = hovered;
     markers.focused = rig.focus;

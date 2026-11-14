@@ -128,6 +128,7 @@ export class Stream {
     } else if (message._ === 'event') {
       this.onEvent(message.d || {});
     } else if (message._ === 'hello') {
+      this.client = message.client;             // who this page is to the runner
       if (message.model_hash && message.model_hash !== this.modelHash) this.onModelChanged();
       if (document.hidden) this.sendControl({ _: 'pause', on: true });
     }

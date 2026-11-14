@@ -1,95 +1,362 @@
-// Pointer driving for the lead scene. Coordinates sent to the server are pelvis-frame x/y.
+// A visitor drives the lead robot: with a pointer on the table, or with a hand in front of the
+// camera. The page says where the hand is and whether it pinches; the runner does the rest. The
+// runner decides whose turn it is, so everything here follows what it last said.
+
 import * as THREE from '../vendor/three/three.module.min.js';
 
+const SEND_MS = 33;                   // as often as the robots are commanded
+const NEAR_M = 0.05;                  // a part this close to the pointer is the one a press takes
+const PINCH_ON = 0.38;                // thumb tip to index tip, in hand lengths: closer is a pinch
+const PINCH_OFF = 0.55;               // further is open again
+const BONES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
+  [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17]];
+const MEDIAPIPE = new URL('../vendor/mediapipe/', import.meta.url).href;
+
 export class Drive {
-  constructor({ canvas, rig, send, tableZ = 0.01, onState = () => {} }) {
+  constructor({ stage, canvas, rig, send, tableZ = 0.01, onState = () => {}, onNote = () => {} }) {
     this.canvas = canvas;
     this.rig = rig;
     this.send = send;
     this.tableZ = tableZ;
     this.onState = onState;
-    this.active = false;
+    this.onNote = onNote;             // something the visitor should read: the camera would not start
+    this.active = false;              // the runner says this page is driving
+    this.asked = 0;                   // when this page last asked for a turn
+    this.table = null;                // the parts and bins, as the runner last told them
+    this.want = null;                 // the bin the part in the hand belongs in
+    this.at = null;                   // where the hand is asked to be: {x, y} on the table
+    this.grip = false;
     this.pointer = null;
     this.last = 0;
-    this.pending = null;
+    this.dirty = false;
+    this.camera = null;               // {video, stream, landmarker, canvas} while a camera hand drives
     this.origin = new THREE.Vector3();
     this.direction = new THREE.Vector3();
     this.point = new THREE.Vector3();
+    this.marks = new Marks(stage, tableZ);
     this.bind();
   }
 
-  setActive(active) {
-    this.active = Boolean(active);
-    this.rig.driving = this.active;
-    this.canvas.toggleAttribute('data-driving', this.active);
-    this.onState(this.active);
-  }
-
+  /** Ask the runner for a turn. Nothing changes here until it says yes. */
   start() {
     if (this.active) return;
-    if (this.send({ type: 'cmd', name: 'drive_start' })) this.setActive(true);
+    this.asked = performance.now();
+    this.send({ type: 'cmd', name: 'drive_start' });
   }
 
   stop() {
-    if (!this.active) return;
     this.send({ type: 'cmd', name: 'drive_end' });
-    this.setActive(false);
-    this.pointer = null;
+    this.asked = 0;
+    this.follow(false, null);
   }
 
-  table(clientX, clientY) {
+  /** What the runner last said: is this page driving, and what is on the table. */
+  follow(mine, operator) {
+    this.table = mine ? operator?.table || null : null;
+    this.want = mine ? operator?.want || null : null;
+    if (mine === this.active) return;
+    this.active = mine;
+    this.rig.driving = mine;
+    this.canvas.toggleAttribute('data-driving', mine);
+    if (!mine) {
+      this.pointer = null;
+      this.at = null;
+      this.grip = false;
+      this.stopCamera();
+    }
+    this.onState(mine);
+  }
+
+  /** Still waiting for the runner's yes. */
+  get waiting() {
+    return !this.active && this.asked > 0 && performance.now() - this.asked < 4000;
+  }
+
+  onTable(clientX, clientY) {
     this.rig.ray(clientX, clientY, this.origin, this.direction);
     const t = (this.tableZ - this.origin.z) / this.direction.z;
     if (!Number.isFinite(t) || t < 0) return null;
     return this.point.copy(this.origin).addScaledVector(this.direction, t);
   }
 
-  sendPoint(clientX, clientY, grip) {
-    const p = this.table(clientX, clientY);
+  aim(clientX, clientY, grip) {
+    const p = this.onTable(clientX, clientY);
     if (!p) return;
-    const message = { type: 'cmd', name: 'hand', value: { x: p.x, y: p.y, grip } };
-    const now = performance.now();
-    if (now - this.last >= 30) {
-      this.last = now;
-      this.send(message);
-    } else {
-      this.pending = message;
-    }
+    const r = this.table?.reach;                // the runner keeps the hand in here: show it where it will be
+    this.at = r ? { x: Math.min(r[2], Math.max(r[0], p.x)), y: Math.min(r[3], Math.max(r[1], p.y)) } : { x: p.x, y: p.y };
+    this.grip = grip;
+    this.dirty = true;
   }
 
-  flush() {
-    if (this.pending && performance.now() - this.last >= 30) {
-      this.last = performance.now();
-      this.send(this.pending);
-      this.pending = null;
+  /** Once a frame: send what changed, keep the hold alive, draw the marks on the table. */
+  frame(now, seconds) {
+    if (this.active && this.at && (this.dirty || now - this.last > 400) && now - this.last >= SEND_MS) {
+      this.last = now;
+      this.dirty = false;
+      const value = { x: this.at.x, y: this.at.y, grip: this.grip };
+      if (this.camera) value.input = 'camera';
+      this.send({ type: 'cmd', name: 'hand', value });
     }
-    requestAnimationFrame(() => this.flush());
+    this.marks.update(this.active ? this : null, seconds);
+  }
+
+  /** The part a press would take now. */
+  nearest() {
+    if (!this.at || !this.table) return null;
+    let best = null;
+    let bestD = NEAR_M;
+    for (const part of this.table.parts) {
+      if (!part.on_mat || part.held) continue;
+      const d = Math.hypot(part.x - this.at.x, part.y - this.at.y);
+      if (d < bestD) {
+        bestD = d;
+        best = part;
+      }
+    }
+    return best;
   }
 
   bind() {
-    this.canvas.addEventListener('pointerdown', (event) => {
-      if (!this.active) return;
+    const canvas = this.canvas;
+    canvas.addEventListener('pointerdown', (event) => {
+      if (!this.active || this.camera) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       this.pointer = event.pointerId;
-      this.canvas.setPointerCapture(event.pointerId);
-      this.sendPoint(event.clientX, event.clientY, true);
+      canvas.setPointerCapture(event.pointerId);
+      this.aim(event.clientX, event.clientY, true);
     });
-    this.canvas.addEventListener('pointermove', (event) => {
-      if (!this.active || this.pointer !== event.pointerId) return;
+    canvas.addEventListener('pointermove', (event) => {
+      if (!this.active || this.camera) return;
+      if (this.pointer !== null && this.pointer !== event.pointerId) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      this.sendPoint(event.clientX, event.clientY, true);
+      // a mouse that only hovers still moves the hand: it waits over the part before the press
+      this.aim(event.clientX, event.clientY, this.pointer === event.pointerId);
     });
     const release = (event) => {
       if (!this.active || this.pointer !== event.pointerId) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      this.sendPoint(event.clientX, event.clientY, false);
+      this.aim(event.clientX, event.clientY, false);
       this.pointer = null;
     };
-    this.canvas.addEventListener('pointerup', release);
-    this.canvas.addEventListener('pointercancel', release);
-    this.flush();
+    canvas.addEventListener('pointerup', release);
+    canvas.addEventListener('pointercancel', release);
+  }
+
+  // ------------------------------------------------------------------ a hand in front of the camera
+
+  /** Drive with a hand the camera sees. The picture never leaves this page. */
+  async startCamera(holder) {
+    if (this.camera || !this.active) return false;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      this.onNote('This browser gives the page no camera. The pointer still drives.');
+      return false;
+    }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' }, audio: false });
+    } catch {
+      this.onNote('The camera did not start. The pointer still drives.');
+      return false;
+    }
+    let landmarker;
+    try {
+      const { FilesetResolver, HandLandmarker } = await import(`${MEDIAPIPE}vision_bundle.mjs`);
+      const files = await FilesetResolver.forVisionTasks(`${MEDIAPIPE}wasm`);
+      const make = (delegate) => HandLandmarker.createFromOptions(files, {
+        baseOptions: { modelAssetPath: `${MEDIAPIPE}hand_landmarker.task`, delegate },
+        runningMode: 'VIDEO',
+        numHands: 1,
+      });
+      try {
+        landmarker = await make('GPU');
+      } catch {
+        landmarker = await make('CPU');
+      }
+    } catch (error) {
+      console.error(error);
+      for (const track of stream.getTracks()) track.stop();
+      this.onNote('Hand tracking did not load. The pointer still drives.');
+      return false;
+    }
+    if (!this.active) {                       // the turn ended while it loaded
+      for (const track of stream.getTracks()) track.stop();
+      landmarker.close();
+      return false;
+    }
+    const video = holder.querySelector('video');
+    const overlay = holder.querySelector('canvas');
+    video.srcObject = stream;
+    await video.play().catch(() => {});
+    this.camera = { stream, landmarker, video, overlay, holder, smooth: null, seen: 0, stamp: -1 };
+    holder.hidden = false;
+    this.pointer = null;
+    this.grip = false;
+    this.look();
+    return true;
+  }
+
+  stopCamera() {
+    const camera = this.camera;
+    if (!camera) return;
+    this.camera = null;
+    for (const track of camera.stream.getTracks()) track.stop();
+    camera.video.srcObject = null;
+    camera.holder.hidden = true;
+    try {
+      camera.landmarker.close();
+    } catch {
+      // already gone
+    }
+    this.grip = false;
+    this.dirty = true;
+  }
+
+  look() {
+    const camera = this.camera;
+    if (!camera) return;
+    requestAnimationFrame(() => this.look());
+    const video = camera.video;
+    if (video.readyState < 2 || video.currentTime === camera.stamp) return;
+    camera.stamp = video.currentTime;
+    let hand = null;
+    try {
+      hand = camera.landmarker.detectForVideo(video, performance.now()).landmarks?.[0] || null;
+    } catch {
+      return;
+    }
+    this.draw(camera, hand);
+    if (!hand) {
+      // a hand that left the picture lets go only after a moment: one missed frame is not a release
+      if (performance.now() - camera.seen > 600 && this.grip) {
+        this.grip = false;
+        this.dirty = true;
+      }
+      return;
+    }
+    camera.seen = performance.now();
+    const reading = readHand(hand, this.grip);
+    const s = camera.smooth || { x: reading.x, y: reading.y };
+    s.x += (reading.x - s.x) * 0.4;
+    s.y += (reading.y - s.y) * 0.4;
+    camera.smooth = s;
+    // the middle of the picture is the table: nobody has to reach for the picture's edges
+    const box = this.reach();
+    const u = clamp01((s.x - 0.2) / 0.6);
+    const v = clamp01((s.y - 0.25) / 0.55);
+    this.aim(box.left + u * box.width, box.top + v * box.height, reading.grip);
+  }
+
+  /** Where the hand may go, as a box on the page: the hand in the picture moves over this. */
+  reach() {
+    const bounds = this.canvas.getBoundingClientRect();
+    const r = this.table?.reach || [0.21, -0.35, 0.515, 0.35];
+    let left = Infinity; let right = -Infinity; let top = Infinity; let bottom = -Infinity;
+    for (const [x, y] of [[r[0], r[1]], [r[0], r[3]], [r[2], r[1]], [r[2], r[3]]]) {
+      this.point.set(x, y, this.tableZ).project(this.rig.camera);
+      const px = bounds.left + (this.point.x * 0.5 + 0.5) * bounds.width;
+      const py = bounds.top + (0.5 - this.point.y * 0.5) * bounds.height;
+      left = Math.min(left, px); right = Math.max(right, px); top = Math.min(top, py); bottom = Math.max(bottom, py);
+    }
+    return { left, top, width: right - left, height: bottom - top };
+  }
+
+  draw(camera, hand) {
+    const overlay = camera.overlay;
+    const w = overlay.width = overlay.clientWidth * devicePixelRatio;
+    const h = overlay.height = overlay.clientHeight * devicePixelRatio;
+    const g = overlay.getContext('2d');
+    g.clearRect(0, 0, w, h);
+    camera.holder.toggleAttribute('data-lost', !hand);
+    if (!hand) return;
+    const pinched = this.grip;
+    g.lineWidth = 1.5 * devicePixelRatio;
+    g.strokeStyle = pinched ? 'rgba(74, 222, 128, 0.95)' : 'rgba(255, 255, 255, 0.9)';
+    g.fillStyle = g.strokeStyle;
+    g.beginPath();
+    for (const [a, b] of BONES) {
+      g.moveTo((1 - hand[a].x) * w, hand[a].y * h);        // mirrored, like the picture under it
+      g.lineTo((1 - hand[b].x) * w, hand[b].y * h);
+    }
+    g.stroke();
+    for (const tip of [4, 8]) {
+      g.beginPath();
+      g.arc((1 - hand[tip].x) * w, hand[tip].y * h, 3.5 * devicePixelRatio, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+}
+
+/** Where a hand is in the picture (mirrored, 0..1) and whether thumb and index finger pinch. */
+export function readHand(hand, wasPinched) {
+  const palm = [0, 5, 17].reduce((sum, i) => ({ x: sum.x + hand[i].x / 3, y: sum.y + hand[i].y / 3 }), { x: 0, y: 0 });
+  const length = Math.hypot(hand[9].x - hand[0].x, hand[9].y - hand[0].y) || 1e-6;
+  const gap = Math.hypot(hand[8].x - hand[4].x, hand[8].y - hand[4].y) / length;
+  return { x: 1 - palm.x, y: palm.y, gap, grip: wasPinched ? gap < PINCH_OFF : gap < PINCH_ON };
+}
+
+const clamp01 = (v) => Math.min(1, Math.max(0, v));
+
+// The marks on the driver's table: where the hand is asked to be, the part a press would take,
+// the bin the part in the hand belongs in.
+class Marks {
+  constructor(stage, tableZ) {
+    this.z = tableZ + 0.003;
+    this.group = new THREE.Group();
+    this.group.visible = false;
+    const flat = (color, opacity) => new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
+    });
+    this.cursor = new THREE.Mesh(new THREE.RingGeometry(0.019, 0.023, 48), flat(0xffffff, 0.95));
+    this.dot = new THREE.Mesh(new THREE.CircleGeometry(0.008, 24), flat(0xffffff, 0.95));
+    this.take = new THREE.Mesh(new THREE.RingGeometry(0.040, 0.045, 64), flat(0xffffff, 0.9));
+    this.binLine = new THREE.LineLoop(
+      new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(12), 3)),
+      new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, toneMapped: false }),
+    );
+    this.binFill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), flat(0xffffff, 0.14));
+    for (const mark of [this.cursor, this.dot, this.take, this.binLine, this.binFill]) {
+      mark.renderOrder = 20;
+      mark.material.depthTest = false;      // the robot's own arm must not hide where the hand is going
+      this.group.add(mark);
+    }
+    stage.scene.add(this.group);
+  }
+
+  update(drive, seconds) {
+    this.group.visible = Boolean(drive?.at);
+    if (!this.group.visible) return;
+    const { at, grip, table, want } = drive;
+    this.cursor.position.set(at.x, at.y, this.z);
+    this.dot.position.set(at.x, at.y, this.z);
+    this.dot.visible = grip;
+    this.cursor.scale.setScalar(grip ? 0.8 : 1);
+
+    const near = want ? null : drive.nearest();
+    this.take.visible = Boolean(near);
+    if (near) {
+      this.take.position.set(near.x, near.y, this.z);
+      this.take.scale.setScalar(1 + 0.06 * Math.sin(seconds * 6));
+    }
+
+    const bin = want && table ? table.bins[want] : null;
+    this.binLine.visible = this.binFill.visible = Boolean(bin);
+    if (bin) {
+      const [x0, y0, x1, y1] = bin;
+      const over = at.x >= x0 && at.x <= x1 && at.y >= y0 && at.y <= y1;
+      const color = over ? 0x4ade80 : 0xffffff;
+      const z = this.z + 0.002;
+      const p = this.binLine.geometry.attributes.position;
+      p.setXYZ(0, x0, y0, z); p.setXYZ(1, x1, y0, z); p.setXYZ(2, x1, y1, z); p.setXYZ(3, x0, y1, z);
+      p.needsUpdate = true;
+      this.binLine.geometry.computeBoundingSphere();
+      this.binLine.material.color.setHex(color);
+      this.binFill.material.color.setHex(color);
+      this.binFill.material.opacity = over ? 0.28 : 0.10 + 0.06 * (0.5 + 0.5 * Math.sin(seconds * 5));
+      this.binFill.position.set((x0 + x1) / 2, (y0 + y1) / 2, z);
+      this.binFill.scale.set(x1 - x0, y1 - y0, 1);
+    }
   }
 }

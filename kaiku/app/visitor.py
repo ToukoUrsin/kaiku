@@ -41,6 +41,12 @@ class VisitorOperator:
         self.s = session
         self.scene = session.scene
         self.pace, self.speed, self.hover, self.approach_s = pace, speed, hover, approach_s
+        # Where the visitor's point may be: over the parts and over the bins, never at the robot or off the table.
+        lo, hi = self.scene.region
+        inner = [self.scene.bin_inner(b) for b in self.scene.bin_centers]
+        far = max(float(c[0]) for c in self.scene.bin_centers.values())
+        self.reach = (np.array([lo[0] - 0.05, min(float(a[1]) for a, _ in inner) + 0.01]),
+                      np.array([far + 0.01, max(float(b[1]) for _, b in inner) - 0.01]))
         self.command = np.array([0.28, 0.0], float)
         self.grip = False
         self.last_command = 0.0
@@ -68,6 +74,7 @@ class VisitorOperator:
         self.carry_z = self.scene.rest_z + self.hover
         self.input = "pointer"                                # or "camera": what the visitor drives with
         self.points = None                                    # the visitor's hand as the camera saw it, for the page
+        self.seen: Observation | None = None                  # the last tick's, for what the page is told
 
     def _toward(self, s: int, target: np.ndarray) -> None:
         """Move one hand's target after ``target`` at a hand's pace, not a pointer's."""
@@ -91,9 +98,7 @@ class VisitorOperator:
             return
         if not np.isfinite([x, y]).all():
             return
-        lo, hi = self.scene.region
-        # The pointer may reach bins just outside the mat, but never the robot or the room.
-        self.command[:] = np.clip([x, y], lo - 0.18, hi + 0.18)
+        self.command[:] = np.clip([x, y], *self.reach)
         self.grip = bool(value.get("grip", False))
         self.input = "camera" if value.get("input") == "camera" else "pointer"
         points = value.get("points")
@@ -169,6 +174,7 @@ class VisitorOperator:
 
     def update(self, obs: Observation) -> LeadCommand:
         s = self.side
+        self.seen = obs
         if self.phase == "idle":
             # Keep a hand over the pointer even before the first pinch.  The other rests at home.
             near = self._near_part(obs)
@@ -212,12 +218,29 @@ class VisitorOperator:
         self.hand[other] = HAND_OPEN.copy()
         return LeadCommand(self.pinch.copy(), self.rot.copy(), hand14(self.hand[0], self.hand[1]))
 
+    def _table(self) -> dict:
+        """What the visitor's page draws on the table: the parts still to sort, each with its bin, and the bins."""
+        lay, parts = self.s.layouts[0], []
+        for p in lay.placements:
+            ob = self.scene.by_name[p.name]
+            at = p.pos if self.seen is None else self.seen.obj_pos[0, ob.index]
+            parts.append({"x": round(float(at[0]), 3), "y": round(float(at[1]), 3), "color": ob.color,
+                          "bin": lay.mapping[ob.color], "held": ob.index == self.held,
+                          "on_mat": bool(self.s._on_mat(np.asarray(at, float)[None], 0.03)[0])})
+        bins = {}
+        for name in self.scene.bin_centers:
+            lo, hi = self.scene.bin_inner(name)
+            bins[name] = [round(float(v), 3) for v in (lo[0], lo[1], hi[0], hi[1])]
+        return {"parts": parts, "bins": bins, "reach": [round(float(v), 3) for v in (*self.reach[0], *self.reach[1])]}
+
     def hud(self) -> dict:
-        # A compact synthetic hand stream.  The browser uses it exactly like glove points.
+        held = self.held >= 0 and self.phase in ("pick", "carry", "release")
         return {"calibrated": True, "source": self.source, "stand_in": False, "driving": True, "hands": None,
                 "input": self.input, "points": self.points, "phase": self.phase,
                 "holding": self.held >= 0 and self.phase in ("carry", "release"),
                 "over": self._bin_at(self.command),
+                "want": self.held_bin if held else None,            # the bin the part in the hand belongs in
+                "table": self._table(),
                 "left": {"connected": True, "hz": 30.0, "status": "tracking"},
                 "right": {"connected": True, "hz": 30.0, "status": "tracking"}}
 

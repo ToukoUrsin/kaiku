@@ -64,9 +64,23 @@
         </div>
       </div>
       <div class="drive-tools" data-ref="drive-tools" hidden>
-        <button type="button" class="button button-primary" data-ref="drive-stage">Drive it yourself</button>
-        <button type="button" class="button" data-ref="drive-back" hidden>Hand it back</button>
-        <p class="drive-hint" data-ref="drive-hint" hidden>Press on a part, drag it to the bin of its colour, let go.</p>
+        <button type="button" class="button button-primary button-large" data-ref="drive-stage">Drive it yourself</button>
+      </div>
+
+      <div class="drive-card" data-ref="drive-card" role="status" hidden>
+        <p class="drive-say" data-ref="drive-say"></p>
+        <p class="drive-more" data-ref="drive-more"></p>
+        <div class="drive-row">
+          <button type="button" class="button" data-ref="drive-camera">Use my hand</button>
+          <button type="button" class="button" data-ref="drive-back">Hand it back</button>
+          <span class="drive-left num" data-ref="drive-left"></span>
+        </div>
+      </div>
+
+      <div class="hand-cam" data-ref="hand-cam" hidden>
+        <video playsinline muted></video>
+        <canvas></canvas>
+        <p>Your hand. The picture stays on this device.</p>
       </div>
 
       <div class="banner" data-ref="banner" role="status" hidden>

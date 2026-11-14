@@ -30,6 +30,12 @@ def test_pointer_visitor_sorts_lead_without_clips():
     assert v.done
     assert s.progress()[0] == len(s.layouts[0].placements)
     assert s.clipped[0] == 0
+    # what the driver's page draws: every part with the bin it belongs in, and nothing left on the mat
+    table = v.hud()["table"]
+    assert len(table["parts"]) == len(s.layouts[0].placements) and set(table["bins"]) == set(s.scene.bin_centers)
+    assert not any(part["on_mat"] for part in table["parts"])
+    v.set_command({"x": -5.0, "y": 9.0, "grip": False})                 # a pointer far off the table stays on it
+    assert np.all(v.command >= v.reach[0]) and np.all(v.command <= v.reach[1])
     s.close()
 
 
