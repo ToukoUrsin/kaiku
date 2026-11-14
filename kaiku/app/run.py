@@ -394,7 +394,9 @@ class Runner:
             "envs": {"lag_s": [0.0] + [round(float(v), 2) for v in lag], "sorted": [int(v) for v in self.sorted],
                      "parts": [int(v) for v in self.want], "clipped": [int(v) for v in s.clipped]},
             "totals": {"episodes": t["episodes"], "human_demos": t["human"], "robot_demos": t["robot"],
-                       "amplification": round(demos / t["human"], 1) if t["human"] else 0.0,
+                       # Demonstrations saved for every one the operator performed, clean or not: never
+                       # more than there are robots.
+                       "amplification": round(demos / t["episodes"], 1) if t["episodes"] else 0.0,
                        "yield": round(t["robot"] / t["attempts"], 4) if t["attempts"] else 0.0,
                        "demos_per_min": round(demos / minutes, 1) if minutes > 0.05 else 0.0,
                        "clipped_steps": t["clipped"], "minutes": round(minutes, 2)},
