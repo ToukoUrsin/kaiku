@@ -1,4 +1,4 @@
-// The camera: three named shots, a close-up of any one robot, and free orbiting. The camera is
+// The camera: named shots, a close-up of any one robot, and free orbiting. The camera is
 // always described the same way (what it looks at, from which side, from how high, from how far)
 // and eases towards that description, so a shot change and a drag are the same motion.
 
@@ -39,6 +39,10 @@ export class CameraRig {
       },
       top: { target: [-0.5 * depth + 0.4, 0, 0], azimuth: 0, polar: MIN_POLAR, frame: [width + 2.8, depth + 3.6] },
     };
+    // One robot looked at closely. From higher than the lead's shot: at that one's height the camera would
+    // stand in the rank in front. And from the other side: the table of the robot in front then comes in at
+    // the bottom right, under nothing, and not at the bottom left under the totals, where it read as a stray shape.
+    this.close = { target: [0.3, 0.0, -0.1], azimuth: 30 * DEG, polar: 52 * DEG, frame: [2.0, 1.9] };
     // the opening starts here: the operator's hands and the robot's hands under them, nothing else
     this.hands = { target: [0.3, 0.0, 0.62], azimuth: -38 * DEG, polar: 70 * DEG, frame: [1.25, 1.05] };
 
@@ -89,8 +93,32 @@ export class CameraRig {
     this.shot = 'focus';
     this.focus = env;
     const o = this.offsets;
-    this.aim(this.shots.lead, o[env * 3], o[env * 3 + 1], o[env * 3 + 2]);
+    this.aim(this.close, o[env * 3], o[env * 3 + 1], o[env * 3 + 2]);
     this.onChange();
+  }
+
+  /**
+   * A camera where this one will be once it has arrived, with the picture not slid: the page lays itself
+   * out around the subject with it, before the camera has moved.
+   */
+  arrived() {
+    const g = this.goal;
+    const ghost = this.ghost || (this.ghost = this.camera.clone());
+    const sin = Math.sin(g[POLAR]);
+    ghost.fov = FOV;
+    ghost.aspect = this.camera.aspect;
+    ghost.up.copy(this.camera.up);
+    ghost.position.set(
+      g[TARGET_X] + g[DISTANCE] * sin * Math.cos(g[AZIMUTH]),
+      g[TARGET_Y] + g[DISTANCE] * sin * Math.sin(g[AZIMUTH]),
+      g[TARGET_Z] + g[DISTANCE] * Math.cos(g[POLAR]),
+    );
+    ghost.lookAt(this.scratch.set(g[TARGET_X], g[TARGET_Y], g[TARGET_Z]));
+    ghost.near = Math.max(0.05, g[DISTANCE] * 0.04);
+    ghost.far = g[DISTANCE] + 110;
+    ghost.updateProjectionMatrix();
+    ghost.updateMatrixWorld();
+    return ghost;
   }
 
   aim(shot, dx, dy, dz) {

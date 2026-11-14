@@ -8,6 +8,9 @@ Their own grasp (``own``): nothing is scripted. The hand goes where the visitor'
 as far as the visitor lowers theirs, and its fingers close as far as the visitor's fingers do. The
 fingers come from the camera's 21 landmarks or from one Smartglove (``kaiku.teleop.fingers``), through
 the gloves' filters and retargeting. The robot still chooses the arm and turns its palm to the part.
+
+The grasp is the visitor's choice and only theirs: when nothing sees their hand while they do their own
+grasp, the robot keeps what it has where it has it, and the page says the hand is not seen.
 """
 from __future__ import annotations
 
@@ -42,6 +45,10 @@ PINCH_ON, PINCH_OFF = 0.045, 0.065   # m between a gloved thumb and index finger
 LIFT_AFTER = 0.3              # s the fingers stay closed before the hand lifts what they hold
 MISSED_S = 1.5                # s the page says a pinch took nothing, after the pinch
 DROPPED_S = 4.0               # s it says a part fell out of the hand
+LANDED_S = (2.5, 6.0)         # s it says where a part that left the hand came to rest: in its bin, anywhere else
+REST = 0.02                   # m/s under which a part that was let go lies still
+REST_TICKS, REST_S = 5, 1.5   # for this many ticks in a row; or it is judged where it is after this long
+BESIDE = 0.05                 # m around a bin that still reads as "beside the bin"
 ANCHOR_S = 1.5                # s a gloved hand is held flat and still before where it is counts as the middle
 ABOVE = 0.10                  # m over the hover height a hand on a Coil Pro may rise
 
@@ -127,6 +134,9 @@ class VisitorOperator:
         self.missed_at = -1e9
         self.dropped_at = -1e9
         self.held_since = None                                # since when their own fingers have held a part
+        self.lost = False                                     # their own grasp, and nothing sees the hand: it holds
+        self.let_go = None                                    # the part that just left the hand, until it lies still
+        self.landed = None                                    # where it came to rest, for the page to say
 
     def _toward(self, s: int, target: np.ndarray) -> None:
         """Move one hand's target after ``target`` at a hand's pace, not a pointer's."""
@@ -416,11 +426,71 @@ class VisitorOperator:
         if self.closed_at is not None and now - self.closed_at > 1.2 and now - self.dropped_at > DROPPED_S:
             self.missed_at = now
 
+    def _left_hand(self, obs: Observation, index: int, now: float) -> None:
+        """A part the hand carried is no longer in it: watch it until it lies still."""
+        self.let_go = {"index": index, "at": now, "last": obs.obj_pos[0, index].copy(), "still": 0}
+        self.landed = None
+
+    def _rest(self, obs: Observation, now: float) -> None:
+        """Where the part that left the hand came to rest. For the page only: nothing here moves the robot."""
+        go = self.let_go
+        if go is None:
+            return
+        pos = obs.obj_pos[0, go["index"]]
+        if pos[2] > self.scene.rest_z + 0.02 and np.linalg.norm(pos - obs.pinch[0, self.side]) < 0.06:
+            go["at"], go["still"] = now, 0                     # off the table and at the fingers: not let go yet
+            return
+        go["still"] = go["still"] + 1 if np.linalg.norm(pos - go["last"]) < REST * DT else 0
+        go["last"] = pos.copy()
+        if go["still"] < REST_TICKS and now - go["at"] < REST_S:
+            return
+        self.let_go = None
+        self.landed = dict(self.where(go["index"], pos), at=now)
+
+    def where(self, index: int, pos: np.ndarray) -> dict:
+        """Where a part lies, in the page's words: ``in`` its own bin, in the ``wrong`` one, ``beside`` a bin,
+        elsewhere on the ``table``, or ``off`` it. ``reach``: the hand can take it again from there."""
+        pos = np.asarray(pos, float)
+        ob = next(o for o in self.scene.objects if o.index == index)
+        belongs = self.s.layouts[0].mapping.get(ob.color)
+        inside = self.scene.bin_of(pos)
+        if not self.scene.on_counter(pos):
+            where = "off"
+        elif inside is not None:
+            where = "in" if inside == belongs else "wrong"
+        else:
+            half = self.scene.bin_outer[::-1] / 2 + BESIDE
+            near = any(np.all(np.abs(pos[:2] - c[:2]) <= half) for c in self.scene.bin_centers.values())
+            where = "beside" if near else "table"
+        return {"where": where, "color": ob.color, "bin": belongs,
+                "reach": bool(where in ("beside", "table") and self.s._on_mat(pos[None], 0.03)[0])}
+
     def update(self, obs: Observation) -> LeadCommand:
+        now = time.monotonic()
+        carried = self.held if self.phase in ("carry", "release") else -1
+        command = self._update(obs, now)
+        if carried >= 0 and self.held != carried:
+            self._left_hand(obs, carried, now)
+        elif self.held >= 0:
+            self.let_go = self.landed = None                   # another part is in hand: the last one is old news
+        self._rest(obs, now)
+        return command
+
+    def _update(self, obs: Observation, now: float) -> LeadCommand:
         s = self.side
         self.seen = obs
-        now = time.monotonic()
         posture = self._fingers(s, now)
+        # Their own grasp and nothing sees their hand: the robot keeps what it has, where it has it. It does
+        # not take the grasp over. The grasp changes when the visitor changes it, never by itself.
+        self.lost = self.own and posture is None and self.job is None
+        if self.lost:
+            self.was_own = True
+            self._toward(s, self.pinch[s].copy())              # comes to rest; the fingers stay as they were
+            other = 1 - s
+            self._toward(other, self.s.home_pinch[other])
+            self.rot[other] = self.s.home_rot[other]
+            self.hand[other] = HAND_OPEN.copy()
+            return LeadCommand(self.pinch.copy(), self.rot.copy(), hand14(self.hand[0], self.hand[1]))
         own = self.own and posture is not None and self.job is None
         if own or self.was_own:
             if not own:                                        # back to the assisted grasp: nothing is in the hand
@@ -496,6 +566,16 @@ class VisitorOperator:
             bins[name] = [round(float(v), 3) for v in (lo[0], lo[1], hi[0], hi[1])]
         return {"parts": parts, "bins": bins, "reach": [round(float(v), 3) for v in (*self.reach[0], *self.reach[1])]}
 
+    def _landed(self) -> dict | None:
+        """Where the part that last left the hand lies, while that is news: {where: in | wrong | beside |
+        table | off, color, bin (where it belongs), reach}. {where: None} while it has not come to rest."""
+        if self.let_go is not None:
+            return {"where": None}
+        got = self.landed
+        if got is None or time.monotonic() - got["at"] > LANDED_S[0 if got["where"] == "in" else 1]:
+            return None
+        return {k: got[k] for k in ("where", "color", "bin", "reach")}
+
     def hud(self) -> dict:
         held = self.held >= 0 and self.phase in ("pick", "carry", "release")
         hands = None
@@ -510,7 +590,9 @@ class VisitorOperator:
         # No glove rows here: a pointer or a camera is not a glove, and the page must not say it is.
         return {"source": self.source, "stand_in": False, "driving": True, "hands": hands,
                 # Where each part of the command comes from, for the page to say.
-                "fingers": self.fingers, "own": bool(self.own and self.fingers is not None), "gap_mm": gap,
+                # ``own`` is the grasp the visitor chose. ``lost``: they do it themselves and nothing sees their
+                # hand, so the robot holds what it has. The page says so; the grasp is never changed for them.
+                "fingers": self.fingers, "own": bool(self.own), "lost": bool(self.lost), "gap_mm": gap,
                 # How far the person's own index and middle finger close the robot's, 0 open to 1 closed.
                 "closure": closure,
                 "glove": self.glove.hud() if self.glove is not None else None,
@@ -521,6 +603,9 @@ class VisitorOperator:
                 "dropped": time.monotonic() - self.dropped_at < DROPPED_S and not held,
                 "holding": self.held >= 0 and self.phase in ("carry", "release"),
                 "over": self._bin_at(self.command),
+                # A part being let go: over which bin (None: onto the table). Then where it came to rest.
+                "into": self.release_bin if self.phase == "release" else None,
+                "landed": self._landed(),
                 "want": self.held_bin if held else None,            # the bin the part in the hand belongs in
                 "table": self._table()}
 

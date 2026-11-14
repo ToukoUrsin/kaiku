@@ -136,3 +136,62 @@ def test_one_visitor_drives_at_a_time():
         assert r.paused
     finally:
         r.close()
+
+
+def test_the_page_is_told_where_a_part_that_was_let_go_came_to_rest():
+    """Let go over the table, a part is on the table, and the page is not told it went into a bin."""
+    s = Session(1, seed=7, reachable_only=True)
+    v = VisitorOperator(s)
+    try:
+        lay = s.layouts[0]
+        placement = lay.placements[0]
+        ob = s.scene.by_name[placement.name]
+        own = lay.mapping[ob.color]
+        at = np.array(placement.pos[:2], float)
+        say = lambda xy, grip: v.set_command({"x": float(xy[0]), "y": float(xy[1]), "grip": grip})
+
+        def run(until, limit=600):
+            for _ in range(limit):
+                s.tick(v.update(s.observe()))
+                if until():
+                    return
+            assert until()
+
+        say(at, True)
+        run(lambda: v.phase == "carry")
+        assert v.hud()["landed"] is None
+        say(at, False)                                                    # let go where it was picked: not over a bin
+        run(lambda: v.phase == "release", 5)
+        assert v.hud()["into"] is None                                    # the page knows it is not going into a bin
+        run(lambda: v.phase == "idle" and v.let_go is None)
+        landed = v.hud()["landed"]
+        assert landed == {"where": "table", "color": ob.color, "bin": own, "reach": True}
+        assert s.progress()[0] == 0
+
+        say(at, True)                                                     # again, and this time into its bin
+        run(lambda: v.phase == "carry")
+        assert v.hud()["landed"] is None                                  # a part in the hand: the last one is old news
+        box = s.scene.bin_centers[own][:2]
+        say(box, True)
+        _ticks(s, v, 180)
+        say(box, False)
+        run(lambda: v.phase == "release", 5)
+        assert v.hud()["into"] == own
+        run(lambda: v.phase == "idle" and v.let_go is None)
+        assert v.hud()["landed"]["where"] == "in" and s.progress()[0] == 1
+        v.landed["at"] -= 60.0                                            # a while later it is no longer news
+        assert v.hud()["landed"] is None
+
+        # every place a part can lie has its own word
+        lo, hi = s.scene.bin_inner(own)
+        inside = (lo + hi) / 2
+        other = next(b for b in s.scene.bin_centers if b != own)
+        olo, ohi = s.scene.bin_inner(other)
+        rim = np.r_[lo[0] - s.scene.bin_wall - 0.03, inside[1], s.scene.rest_z]      # on the table, against its wall
+        assert v.where(ob.index, inside)["where"] == "in"
+        assert v.where(ob.index, (olo + ohi) / 2) == {"where": "wrong", "color": ob.color, "bin": own, "reach": False}
+        assert v.where(ob.index, rim)["where"] == "beside"
+        assert v.where(ob.index, np.r_[at, s.scene.rest_z])["where"] == "table"
+        assert v.where(ob.index, np.r_[at, s.scene.counter_z - 0.5])["where"] == "off"
+    finally:
+        s.close()

@@ -46,6 +46,7 @@ from kaiku.web.server import ViewerServer
 DT = 1.0 / CONTROL_HZ
 HUD_EVERY = 3                 # ticks between HUD updates (10 Hz)
 PAUSE_S = 20.0                # how long a pause lasts on a session that everybody shares
+SWITCHED_S = 12.0             # how long the page says who handed the robots to the policy, or took them back
 MODES = ("gloves", "autopilot", "policy", "visitor")
 VISITOR_SCENE_S = 150.0                                # a scene a visitor drives is replaced after this long
 TURN_S, IDLE_S = 240.0, 45.0                      # a visitor's turn at the robots, and how long it may sit untouched
@@ -136,8 +137,13 @@ class Runner:
                 meta.write_text(json.dumps({"format": 1, "source": source, "start_time": time.time(),
                                             "host": socket.gethostname()}, indent=2) + "\n")
         self.paused = False
+        # Pause, the policy and the next scene are everybody's: who pressed it (the page's connection), for the
+        # other pages to say that it was not them.
+        self.paused_by: int | None = None
+        self.switched: dict | None = None                      # {by, to, at}: who handed the robots to the policy, or took them back
         self.shared = shared                                   # one session for everybody who opens the page
         self._zip, self._zip_lock = None, threading.Lock()     # (scene file, zip) of the last download built
+        self.zip_bytes: int | None = None                      # and how large it came out, for the page to say
         self.download = self.rec.root is not None and _has("pyarrow")
         if self.download:
             self.viewer.dataset = self._dataset_zip
@@ -291,8 +297,11 @@ class Runner:
     def _end_visitor_turn(self, reason: str = "") -> None:
         if self.driver_client is None:
             return
+        handed = bool(self.queue) and reason != "reset"        # true words about who drives after them
         self.tell(self.driver_client, "You were away a while, so your turn ended." if reason == "idle"
                   else "Your turn is over. Thanks for driving." if reason == "timeout"
+                  else "Your turn has ended. The next visitor drives now." if handed
+                  else "Your turn has ended." if self.glove_fingers
                   else "Your turn has ended. The stand-in drives again.")
         self.driver_client = None
         self.turn_started = self.last_visitor_command = 0.0
@@ -333,7 +342,7 @@ class Runner:
         if self.next_free is not None:
             self.next_free = self.sampler.free(self.parts)
         self.want_mode = self.home_mode if self.home_mode != "policy" or self.policy is not None else "gloves"
-        self.paused, self.resume_at = False, None
+        self.paused, self.resume_at, self.paused_by, self.switched = False, None, None, None
         self.copy_next, self.again, self.replaying, self.compare, self.copy_at = False, None, False, None, 0.0
         self.tot = {k: 0 for k in self.tot}
         self.pol = {k: 0 for k in self.pol}
@@ -548,16 +557,24 @@ class Runner:
             elif self.driver_client is not None and client != self.driver_client:
                 continue                                       # a visitor has the robots: nobody else's buttons count
             elif name == "pause":
-                self.paused = bool(value)
+                was, self.paused = self.paused, bool(value)
+                self.paused_by = client if self.paused else None
                 # One page for everybody: a visitor who pauses and leaves must not leave it paused.
                 self.resume_at = time.perf_counter() + PAUSE_S if self.paused and self.shared else None
-                if self.resume_at:
-                    self.toast(f"Paused for everyone. It carries on by itself in {PAUSE_S:.0f} seconds.", "info")
+                alone = f" They carry on by themselves in {PAUSE_S:.0f} seconds." if self.resume_at else ""
+                if self.paused and not was:
+                    self.toast(f"Paused for everyone. It carries on by itself in {PAUSE_S:.0f} seconds."
+                               if self.resume_at else "", "info", by=client,
+                               other=f"Another visitor paused the robots.{alone}")
+                elif was and not self.paused:
+                    self.toast("", "info", by=client, other="Another visitor let the robots carry on.")
             elif name == "next_scene":
                 if self.phase == "run":
                     self._end_policy_episode(False) if self.mode == "policy" else self._end_episode(record=False)
                 self.hold_until = 0.0
+                self.toast("", "info", by=client, other="Another visitor asked for the next scene.")
             elif name == "parts":
+                self.toast("", "info", by=client, other="Another visitor changed how many parts a scene has.")
                 self.parts = value if value == "auto" else int(value)
                 self.next = self.sampler.scene(self.parts)       # the scenes already drawn no longer fit
                 if self.next_free is not None:
@@ -579,8 +596,14 @@ class Runner:
                             self._end_policy_episode(False) if self.mode == "policy" else self._end_episode(False)
                         self.hold_until = 0.0
                         # Every visitor shares this session: the others see why the scene changed.
-                        self.toast("Switched to Policy. Nobody is driving now." if value == "policy" else
-                                   "Switched to Operator. One operator drives, the others repeat.", "info")
+                        self.switched = {"by": client, "to": value, "at": time.monotonic()}
+                        if value == "policy":
+                            self.toast("Switched to Policy. Nobody is driving now.", "info", by=client,
+                                       other="Another visitor let the policy drive. Nobody is driving now.")
+                        else:
+                            self.toast("Switched to Operator. One operator drives, the others repeat.", "info", by=client,
+                                       other="Another visitor took the robots back from the policy. One operator drives, "
+                                             "the others repeat.")
                     elif value != self.mode:
                         who = "The operator" if value == "gloves" else "The autopilot"
                         self.toast(f"{who} takes over at the next scene.", "info")
@@ -608,8 +631,15 @@ class Runner:
             arm, hand = self.s.last_action
             self.lead.put(arm[0], hand[0])
 
-    def toast(self, text: str, level: str = "info") -> None:
-        self.viewer.send_event({"type": "toast", "text": text, "level": level})
+    def toast(self, text: str, level: str = "info", by: int | None = None, other: str | None = None) -> None:
+        """Say something on every page. ``by`` is the page whose button did it and ``other`` what the pages
+        that did not press it read instead ("Another visitor paused the robots"); ``text`` may then be empty,
+        when the page that pressed needs no telling."""
+        event = {"type": "toast", "text": text, "level": level}
+        if by is not None and other:
+            event.update(by=by, other=other)
+        if text or "other" in event:
+            self.viewer.send_event(event)
 
     def _step(self) -> None:
         s = self.s
@@ -731,6 +761,11 @@ class Runner:
             "mode": self.mode,
             "status": status,
             "shared": self.shared,
+            # Whose button paused it (None: not paused, or the runner's own) and how long until it carries on.
+            "paused_by": self.paused_by if self.paused else None,
+            "resume_s": round(max(0.0, self.resume_at - time.perf_counter())) if self.paused and self.resume_at else None,
+            # Who handed the robots to the policy or took them back, while that is news.
+            "switched": self._switched(),
             "operator": operator,
             # The comparison: is the echo off in this scene, may it be asked for, what the last one came to.
             "copy": {"on": bool(s.copy), "next": self.copy_next, "again": self.replaying, "over": self.phase == "hold",
@@ -762,11 +797,19 @@ class Runner:
             "history": list(self.history),
             "dataset": {"episodes": self.rec.demos, "frames": self.rec.frames,
                         "path": str(self.rec.root) if self.rec.root else None, "recording": self.rec.enabled,
-                        "download": self.download and self.rec.demos > 0},
+                        "download": self.download and self.rec.demos > 0,
+                        # How large the last download built here was (one scene, both layouts), once one was built.
+                        "zip_mb": None if self.zip_bytes is None else round(self.zip_bytes / 1e6)},
             "policy": self._policy_hud(),
             "perf": {"realtime": round(hz / CONTROL_HZ, 2), "tick_ms": round(float(np.mean(self.tick_ms)), 1)
                      if self.tick_ms else 0.0, "hz": CONTROL_HZ},
         }
+
+    def _switched(self) -> dict | None:
+        w = self.switched
+        if w is None or time.monotonic() - w["at"] > SWITCHED_S or w["to"] != self.want_mode:
+            return None
+        return {"by": w["by"], "to": w["to"], "age_s": round(time.monotonic() - w["at"], 1)}
 
     def _dataset_zip(self) -> tuple[Path, str]:
         """The last saved scene as LeRobot and GR00T, zipped; built once a scene, on the server's thread pool."""
@@ -783,6 +826,7 @@ class Runner:
                 if self._zip is not None and self._zip[1] != out:
                     self._zip[1].unlink(missing_ok=True)
                 self._zip = (scene, out)
+                self.zip_bytes = out.stat().st_size
             return self._zip[1], name
 
     def _policy_hud(self) -> dict:
@@ -823,7 +867,7 @@ class Runner:
                 self._commands()
                 self._policy_news()
                 if self.paused and self.resume_at and time.perf_counter() > self.resume_at:
-                    self.paused, self.resume_at = False, None
+                    self.paused, self.resume_at, self.paused_by = False, None, None
                 if not self.paused:
                     self._step()
                 self.hud_tick += 1
