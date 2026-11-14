@@ -50,6 +50,7 @@ class Runner:
                  parts: str | int = "auto",
                  record: Path | str | None = None, hold_s: float = 1.6, lead_timeout_s: float = 90.0,
                  threads: int | None = None, mode: str = "gloves", gloves: str | None = None,
+                 hand_solver: str | None = None,
                  policy: Path | str | None = None, train: str = "local", train_steps: int = 30000,
                  policy_timeout_s: float = 80.0, stall_s: float = 15.0):
         if seed is None:                                       # other scenes every time it is started
@@ -64,6 +65,7 @@ class Runner:
         self.commands: queue.Queue = queue.Queue()
         self.viewer.on_message(self.commands.put)
         self.gloves = gloves                                   # HOST[:PORT] of a Rokoko driver, or None: the stand-in
+        self.hand_solver = hand_solver                         # HOST:PORT of rkk-hand-solver, "off", or None: the default
         self.ops: dict = {}
         self.mode = mode if mode in ("gloves", "autopilot") else "gloves"
         self.want_mode = mode if mode in MODES else "gloves"
@@ -108,7 +110,8 @@ class Runner:
                 self.ops[mode] = Autopilot(self.s)
             else:
                 host, _, port = (self.gloves or "").partition(":")
-                self.ops[mode] = GloveOperator(self.s, host or None, int(port) if port else None)
+                self.ops[mode] = GloveOperator(self.s, host or None, int(port) if port else None,
+                                               solver=self.hand_solver)
         return self.ops[mode]
 
     def _who(self) -> str:
@@ -468,10 +471,13 @@ def main(argv=None) -> None:
     ap.add_argument("--train-steps", type=int, default=30000)
     ap.add_argument("--gloves", default=None, metavar="HOST[:PORT]",
                     help="RGMP address of the Rokoko driver; without it the stand-in operator drives")
+    ap.add_argument("--hand-solver", default=None, metavar="HOST:PORT|off",
+                    help="where rkk-hand-solver serves solved hands (default: port 12277 on the gloves' host); "
+                         "the fingers come from it while it runs, from kaiku's own solver otherwise")
     a = ap.parse_args(argv)
     ensure()                                                   # the robot model, fetched on the first run
     r = Runner(a.n, a.port, a.host, a.seed, a.parts if a.parts == "auto" else int(a.parts), a.record,
-               threads=a.threads, mode=a.mode, gloves=a.gloves, policy=a.policy, train=a.train,
+               threads=a.threads, mode=a.mode, gloves=a.gloves, hand_solver=a.hand_solver, policy=a.policy, train=a.train,
                train_steps=a.train_steps)
 
     def quit_(*_):

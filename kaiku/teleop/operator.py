@@ -11,16 +11,19 @@ from __future__ import annotations
 
 import threading
 import time
+from dataclasses import replace
 
 import numpy as np
 
 from kaiku.app.autopilot import Autopilot
 from kaiku.app.session import LeadCommand, Observation, Session
 from kaiku.hand import Calibration, GloveNoise, GloveSolver, Teleop, hand_to_glove_frame
-from kaiku.hand.geometry import Pose, quat_from_rotvec, quat_mul, quat_slerp
+from kaiku.hand.geometry import Pose, quat_from_rotvec, quat_mul, quat_rotate, quat_slerp
+from kaiku.hand.solved import with_fingers
 from kaiku.hand.synth import _TREMOR_BANDS, _TREMOR_JOINT, _TREMOR_POS, _TREMOR_ROT, DEFAULT_HOME
 from kaiku.rgmp import GloveStream
 from kaiku.rgmp.emulator import Emulator
+from kaiku.rgmp.solved import SOLVED_PORT, SolvedStream
 from kaiku.sim.grasp import HAND_OPEN, hand14
 from kaiku.teleop.retarget import Retarget
 from kaiku.types import SIDES, GloveFrame
@@ -80,10 +83,14 @@ class StandIn:
 
 class GloveOperator:
     """Drives the lead robot from Smartgloves. With no ``host`` it brings its own: the stand-in
-    person wearing emulated gloves, steered by the autopilot's intent."""
+    person wearing emulated gloves, steered by the autopilot's intent.
+
+    With real gloves the fingers come from Rokoko's own solver whenever ``rkk-hand-solver`` is up on
+    ``solver`` (HOST:PORT, by default port 12277 on the gloves' host; "off" for never), and from kaiku's
+    otherwise. The wrists always come from the driver's stream."""
 
     def __init__(self, session: Session, host: str | None = None, port: int | None = None, seed: int = 0,
-                 noise: GloveNoise | None = GloveNoise(), tremor: float = 1.0):
+                 noise: GloveNoise | None = GloveNoise(), tremor: float = 1.0, solver: str | None = None):
         self.s = session
         self.rt = Retarget()
         self.solvers = {side: GloveSolver(side) for side in SIDES}
@@ -97,6 +104,14 @@ class GloveOperator:
             self.pilot = Autopilot(session)
         self.source = "stand-in" if self.person else "gloves"
         self.stream = GloveStream(host, port or 12276).start()
+        self.solved: SolvedStream | None = None
+        self.ranges = None                                           # per side, what this operator's gloves read
+        if self.person is None:
+            self.ranges = {side: self.rt.gap_range() for side in SIDES}
+            if solver != "off":
+                shost, _, sport = (solver or "").partition(":")
+                self.solved = SolvedStream(shost or host, int(sport) if sport else SOLVED_PORT).start()
+        self.fingers = {side: "kaiku" for side in SIDES}             # whose solver the fingers are from
         self.teleop: Teleop | None = None
         self.hands: dict = {side: None for side in SIDES}
         self.posture = np.stack([HAND_OPEN, HAND_OPEN])              # left-hand order, per side
@@ -124,17 +139,43 @@ class GloveOperator:
         left, right = self.hands["left"], self.hands["right"]
         if left is None or right is None or not (left.has_position and right.has_position):
             return False
+        if self.person is None:
+            # The palms face down in this pose. Backs of both hands pointing down in the tracking frame
+            # means the Coil Pro's Z is the other way up than assumed: turn the frame over and solve again.
+            back = [quat_rotate(hand.wrist_quat, (0.0, 0.0, 1.0))[2] for hand in (left, right)]
+            if max(back) < -0.3:
+                frames = {side: self.stream.latest(side) for side in SIDES}
+                if None in frames.values():
+                    return False
+                for side in SIDES:
+                    self.solvers[side].flip_vertical()
+                    self.hands[side] = self._solve(side, frames[side])
+                left, right = self.hands["left"], self.hands["right"]
+            elif min(back) < 0.3:
+                return False                                  # not flat, or the two hands disagree
         try:
             cal = Calibration.capture(left, right, robot_home=self.rt.ready(), reach_scale=self.rt.scale)
         except ValueError:
             return False
         self.teleop = Teleop(cal)
+        if self.ranges:
+            for side, hand in (("left", left), ("right", right)):
+                self.ranges[side].open(hand.pinch)
         return True
+
+    def _solve(self, side: str, frame: GloveFrame | None):
+        """One glove frame to a hand: the wrist from the driver, the fingers from Rokoko's solver when it runs."""
+        if frame is None:
+            self.fingers[side] = "kaiku"
+            return None
+        hand = self.solvers[side].solve(frame)
+        theirs = self.solved.latest(side) if self.solved else None
+        self.fingers[side] = "kaiku" if theirs is None else "rokoko"
+        return hand if theirs is None else with_fingers(hand, self.rt.models[side], theirs.points)
 
     def update(self, obs: Observation) -> LeadCommand:
         for side in SIDES:
-            frame = self.stream.latest(side)
-            self.hands[side] = self.solvers[side].solve(frame) if frame is not None else None
+            self.hands[side] = self._solve(side, self.stream.latest(side))
         if self.teleop is None:
             self.label = "calibrating" if self.stream.connected else "connecting"
             if self.person and self.stream.rate_hz("left") > 40 and self.stream.rate_hz("right") > 40:
@@ -157,6 +198,11 @@ class GloveOperator:
         else:
             self.label = "teleop"
         cmd = self.teleop.update(self.hands, time.monotonic())
+        if self.ranges:
+            for side in SIDES:
+                hand = cmd.hands[side]
+                if hand is not None:
+                    cmd.hands[side] = replace(hand, pinch=self.ranges[side](hand.pinch))
         self.pinch, self.rot, self.posture = self.rt.command(cmd, (self.pinch, self.rot, self.posture))
         return LeadCommand(self.pinch.copy(), self.rot.copy(), hand14(self.posture[0], self.posture[1]))
 
@@ -166,7 +212,7 @@ class GloveOperator:
         pts = {}
         for side in SIDES:
             hz = self.stream.rate_hz(side)
-            out[side] = {"connected": hz > 1.0, "hz": round(hz, 1),
+            out[side] = {"connected": hz > 1.0, "hz": round(hz, 1), "fingers": self.fingers[side],
                          "status": self.teleop.status[side] if self.teleop else "uncalibrated"}
             hand = self.hands[side]
             if hand is not None:
@@ -177,5 +223,7 @@ class GloveOperator:
 
     def close(self) -> None:
         self.stream.stop()
+        if self.solved:
+            self.solved.stop()
         if self.emulator:
             self.emulator.stop()

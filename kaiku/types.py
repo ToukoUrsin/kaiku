@@ -68,6 +68,9 @@ class HumanHand:
     curl: np.ndarray
     # Thumb tip to each other fingertip distance, metres. Shape (4,) for index, middle, ring, little.
     pinch: np.ndarray
+    # The same distances as an outside solver measured them (Rokoko's rkk-hand-solver), when one is running.
+    # They then take the place of the model's own all the way to the robot. None: there is no such solver.
+    gaps: np.ndarray | None = None
 
 
 @dataclass

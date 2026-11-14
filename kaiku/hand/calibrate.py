@@ -140,12 +140,13 @@ class FilterParams:
 class TeleopFilters:
     """Filter tuning for 83 Hz glove data: quiet at rest, a few milliseconds behind in motion.
 
-    Speeds are in m/s, rad/s and rad/s. A wrist reaching at 0.3 m/s runs at about 14 Hz cutoff (11 ms time
+    Speeds are in m/s, rad/s, rad/s and (fingertip gaps from an outside solver) m/s. A wrist reaching at 0.3 m/s runs at about 14 Hz cutoff (11 ms time
     constant); a still hand at 1.5 Hz, which removes most sensor jitter and physiological tremor.
     """
     position: FilterParams = FilterParams(min_cutoff=1.5, beta=40.0)
     orientation: FilterParams = FilterParams(min_cutoff=1.5, beta=5.0)
     fingers: FilterParams = FilterParams(min_cutoff=2.5, beta=3.0)
+    gaps: FilterParams = FilterParams(min_cutoff=2.5, beta=60.0)
 
 
 FILTER_RESET_GAP = 0.2
@@ -227,6 +228,7 @@ class _HandState:
     position: OneEuro
     orientation: OneEuroQuat
     joints: OneEuroElementwise
+    gaps: OneEuroElementwise
     wrist: Pose                           # last commanded robot wrist pose
     hand: HumanHand | None = None         # last filtered hand
     frozen_at: float | None = None        # when the wrist command stopped following the operator, if it has
@@ -244,7 +246,8 @@ class Teleop:
     were, so brief dropouts do not let the anchor wander.
 
     Fingers. Joint angles are filtered and the fingertips, curl and pinch distances recomputed from them, so
-    the command stays self-consistent. Fingers stay live through the clutch and a lost coil: neither affects
+    the command stays self-consistent. Pinch distances that an outside solver measured are filtered as they
+    are instead. Fingers stay live through the clutch and a lost coil: neither affects
     what the finger sensors see, and the operator may need the grip while re-centring an arm.
 
     Attributes:
@@ -270,6 +273,7 @@ class Teleop:
                 position=OneEuro(filters.position),
                 orientation=OneEuroQuat(filters.orientation),
                 joints=OneEuroElementwise(filters.fingers),
+                gaps=OneEuroElementwise(filters.gaps),
                 wrist=calibration.robot_anchor[side],
             )
             for side in SIDES
@@ -305,8 +309,9 @@ class Teleop:
 
         joints = state.joints(hand.joints, t)
         tips = state.model.tips(joints)
-        state.hand = replace(hand, joints=joints, tips=tips, curl=state.model.curl(joints),
-                             pinch=np.linalg.norm(tips[1:] - tips[0], axis=1))
+        gaps = None if hand.gaps is None else state.gaps(hand.gaps, t)
+        state.hand = replace(hand, joints=joints, tips=tips, curl=state.model.curl(joints), gaps=gaps,
+                             pinch=np.linalg.norm(tips[1:] - tips[0], axis=1) if gaps is None else gaps)
         if not hand.has_position:
             self.status[side] = NO_POSITION
             self._hold(state, t)

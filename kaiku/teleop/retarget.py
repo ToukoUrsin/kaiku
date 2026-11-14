@@ -38,6 +38,38 @@ READY_PINCH = {"left": np.array([0.28, 0.14, 0.17]), "right": np.array([0.28, -0
 level, above the mat, in reach of every part."""
 
 
+class GapRange:
+    """What one operator's glove reads with thumb and finger together and with the hand flat, learned while
+    they work, and their gaps brought onto the range the robot's fingers are driven by.
+
+    A solved hand is a generic skeleton on somebody's real hand: fingertips that touch may read 25 mm apart,
+    a flat hand 70 mm instead of the model's 125. Left alone, that operator could never squeeze or never
+    let go. ``open`` takes the flat hand of the calibration pose; the closed end is the smallest gap seen
+    so far, and until the operator has pinched it is taken to be the hold gap, so closing the hand grips
+    from the first try.
+    """
+
+    MOST = 3.0          # how far a short range is stretched at most
+
+    def __init__(self, closed: np.ndarray, flat: np.ndarray) -> None:
+        self.closed, self.flat = np.asarray(closed, dtype=float), np.asarray(flat, dtype=float)   # the model's
+        self.low = np.full(4, HOLD_GAP)
+        self.high: np.ndarray | None = None
+
+    def open(self, pinch: np.ndarray) -> None:
+        """The operator holds the hand flat now."""
+        self.high = np.asarray(pinch, dtype=float).copy()
+
+    def __call__(self, pinch: np.ndarray) -> np.ndarray:
+        pinch = np.asarray(pinch, dtype=float)
+        self.low = np.minimum(self.low, np.maximum(pinch, GAP_KNOTS[0]))
+        if self.high is None:
+            scale = 1.0
+        else:
+            scale = np.clip((self.flat - self.closed) / np.maximum(self.high - self.low, 1e-3), 1.0, self.MOST)
+        return self.closed + (pinch - self.low) * scale
+
+
 def closure_from_gap(gap: np.ndarray | float) -> np.ndarray:
     return np.interp(gap, GAP_KNOTS, U_KNOTS)
 
@@ -86,6 +118,14 @@ class Retarget:
         self._index_gap, self._middle_gap = gaps, np.array(mid)
 
     # ------------------------------------------------------------------ person -> robot
+    def gap_range(self) -> GapRange:
+        """A fresh ``GapRange`` for one glove: the closed and the flat end of every thumb-to-finger gap as
+        the robot's fingers read them (the middle finger's against its own, wider, scale)."""
+        ends = np.array([GAP_KNOTS[0], GAP_KNOTS[-1]])
+        middle = np.interp(ends, self._index_gap, self._middle_gap)
+        closed, flat = np.column_stack([ends, middle, ends, ends])
+        return GapRange(closed, flat)
+
     def fingers(self, hand: HumanHand) -> np.ndarray:
         """Dex3 posture (7, left-hand order) for a solved human hand."""
         u_index = float(closure_from_gap(hand.pinch[0]))

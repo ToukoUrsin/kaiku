@@ -73,6 +73,11 @@ class GloveSolver:
         self._joints = np.zeros((5, 4))
         self._wrist_quat = np.array([1.0, 0.0, 0.0, 0.0])
 
+    def flip_vertical(self) -> None:
+        """Turn the tracking frame upside down (half a turn about x): the Coil Pro's Z points the other way
+        than assumed. The operator's calibration pose tells, see ``GloveOperator.calibrate``."""
+        self._tracking_from_coil = pose_mul((np.zeros(3), np.array([0.0, 1.0, 0.0, 0.0])), self._tracking_from_coil)
+
     def solve(self, frame: GloveFrame) -> HumanHand:
         """Solve one frame. A digit whose sensor is missing or invalid keeps its previous joint values."""
         if frame.side != self.model.side:
