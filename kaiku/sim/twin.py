@@ -30,7 +30,7 @@ G1_XML = Path(os.environ.get("KAIKU_G1_XML", REPO / "third_party/mujoco_menageri
 
 PELVIS_HEIGHT = 0.79            # m above the floor (scene.yaml assumption for a standing G1)
 CONTROL_HZ = 30                 # the challenge's action rate
-SUBSTEPS = 16                   # physics steps per control tick
+SUBSTEPS = 16                   # physics steps per control tick (8 halves the cost but drops triangle grasps to 84 %)
 TIMESTEP = 1.0 / (CONTROL_HZ * SUBSTEPS)
 OBJECT_MASS = 0.050             # kg, printed PLA part
 FINGER_FRICTION = float(os.environ.get("KAIKU_FINGER_FRICTION", 1.0))
@@ -195,7 +195,10 @@ def _add_scene(spec: mujoco.MjSpec, sc: Scene) -> None:
         if ob.shape == "cube":
             body.add_geom(type=box, size=[r, r, hh], rgba=rgba, **contact)
         elif ob.shape == "cylinder":
-            body.add_geom(type=cyl, size=[r, hh, 0], rgba=rgba, **contact)
+            # condim 6 adds rolling resistance: a cylinder knocked onto its side comes to rest
+            # instead of rolling about its bin for seconds.
+            body.add_geom(type=cyl, size=[r, hh, 0], rgba=rgba, **{**contact, "condim": 6,
+                                                                    "friction": [0.8, 0.02, 0.003]})
         else:
             body.add_geom(type=mesh, meshname="object_triangle", pos=[0, 0, -hh], rgba=rgba, **contact)
 

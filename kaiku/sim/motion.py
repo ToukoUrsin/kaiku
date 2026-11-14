@@ -109,8 +109,9 @@ class Follower:
         state = PalmState(p0 + s * (w.point - p0), quat_to_mat(slerp(q0, q1, s)), h0 + s * (w.hand - h0),
                           w.label, False)
         if self.t >= w.duration:
-            near = (np.linalg.norm(point - w.point) <= self.pos_tol
-                    and np.linalg.norm(_rotvec(w.rot, rot)) <= self.rot_tol
+            tol = self.pos_tol if w.tol is None else w.tol
+            near = (np.linalg.norm(point - w.point) <= tol
+                    and np.linalg.norm(_rotvec(w.rot, rot)) <= self.rot_tol * max(1.0, tol / self.pos_tol)
                     and (hand is None or np.abs(hand - w.hand).max() <= 0.15))
             if not near and self.waited < self.patience:
                 self.waited += dt

@@ -33,6 +33,12 @@ NATURAL_DIR = {"left": np.radians(-25.0), "right": np.radians(25.0)}
 TRIANGLE_PHI = np.radians(75.0)
 
 
+def arm_for(bin_name: str, y: float) -> str:
+    """Which arm sorts a part: the one on its bin's side (neither arm reaches the far bin); for
+    the centre bin, the one nearer the part."""
+    return {"left": "left", "right": "right"}.get(bin_name, "left" if y > 0 else "right")
+
+
 def left_to_right(hand_left: np.ndarray) -> np.ndarray:
     """A left-hand posture as the mirrored right-hand command (sign flip, index and middle swapped)."""
     return -np.asarray(hand_left, float)[[0, 1, 2, 5, 6, 3, 4]]
@@ -119,6 +125,7 @@ class Waypoint:
     hand: np.ndarray         # (7,) left-order posture for the working hand
     duration: float          # seconds to get there from the previous waypoint
     hold: float = 0.0        # seconds to stay after arriving
+    tol: float | None = None  # m: how close the robot must be before going on (None: the follower's default)
 
 
 # Finger direction (left arm; mirrored for the right) in which each bin is easiest to reach.
@@ -180,12 +187,12 @@ def plan_pick_place(scene: Scene, side: str, shape: str, pos: np.ndarray, yaw: f
     rot_drop = palm_rotation(side, drop_direction(side, bin_name))
     s = 1.0 / speed
     return [
-        Waypoint("approach", above, rot, HAND_OPEN, 1.5 * s),
-        Waypoint("descend", grasp, rot, HAND_OPEN, 0.9 * s, hold=0.1 * s),
-        Waypoint("grasp", grasp, rot, HAND_CLOSED, 0.45 * s, hold=0.25 * s),
-        Waypoint("lift", np.r_[grasp[:2], carry_z], rot, HAND_CLOSED, 0.9 * s),
-        Waypoint("carry", np.r_[drop[:2], carry_z], rot_drop, HAND_CLOSED, 1.6 * s),
-        Waypoint("lower", drop, rot_drop, HAND_CLOSED, 0.5 * s, hold=0.1 * s),
-        Waypoint("release", drop, rot_drop, HAND_RELEASE, 0.4 * s, hold=0.3 * s),
-        Waypoint("retreat", np.r_[drop[:2], carry_z + 0.02], rot_drop, HAND_OPEN, 0.6 * s),
+        Waypoint("approach", above, rot, HAND_OPEN, 1.5 * s, tol=0.015),
+        Waypoint("descend", grasp, rot, HAND_OPEN, 0.9 * s, hold=0.1 * s, tol=0.006),
+        Waypoint("grasp", grasp, rot, HAND_CLOSED, 0.45 * s, hold=0.25 * s, tol=0.05),
+        Waypoint("lift", np.r_[grasp[:2], carry_z], rot, HAND_CLOSED, 0.9 * s, tol=0.03),
+        Waypoint("carry", np.r_[drop[:2], carry_z], rot_drop, HAND_CLOSED, 1.6 * s, tol=0.02),
+        Waypoint("lower", drop, rot_drop, HAND_CLOSED, 0.5 * s, hold=0.1 * s, tol=0.012),
+        Waypoint("release", drop, rot_drop, HAND_RELEASE, 0.4 * s, hold=0.3 * s, tol=0.05),
+        Waypoint("retreat", np.r_[drop[:2], carry_z + 0.02], rot_drop, HAND_OPEN, 0.6 * s, tol=0.05),
     ]
