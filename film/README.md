@@ -39,8 +39,8 @@ numbers change on the hosted page:
     .venv/bin/python film/rec.py https://kaiku-echo.fly.dev /bulk3/runs/robotteleop/film/rec/study --seconds 20 --wait standin
 
 then in `film.json` set `"rec": "study"` and `"at": 10` on the still `6-panel`, start/end 1 to 3 on
-`6-page`, 3 to 20 on `6-left` (drop `6-leftb`), put the new numbers in `numbers`, delete
-`work/clips/6-*`, and run `film/make.sh vN`. `rec.py` only listens.
+`6-page`, 3 to 16.7 on `6-left`, put the new numbers in `numbers`, move `work/clips/6-*` and
+`work/jobs/6-*` away, and run `film/make.sh vN`. `rec.py` only listens.
 
 ## What is what
 

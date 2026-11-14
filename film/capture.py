@@ -51,7 +51,7 @@ def run_chunk(job: dict) -> bool:
         shutil.copy(src, dst)
     subprocess.run(["cp", "-al", str(job["rec"]), str(d / "rec")], check=True)
     cmd = ["bash", "film/sandbox.sh", "rec", "--out", "out/c.mp4", "--start", repr(job["start"]), "--end", repr(job["end"]),
-           "--jobs", "2", *job["args"]]
+           "--jobs", str(job["browsers"]), *job["args"]]
     (d / "run.sh").write_text(" ".join(shlex.quote(x) for x in cmd) + "\n")
     for attempt in range(3):
         with (d / f"drun{attempt}.log").open("w") as log:
@@ -88,12 +88,13 @@ def main() -> None:
             continue
         speed, fps = c.get("speed", 1), 30
         total = int(round((c["end"] - c["start"]) * fps / speed))
-        n = max(1, -(-total // chunk))
+        n = 1 if c.get("whole") else max(1, -(-total // chunk))      # whole: one browser films it start to end
         todo[name] = []
         for i in range(n):
             a, b = total * i // n, total * (i + 1) // n
             job = {"name": name, "i": i, "dir": work / "jobs" / f"{name}-{i:02d}", "rec": recs / c["rec"],
-                   "start": c["start"] + a * speed / fps, "end": c["start"] + b * speed / fps, "args": shoot_args(takes, c)}
+                   "start": c["start"] + a * speed / fps, "end": c["start"] + b * speed / fps, "args": shoot_args(takes, c),
+                   "browsers": 1 if c.get("whole") else 2}
             jobs.append(job)
             todo[name].append(job)
     print(f"{len(jobs)} chunks, {par} sandboxes at a time", flush=True)

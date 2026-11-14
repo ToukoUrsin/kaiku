@@ -105,11 +105,10 @@
   },
   {
    "id": "6-policy-tab",
-   "dur": 18.0,
+   "dur": 15.0,
    "clip": [
     "6-page.mp4",
     "6-left.mp4",
-    "6-leftb.mp4",
     "6-panel.png"
    ],
    "vo": [
@@ -121,7 +120,7 @@
   },
   {
    "id": "7-nobody",
-   "dur": 14.0,
+   "dur": 12.0,
    "clip": "7-nobody.mp4",
    "vo": [
     {
@@ -135,7 +134,6 @@
    "dur": 11.0,
    "clip": [
     "8-left.mp4",
-    "8-leftb.mp4",
     "8-panel.png"
    ],
    "vo": [
@@ -162,7 +160,7 @@
   }
  ],
  "takes": {
-  "about": "What is filmed. rec = a recording under WORK/../rec made with film/rec.py; start/end are seconds into it; speed = recorded seconds per film second. css and init are film-only: they hide buttons, enlarge the page's own lines, or move the camera. They never change a word or a number.",
+  "about": "What is filmed. rec = a recording under WORK/../rec made with film/rec.py; start/end are seconds into it; speed = recorded seconds per film second. css and init are film-only: they hide buttons, enlarge the page's own lines, or move the camera. They never change a word or a number. whole = filmed by one browser from start to end (close shots, where a join between two browsers shows as a twitch). init push = the camera moves in 6% over the 9 s of shot 1 (the page clock is 100000 ms + recording time).",
   "css": {
    "base": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}",
    "source": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:30px!important;line-height:1.3!important;max-width:900px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.tag{font-size:26px!important;padding:9px 18px!important}",
@@ -174,7 +172,8 @@
   },
   "init": {
    "close": "(()=>{const r=window.kaiku.rig;Object.assign(r.shots.lead,{target:[0.34,0,0.42],frame:[1.25,1.0]});r.goTo('lead',0.01);})()",
-   "nostage": "window.kaiku.stage.render=()=>{}"
+   "nostage": "window.kaiku.stage.render=()=>{}",
+   "push": "(()=>{const r=window.kaiku.rig,f=[...r.frame],a=100000+107500;const go=()=>{const k=1-0.06*Math.min(1,Math.max(0,(performance.now()-a)/9000));r.frame=[f[0]*k,f[1]*k];r.refit();requestAnimationFrame(go);};go();})()"
   },
   "clips": {
    "1-all": {
@@ -182,7 +181,8 @@
     "start": 107.5,
     "end": 116.5,
     "query": "clean=1&shot=overview&quality=high",
-    "css": "source"
+    "css": "source",
+    "init": "push"
    },
    "shot2-standin": {
     "rec": "operator2",
@@ -190,7 +190,8 @@
     "end": 131.5,
     "query": "clean=1&shot=lead&quality=high",
     "css": "source",
-    "init": "close"
+    "init": "close",
+    "whole": true
    },
    "3-env1": {
     "rec": "operator2",
@@ -255,42 +256,28 @@
    },
    "7-nobody": {
     "rec": "policy",
-    "start": 31.5,
-    "end": 45.5,
+    "start": 35.0,
+    "end": 47.0,
     "query": "clean=1&shot=overview&quality=high",
     "css": "nobody"
    },
    "6-left": {
     "rec": "operator2",
     "start": 105.8,
-    "end": 118.3,
+    "end": 119.5,
     "size": "1138x1080",
     "query": "clean=1&shot=lead&quality=high",
-    "css": "stage"
+    "css": "stage",
+    "whole": true
    },
    "8-left": {
     "rec": "operator2",
     "start": 142.8,
-    "end": 147.4,
-    "size": "1138x1080",
-    "query": "clean=1&shot=lead&quality=high",
-    "css": "stage"
-   },
-   "6-leftb": {
-    "rec": "operator2",
-    "start": 118.3,
-    "end": 122.5,
-    "size": "1138x1080",
-    "query": "clean=1&shot=lead&quality=high",
-    "css": "stage"
-   },
-   "8-leftb": {
-    "rec": "operator2",
-    "start": 147.4,
     "end": 149.5,
     "size": "1138x1080",
     "query": "clean=1&shot=lead&quality=high",
-    "css": "stage"
+    "css": "stage",
+    "whole": true
    }
   },
   "stills": {

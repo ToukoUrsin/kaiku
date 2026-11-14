@@ -101,7 +101,7 @@ def plan(work: Path) -> None:
         return rows
 
     # ---- what each take said
-    used = ["1-all", "3-env1", "3-env7", "3-env19", "4a", "4b", "5a", "5b", "6-page", "6-left", "6-leftb", "7-nobody", "8-left", "8-leftb"]
+    used = ["1-all", "3-env1", "3-env7", "3-env19", "4a", "4b", "5a", "5b", "6-page", "6-left", "7-nobody", "8-left"]
     said = {name: page_said(name) for name in used}
     if kind == "standin":
         rows = page_said("shot2-standin")
@@ -243,15 +243,15 @@ def render() -> None:
             g = f"[0:v][1:v]concat=n=2:v=1,{hold}[c];[c][2:v]overlay=0:0:enable='lt(t,{f['a']:.3f})',{end}[v]"
         elif sid == "6-policy-tab":
             lead = 1.8                                       # the whole page first, then its panel beside the stage
-            ins = I("6-page.mp4", "6-left.mp4", "6-leftb.mp4", "6-panel.png")
-            g = (f"[1:v][2:v]concat=n=2:v=1,{hold}[l];[3:v]scale={PANEL}:{H}[p];[l][p]hstack=inputs=2,trim=0:{dur - lead},setpts=PTS-STARTPTS,fps=30[b];"
+            ins = I("6-page.mp4", "6-left.mp4", "6-panel.png")
+            g = (f"[1:v]{hold}[l];[2:v]scale={PANEL}:{H}[p];[l][p]hstack=inputs=2,trim=0:{dur - lead},setpts=PTS-STARTPTS,fps=30[b];"
                  f"[0:v]trim=0:{lead},setpts=PTS-STARTPTS,fps=30[a];[a][b]concat=n=2:v=1,{end}[v]")
         elif sid == "7-nobody":
             ins, g = I("7-nobody.mp4"), f"[0:v]{hold},{end}[v]"
         elif sid == "8-checked":
             cut = f["cut"]
-            ins = ["-loop", "1", "-framerate", "30", "-t", f"{cut:.3f}", "-i", "in/card-log.png"] + I("8-left.mp4", "8-leftb.mp4", "8-panel.png")
-            g = (f"[1:v][2:v]concat=n=2:v=1,{hold}[l];[3:v]scale={PANEL}:{H}[p];[l][p]hstack=inputs=2,trim=0:{dur - cut:.3f},setpts=PTS-STARTPTS,fps=30[b];"
+            ins = ["-loop", "1", "-framerate", "30", "-t", f"{cut:.3f}", "-i", "in/card-log.png"] + I("8-left.mp4", "8-panel.png")
+            g = (f"[1:v]{hold}[l];[2:v]scale={PANEL}:{H}[p];[l][p]hstack=inputs=2,trim=0:{dur - cut:.3f},setpts=PTS-STARTPTS,fps=30[b];"
                  f"[0:v]fps=30,format=yuv420p[a];[a][b]concat=n=2:v=1,{end}[v]")
         elif sid == "9-address":
             ins = ["-loop", "1", "-framerate", "30", "-t", str(dur + 1), "-i", "in/card-address.png"]
