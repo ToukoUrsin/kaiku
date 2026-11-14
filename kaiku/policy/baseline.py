@@ -9,7 +9,7 @@ subtasks do not occur here: the two hands never hold one part together.
 The module has no dependency on the recorder.  ``load_source`` reads one recorder row,
 ``segments`` finds reach/grasp and carry/drop pieces, and ``generate`` executes one
 target layout.  ``generate_dataset`` is the command line entry point used for the
-study.  Runs and logs belong under ``/bulk2/runs/robotteleop/baseline``; only summary
+study.  Runs and logs belong under ``/bulk3/runs/robotteleop/baseline``; only summary
 JSON is checked into the repository.
 """
 from __future__ import annotations
@@ -91,6 +91,7 @@ class Attempt:
     seconds: float
     ticks: int
     error: str | None = None
+    parts: int = 0
 
 
 @dataclass
@@ -118,6 +119,15 @@ class GenerationSummary:
                 if xs:
                     out[f"{name}_{shape}"] = {"attempts": len(xs), "clean": sum(a.clean for a in xs),
                                                 "yield": sum(a.clean for a in xs) / len(xs)}
+        return out
+
+    def by_parts(self) -> dict[str, dict[str, float | int]]:
+        out: dict[str, dict[str, float | int]] = {}
+        for n in sorted({a.parts for a in self.attempts}):
+            xs = [a for a in self.attempts if a.parts == n]
+            if xs:
+                out[str(n)] = {"attempts": len(xs), "clean": sum(a.clean for a in xs),
+                               "yield": sum(a.clean for a in xs) / len(xs)}
         return out
 
 
@@ -148,24 +158,33 @@ def segments(source: SourceDemo, scene: Scene | None = None) -> list[Segment]:
     active = np.array([p["name"] for p in source.row["layout"]])
     mapping = source.row.get("mapping", {"red": "left", "yellow": "center", "blue": "right"})
     result: list[Segment] = []
-    previous = int(source.span[0])
+    lifts: list[tuple[int, int]] = []
     for j in range(n):
         lift = np.flatnonzero(z[:, j] > scene.rest_z + LIFTED)
-        if not len(lift):
-            continue
-        a = max(previous, int(lift[0]) - 45)
+        if len(lift):
+            # Recorder columns follow layout order, while a person is free to pick the
+            # parts in any order.  Stitching in layout order can therefore produce an
+            # inverted interval (the original smoke-test bug); MimicGen's segments are
+            # ordered by the actual subtask start time.
+            lifts.append((int(lift[0]), j))
+    previous = int(source.span[0])
+    for lift, j in sorted(lifts):
+        a = max(previous, lift - 45)
         color = scene.by_name[str(active[j])].color
         bname = mapping[color]
         p = source.parts[:, j, :3]
         inb = _in_bin(scene, p, bname) & (z[:, j] <= scene.rest_z + DROP_Z)
-        after = np.flatnonzero(inb & (np.arange(T) >= lift[0]))
-        drop = int(after[0]) if len(after) else min(T, int(lift[0]) + 90)
-        drop = max(drop + 1, int(lift[0]) + 2)
+        after = np.flatnonzero(inb & (np.arange(T) >= lift))
+        drop = int(after[0]) if len(after) else min(T, lift + 90)
+        # A noisy bin/rest detector can report a short drop interval that ends
+        # before the preceding subtask's stitch.  Keep the open-loop segments
+        # monotone rather than generating another inverted interval.
+        drop = min(T, max(drop + 1, lift + 2, previous + 1))
         item = source.row["layout"][j]
         xy = tuple(float(v) for v in item["pos"][:2])
         yaw = float(item["yaw"])
         result.append(Segment(j, "reach_grasp", a, min(drop, T), xy, yaw, "object"))
-        result.append(Segment(j, "carry_drop", int(lift[0]), min(drop, T), xy, yaw, "bin"))
+        result.append(Segment(j, "carry_drop", lift, min(drop, T), xy, yaw, "bin"))
         previous = min(drop, T)
     return result
 
@@ -306,11 +325,122 @@ def generate(source: SourceDemo, targets: list[Layout], *, seed: int = 0,
         same = all(scene.by_name[a["name"]].shape == scene.by_name[b.name].shape
                    for a, b in zip(source.row["layout"], layout.placements))
         attempts.append(Attempt(int(source.row.get("episode", -1)), ti, distance, same, clean, clipped,
-                                time.perf_counter() - t0, int(res.ticks)))
+                                time.perf_counter() - t0, int(res.ticks), parts=len(layout.placements)))
         if rec is not None:
             rec.end(res, source=method, source_label=method)
         session.close()
     return GenerationSummary(attempts), rows
+
+
+def generate_batch(source: SourceDemo, targets: list[Layout], *, seed: int = 0,
+                   out_root: Path | str | None = None, method: str = "mimicgen") -> GenerationSummary:
+    """Replay all target tables in one simulator batch.
+
+    The old ``generate`` helper is useful for a one-table smoke test.  Measuring a
+    baseline should use this batch path: every method sees the same target list and the
+    simulator advances the tables together, while the verdict remains independent per
+    table.  ``method='echo'`` adds the source lead and uses the production Echo class,
+    which is the matched Kaiku arm for the same targets.
+    """
+    if not targets:
+        return GenerationSummary([])
+    scene = Scene()
+    t0 = time.perf_counter()
+    from kaiku.app.session import LeadCommand, Session
+    if method == "echo":
+        session = Session(len(targets) + 1, seed=seed, threads=1, spread=0.0, vary_shape=False)
+        lead = Layout([Placement(p["name"], np.asarray(p["pos"], float), float(p["yaw"]))
+                       for p in source.row["layout"]], dict(source.row.get("mapping", {})))
+        session.new_episode(lead, targets)
+        pinch, rot = _pose_from_action(session, source.action[:, :14])
+        fingers = source.action[:, 14:].astype(float)
+        rec = None
+        if out_root:
+            from kaiku.data.recorder import Recorder
+            rec = Recorder(session, out_root, operator="echo")
+        for t in range(source.action.shape[0]):
+            obs = session.observe()
+            if source.span[0] <= t < source.span[1]:
+                cmd = LeadCommand(pinch[t], rot[t], fingers[t])
+            else:
+                cmd = session.home_command()
+            session.tick(cmd)
+            if rec is not None:
+                rec.add(obs, *session.last_action)
+        session.finish_lead()
+        while not session.settled:
+            obs = session.observe()
+            session.tick(session.home_command())
+            if rec is not None:
+                rec.add(obs, *session.last_action)
+        result = session.result()
+        layouts = targets
+        env_offset = 1
+    else:
+        session = Session(len(targets), seed=seed, threads=1, spread=0.0, vary_shape=False)
+        session.free_episode(targets)
+        commands = []
+        if method == "copy":
+            pinch, rot = _pose_from_action(session, source.action[:, :14])
+            fingers = source.action[:, 14:].astype(float)
+            commands = [(pinch, rot, fingers)] * len(targets)
+        elif method == "mimicgen":
+            for layout in targets:
+                commands.append(transformed_targets(source, layout, session, scene))
+        else:
+            raise ValueError(f"unknown baseline method: {method}")
+        # Convert per-target (T, ...) arrays to the (N, ...) command batch expected by drive.
+        rec = None
+        if out_root:
+            from kaiku.data.recorder import Recorder
+            rec = Recorder(session, out_root, operator=method)
+        for t in range(source.action.shape[0]):
+            obs = session.observe()
+            if source.span[0] <= t < source.span[1]:
+                p = np.stack([c[0][t] for c in commands])
+                r = np.stack([c[1][t] for c in commands])
+                h = np.stack([c[2][t] for c in commands])
+            else:
+                home = session.home_command()
+                p = np.broadcast_to(home.pinch, (len(targets), 2, 3))
+                r = np.broadcast_to(home.rot, (len(targets), 2, 3, 3))
+                h = np.broadcast_to(home.hand, (len(targets), 14))
+            session.drive(p, r, h)
+            if rec is not None:
+                rec.add(obs, *session.last_action)
+        session.finish_lead()
+        # ``free_episode`` intentionally has no lead history.  For the settle phase
+        # there is therefore no Echo stream to read; copying the home command keeps
+        # the normal Session settling counters without changing the generated replay.
+        session.copy = True
+        while not session.settled:
+            obs = session.observe()
+            home = session.home_command()
+            session.tick(home)
+            if rec is not None:
+                rec.add(obs, *session.last_action)
+        result = session.result()
+        layouts = targets
+        env_offset = 0
+    attempts = []
+    # Charge the batched simulator wall time evenly to its independent table
+    # verdicts; summing ``seconds`` then gives the actual batch wall time.
+    seconds_per_attempt = (time.perf_counter() - t0) / max(len(targets), 1)
+    src_xy = np.array([p["pos"][:2] for p in source.row["layout"]])
+    for ti, layout in enumerate(layouts):
+        res_i = ti + env_offset
+        dst_xy = np.array([p.pos[:2] for p in layout.placements])
+        distance = float(np.mean(np.linalg.norm(dst_xy - src_xy[:len(dst_xy)], axis=1)))
+        same = all(scene.by_name[a["name"]].shape == scene.by_name[b.name].shape
+                   for a, b in zip(source.row["layout"], layout.placements))
+        attempts.append(Attempt(int(source.row.get("episode", -1)), ti, distance, same,
+                                bool(result.success[res_i] and result.clipped[res_i] == 0 and not result.aborted[res_i]),
+                                int(result.clipped[res_i]), seconds_per_attempt,
+                                int(result.ticks), parts=len(layout.placements)))
+    if rec is not None:
+        rec.end(result, source=method, source_label=method)
+    session.close()
+    return GenerationSummary(attempts)
 
 
 def _rows(root: Path) -> list[dict]:
@@ -338,7 +468,7 @@ def generate_dataset(source_root: Path | str, out_root: Path | str, *, scenes: i
     for i, row in enumerate(chosen):
         src = load_source(source_root, row)
         targets = [target_layout(src, scene, rng, same_shape=same_shape) for _ in range(tables)]
-        summary, _ = generate(src, targets, seed=seed + i * 1000, out_root=out_root, method=method)
+        summary = generate_batch(src, targets, seed=seed + i * 1000, out_root=out_root, method=method)
         all_attempts.extend(summary.attempts)
     summary = GenerationSummary(all_attempts)
     out_root.mkdir(parents=True, exist_ok=True)
@@ -349,7 +479,7 @@ def generate_dataset(source_root: Path | str, out_root: Path | str, *, scenes: i
         "scenes": len(chosen), "tables": tables,
         "attempts": len(all_attempts), "clean": summary.kept, "yield": summary.yield_rate,
         "seconds_per_demo": float(np.mean([a.seconds for a in all_attempts])) if all_attempts else 0.0,
-        "offline": True, "buckets": summary.by_bucket(),
+        "offline": True, "buckets": summary.by_bucket(), "by_parts": summary.by_parts(),
     }, indent=2) + "\n")
     return summary
 

@@ -144,7 +144,12 @@ class Loader:
         for r in rows_of(root):
             by_file.setdefault(r["file"], []).append(r)
         # The operator's own run failed: nothing to compare against. A file still being written: next time.
-        names = [n for n in sorted(by_file) if any(r["source"] == "human" for r in by_file[n]) and (root / n).exists()]
+        # A generated survivor may be stored in a recorder file with no human row
+        # (the offline baseline batches target tables separately).  Include those
+        # files when echoes are requested; the plain arm still selects human rows
+        # below and therefore keeps its original definition.
+        names = [n for n in sorted(by_file)
+                 if (echoes or any(r["source"] == "human" for r in by_file[n])) and (root / n).exists()]
         names = names[skip:][:max_episodes]
         if last:
             names = names[-last:]

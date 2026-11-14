@@ -42,3 +42,12 @@ def test_segments_have_reach_and_carry_for_each_part():
     assert [x.kind for x in got] == ["reach_grasp", "carry_drop"] * 3
     assert all(x.start < x.end for x in got)
     assert all(x.target_frame == ("object" if x.kind == "reach_grasp" else "bin") for x in got)
+
+
+def test_segments_follow_measured_pick_order_not_layout_order():
+    src = _source()
+    src.parts = src.parts[:, [1, 0, 2]]
+    got = segments(src)
+    reaches = got[::2]
+    assert [x.start for x in reaches] == sorted(x.start for x in reaches)
+    assert all(x.start < x.end for x in got)
