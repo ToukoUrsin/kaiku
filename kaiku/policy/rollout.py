@@ -18,6 +18,7 @@ from kaiku.fanout.echo import SHAPE_CODE
 from kaiku.policy.features import HORIZON, MAX_PARTS, Featurizer, plan_for
 from kaiku.policy.model import Policy
 from kaiku.perception import CameraPerception, PartEstimate
+from kaiku.sim.grasp import HAND_CLOSED, HAND_OPEN, hand14
 from kaiku.sim.scene import BINS, Layout, SHAPE_SYMMETRY
 from kaiku.sim.twin import CONTROL_HZ
 
@@ -27,6 +28,12 @@ from kaiku.sim.twin import CONTROL_HZ
 # never commits to the grasp.
 EVERY = 12
 BLEND = 4
+_COLOR_BIN = {"red": 0, "yellow": 1, "blue": 2}
+_SHAPE_CODE = {"cube": 0, "cylinder": 1, "triangle": 2}
+_HAND_OPEN = hand14(HAND_OPEN, HAND_OPEN)
+_HAND_CLOSED = hand14(HAND_CLOSED, HAND_CLOSED)
+_HAND_DELTA = _HAND_CLOSED - _HAND_OPEN
+_HAND_FINGER = np.flatnonzero(np.abs(_HAND_DELTA) > 0.1)
 
 
 class Pilot:
@@ -62,6 +69,9 @@ class Pilot:
             self.cam_shape = np.zeros((self.s.n, P), int)
             self.cam_bins = np.zeros((self.s.n, P), int)
             self.cam_present = np.zeros((self.s.n, P), bool)
+            self.cam_done = np.zeros((self.s.n, P), bool)
+            self.cam_carried = np.zeros((self.s.n, P), bool)
+            self.cam_shape_votes = np.zeros((self.s.n, P, 3), int)
             for i in range(n):
                 self._camera_estimates[i] = self.perception.observe(self.s.sim.data[i])
                 self._set_camera_parts(i, self._camera_estimates[i])
@@ -131,40 +141,118 @@ class Pilot:
                             "position_error_mm": None, "yaw_error_deg": None})
         return out
 
-    def _set_camera_parts(self, i: int, estimates: list[PartEstimate]) -> None:
-        """Update the held camera track; missing parts stay at their last estimate."""
+    def _closure_score(self, hand: np.ndarray) -> np.ndarray:
+        """How closed each commanded/measured hand is, using only finger joint angles."""
+        q = np.asarray(hand)
+        d = _HAND_DELTA[_HAND_FINGER]
+        score = ((q[..., _HAND_FINGER] - _HAND_OPEN[_HAND_FINGER]) * d / (d * d)).mean(-1)
+        return np.clip(score, 0.0, 1.0)
+
+    def _set_camera_parts(self, i: int, estimates: list[PartEstimate], obs=None) -> None:
+        """Track coloured parts through occlusion, grasping and release.
+
+        A top camera sees a held part's fingers and side faces as a new, moving
+        silhouette.  While a hand is closed near a track, retain the last stable
+        tabletop estimate.  A track is retired only after the closed hand reaches
+        its known bin and opens, or the camera actually sees the coloured part in
+        that bin.  Both cues come from the camera and the robot's own commands,
+        never from simulator object state.
+        """
         P = MAX_PARTS
-        shape_code = {"cube": 0, "cylinder": 1, "triangle": 2}
+        if obs is None:
+            hand_pos = np.zeros((2, 3))
+            close = np.zeros(2)
+        else:
+            hand_pos = np.asarray(obs.pinch[i])
+            close = self._closure_score(obs.hand_q[i])
         # On later frames match by colour and proximity.  A hand can hide a part for
         # several frames, so an unmatched track is intentionally held.
+        initial = not bool(self.cam_present[i].any())
         used: set[int] = set()
         order = sorted(range(len(estimates)), key=lambda j: estimates[j].pos[0])
         for j in order:
             e = estimates[j]
-            candidates = [k for k in range(P) if self.cam_present[i, k] and k not in used
-                          and int(self.cam_bins[i, k]) == BINS.index({"red": "left", "yellow": "center", "blue": "right"}[e.color])]
+            b = _COLOR_BIN[e.color]
+            candidates = [] if initial else [k for k in range(P) if self.cam_present[i, k] and k not in used
+                                             and int(self.cam_bins[i, k]) == b and
+                                             np.linalg.norm(self.cam_pos[i, k, :2] - e.pos[:2]) < 0.08]
             if candidates:
                 k = min(candidates, key=lambda q: np.linalg.norm(self.cam_pos[i, q, :2] - e.pos[:2]))
             else:
-                k = next((q for q in range(P) if not self.cam_present[i, q]), None)
+                # A hand edge can produce a second component of the same colour
+                # for one frame.  Do not turn that into a new part when a track of
+                # that colour already exists; all episode parts are visible in the
+                # initial head-camera frame in this benchmark.
+                if not initial and any(self.cam_present[i, q] and int(self.cam_bins[i, q]) == b for q in range(P)):
+                    continue
+                k = next((q for q in range(P) if not self.cam_present[i, q] and not self.cam_done[i, q]), None)
                 if k is None:
                     continue
-            self.cam_pos[i, k] = e.pos
-            self.cam_yaw[i, k] = e.yaw
-            self.cam_shape[i, k] = shape_code[e.shape]
-            self.cam_bins[i, k] = BINS.index({"red": "left", "yellow": "center", "blue": "right"}[e.color])
+            near_hand = np.linalg.norm(hand_pos - e.pos[None, :], axis=1) < 0.09
+            hand_silhouette = bool(np.any(near_hand & (close > 0.30)) and
+                                   e.pos[2] > self.feat.rest_z + 0.012)
+            # A component in the expected bin is a camera confirmation that the
+            # released part is done.  Put the track at a known safe point inside
+            # the bin, rather than trusting a wall/edge depth pixel.
+            bin_lo, bin_hi = self.s.scene.bin_inner(BINS[b])
+            in_expected_bin = bool(np.all(e.pos >= bin_lo) and np.all(e.pos <= bin_hi))
+            if in_expected_bin and not hand_silhouette:
+                c = self.s.scene.bin_centers[BINS[b]].copy()
+                self.cam_pos[i, k] = c + [0.0, 0.0, 0.04]
+                self.cam_done[i, k] = True
+                self.cam_present[i, k] = False
+                used.add(k)
+                continue
+            if self.cam_carried[i, k] or hand_silhouette:
+                self.cam_carried[i, k] = True
+                # The colour track supplies identity and shape, while the robot's
+                # own FK hand position supplies the current centre once the part
+                # is in the hand.  Feeding the old tabletop point here makes a
+                # state policy repeat its grasp forever.
+                if obs is not None:
+                    side = int(self.side[i, k])
+                    self.cam_pos[i, k] = hand_pos[side]
+                used.add(k)
+                continue
+            # Exponential filtering removes frame-to-frame depth jitter while
+            # preserving a real tabletop move.  Shape votes make a single noisy
+            # outline harmless without inventing an identity.
+            alpha = 0.35
+            if not self.cam_shape_votes[i, k].any():
+                self.cam_pos[i, k] = e.pos
+                self.cam_yaw[i, k] = e.yaw
+            else:
+                self.cam_pos[i, k] = (1.0 - alpha) * self.cam_pos[i, k] + alpha * e.pos
+                self.cam_yaw[i, k] = (1.0 - alpha) * self.cam_yaw[i, k] + alpha * e.yaw
+            self.cam_shape_votes[i, k, _SHAPE_CODE[e.shape]] += 1
+            self.cam_shape[i, k] = int(np.argmax(self.cam_shape_votes[i, k]))
+            self.cam_bins[i, k] = b
             self.cam_present[i, k] = True
             used.add(k)
 
-    def _camera_update(self) -> None:
+        # Once the carried hand reaches its destination and opens, the camera
+        # policy can retire the track even when the bin hides the part.
+        for k in range(P):
+            if not self.cam_present[i, k] or not self.cam_carried[i, k]:
+                continue
+            if obs is not None:
+                self.cam_pos[i, k] = hand_pos[int(self.side[i, k])]
+            b = int(self.cam_bins[i, k])
+            target = self.s.scene.bin_centers[BINS[b]]
+            near_bin = np.linalg.norm(hand_pos - target[None, :], axis=1) < 0.16
+            if bool(np.any(near_bin & (close < 0.25))):
+                self.cam_present[i, k] = False
+                self.cam_done[i, k] = True
+
+    def _camera_update(self, obs) -> None:
         for i in range(self.s.n):
             estimates = self.perception.observe(self.s.sim.data[i])
-            self._set_camera_parts(i, estimates)
+            self._set_camera_parts(i, estimates, obs)
 
     def sorted(self, obs) -> np.ndarray:
         """(N,) parts of each env that are in a bin."""
         if self.camera:
-            return (self.cam_present & self.feat.in_bin(self.cam_pos)).sum(axis=1)
+            return self.cam_done.sum(axis=1) + (self.cam_present & self.feat.in_bin(self.cam_pos)).sum(axis=1)
         return (self.present & self.feat.in_bin(obs.obj_pos[self.rows, self.idx])).sum(axis=1)
 
     def step(self, obs) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -173,7 +261,7 @@ class Pilot:
         The policy is asked every ``every`` ticks and its answer is played out in between."""
         if self.clock % self.every == 0:
             if self.camera:
-                self._camera_update()
+                self._camera_update(obs)
                 pos, yaw, shape, bins, present = self.cam_pos, self.cam_yaw, self.cam_shape, self.cam_bins, self.cam_present
             else:
                 pos, yaw, shape, bins, present = (obs.obj_pos[self.rows, self.idx], obs.obj_yaw[self.rows, self.idx],
