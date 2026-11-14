@@ -129,6 +129,32 @@ class GloveOperator:
         self._closed = {side: False for side in SIDES}
         self._capture_at = 1.5
 
+    @property
+    def stream_state(self) -> dict:
+        """A small, operator-facing health snapshot used by the checklist and browser HUD."""
+        frames = {side: self.stream.latest(side) for side in SIDES}
+        rates = {side: self.stream.rate_hz(side) for side in SIDES}
+        missing = [side for side in SIDES if frames[side] is None]
+        low = [side for side in SIDES if frames[side] is not None and rates[side] < 40.0]
+        coil = all(bool(frames[side] and frames[side].coil_present) for side in SIDES)
+        reason = None
+        if len(missing) == 1 and not low:
+            reason = "one glove: the fingers and pinch come from it; with no Coil Pro the hand's position comes from the laptop camera"
+        elif len(missing) == 2:
+            reason = "both gloves are missing"
+        elif low:
+            reason = "rate too low"
+        elif frames and not coil:
+            reason = "no Coil Pro: the laptop camera supplies hand position"
+        return {"frames": frames, "rates": rates, "missing": missing, "low": low, "coil": coil, "reason": reason,
+                "connected": self.stream.connected, "emulated": self.stream.emulated,
+                "firmware": self.stream.firmware}
+
+    @property
+    def healthy(self) -> bool:
+        state = self.stream_state
+        return any(state["frames"].values()) and not state["low"]
+
     # ------------------------------------------------------------------ operator interface
     def begin(self) -> None:
         if self.pilot:
@@ -263,21 +289,31 @@ class GloveOperator:
 
     # ------------------------------------------------------------------ for the viewer
     def hud(self) -> dict:
-        out = {"calibrated": self.teleop is not None, "source": self.source, "stand_in": self.person is not None}
+        state = self.stream_state
+        if self.person is None and state["emulated"]:
+            source = "emulated"
+        else:
+            source = self.source
+        out = {"calibrated": self.teleop is not None, "source": source, "stand_in": self.person is not None,
+               "missing": list(state["missing"]), "rate_low": list(state["low"]),
+               "coil_present": bool(state["coil"]), "stream_stopped": not state["connected"],
+               "message": state["reason"], "firmware": state["firmware"]}
         out["flat_s"] = 0.0 if self._flat_since is None else round(max(0.0, time.monotonic() - self._flat_since), 2)
         out["still_s"] = 0.0 if self._still_since is None else round(max(0.0, time.monotonic() - self._still_since), 2)
         pts = {}
         for side in SIDES:
-            hz = self.stream.rate_hz(side)
+            hz = state["rates"][side]
             hand = self.hands[side]
             flat = self._is_flat(hand)
             position = bool(hand is not None and hand.has_position)
+            frame = state["frames"][side]
             still_s = 0.0 if self._still_since is None else max(0.0, time.monotonic() - self._still_since)
             out[side] = {"connected": hz > 1.0, "hz": round(hz, 1), "fingers": self.fingers[side],
                          "status": self.teleop.status[side] if self.teleop else "uncalibrated",
                          "seen": hand is not None, "position": position, "has_position": position,
                          "flat": flat, "is_flat": flat, "still": flat and still_s > 0,
-                         "still_s": round(still_s, 2), "closed": self._closed[side]}
+                         "still_s": round(still_s, 2), "closed": self._closed[side],
+                         "coil_present": bool(frame is not None and frame.coil_present)}
             hand = self.hands[side]
             if hand is not None:
                 p = self.rt.models[side].points(hand.joints).reshape(20, 3)
@@ -322,7 +358,12 @@ class ReplayOperator:
         self.current = None
         self.tick = 0
         self.label = "replay"
-        self.source = "recorded"
+        self.metadata = {}
+        try:
+            self.metadata = json.loads((self.root / "session.json").read_text())
+        except (OSError, ValueError):
+            pass
+        self.source = "emulated-recorded" if self.metadata.get("source") == "emulated" else "recorded"
         self.person = None
         self.hands = {side: None for side in SIDES}
         self.calibrated = True
@@ -374,10 +415,11 @@ class ReplayOperator:
     def hud(self) -> dict:
         row = self.rows[self.index] if self.rows and self.index >= 0 else {}
         points = getattr(self, "_points", None)
-        return {"calibrated": True, "source": "recorded", "stand_in": False, "date": row.get("time"),
+        return {"calibrated": True, "source": self.source, "stand_in": False, "date": row.get("time") or self.metadata.get("start_time"),
                 "left": {"connected": True, "hz": 0.0, "status": "recorded"},
                 "right": {"connected": True, "hz": 0.0, "status": "recorded"},
-                "hands": None if points is None else np.asarray(points).tolist()}
+                "hands": None if points is None else np.asarray(points).tolist(),
+                "session_source": self.metadata.get("source", "smartgloves")}
 
     def close(self) -> None:
         pass

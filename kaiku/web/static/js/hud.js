@@ -27,8 +27,10 @@ const SOURCE_TEXT = {
   policy: 'Trained policy · nobody is driving',
   visitor: 'A visitor is driving',
   recorded: 'Recorded session · replay',
+  'emulated-recorded': 'Recorded emulated glove session · replay',
+  emulated: 'Smartgloves emulator · live',
 };
-const TAG_TEXT = { 'stand-in': 'Scripted hand, emulated gloves', gloves: 'Operator in Rokoko gloves', autopilot: 'Autopilot', policy: 'Policy', visitor: 'A visitor is driving', recorded: 'Recorded session' };
+const TAG_TEXT = { 'stand-in': 'Scripted hand, emulated gloves', gloves: 'Operator in Rokoko gloves', emulated: 'Emulated gloves', autopilot: 'Autopilot', policy: 'Policy', visitor: 'A visitor is driving', recorded: 'Recorded session', 'emulated-recorded': 'Recorded emulated session' };
 const STAGE_TEXT = { loading: 'Reading the demonstrations', training: 'Training', testing: 'Testing on scenes it has not seen', done: 'Finishing' };
 const TOAST_MS = 4200;
 
@@ -370,8 +372,8 @@ export class Hud {
     const source = operator.source;
     const linked = Boolean(operator.left?.connected && operator.right?.connected);
     const sourceText = source === 'gloves' && !linked ? 'Smartgloves II · not connected'
-      : source === 'recorded' && Number.isFinite(operator.date)
-        ? `Recorded session · ${new Date(operator.date * 1000).toLocaleDateString()}`
+      : (source === 'recorded' || source === 'emulated-recorded') && Number.isFinite(operator.date)
+        ? `${source === 'emulated-recorded' ? 'Recorded emulated Smartgloves session' : 'Recorded Smartgloves session'}, ${new Date(operator.date * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
         : SOURCE_TEXT[source];
     this.text('source-text', sourceText || 'Waiting for the operator');
     this.attr('source', 'data-live', source === 'gloves' && linked);
@@ -385,10 +387,16 @@ export class Hud {
       this.text(`${side}-hz`, glove.connected && Number.isFinite(glove.hz) ? `${Math.round(glove.hz)} Hz` : '');
       this.attr(`${side}-dot`, 'data-state', !glove.connected ? null : glove.status === 'tracking' ? 'tracking' : 'weak');
     }
+    this.text('operator-message', operator.message || (operator.coil_present === false
+      ? 'No Coil Pro. Hands turn but will not move the robot.'
+      : operator.stream_stopped ? 'The glove stream stopped. Waiting for it to come back.'
+      : operator.missing?.length ? `${operator.missing[0]} glove missing.`
+      : operator.rate_low?.length ? 'The glove rate is too low.' : ''));
+    this.show('operator-message', Boolean(operator.message || operator.coil_present === false || operator.stream_stopped || operator.missing?.length || operator.rate_low?.length));
     this.text('calibrated', operator.calibrated ? 'Calibrated' : source === 'policy' ? 'Not needed' : 'Not calibrated');
     const calibrating = this.hud.episode?.step === 'calibrating';
     this.text('calibrate', calibrating ? 'Calibrating' : operator.calibrated ? 'Recalibrate' : 'Calibrate');
-    this.attr('calibrate', 'disabled', calibrating || source === 'autopilot' || source === 'policy' || source === 'recorded');
+    this.attr('calibrate', 'disabled', calibrating || source === 'autopilot' || source === 'policy' || source === 'recorded' || source === 'emulated-recorded');
     this.renderDrive();
   }
 
@@ -460,7 +468,8 @@ export class Hud {
     const sorted = Math.min(episode.sorted || 0, parts);
     const alone = this.hud.mode === 'policy';
     this.text('scene-word', alone ? 'Round' : 'Scene');
-    this.text('scene-index', episode.index != null ? String(episode.index) : '');
+    this.text('scene-index', episode.index != null
+      ? (Number.isFinite(episode.target) ? `${episode.index} of ${episode.target}` : String(episode.index)) : '');
     this.text('elapsed', clock(episode.elapsed_s || 0));
     this.text('sorted-text', parts ? `${sorted} of ${parts} parts sorted` : 'No parts on the table yet');
 
@@ -706,9 +715,9 @@ export class Hud {
           + (Number.isFinite(eta) && eta > 0 ? `, ${left(eta)} left` : ''),
         action: 'Show', run: () => this.selectTab('policy'),
       };
-    } else if (operator && operator.source === 'gloves' && !(operator.left?.connected && operator.right?.connected)) {
+    } else if (operator && (operator.message || operator.source === 'gloves' && !(operator.left?.connected && operator.right?.connected))) {
       banner = {
-        level: 'warn', text: 'No gloves connected', action: 'Use autopilot',
+        level: 'warn', text: operator.message || 'No gloves connected', action: 'Use autopilot',
         run: () => this.send({ type: 'cmd', name: 'mode', value: 'autopilot' }),
       };
     } else if (hud.episode?.step === 'calibrating') {

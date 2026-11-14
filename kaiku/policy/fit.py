@@ -32,7 +32,8 @@ def say(**status) -> None:
 def fit(data: Path | str, which: str, out: Path | str, steps: int = 30000, scenes: int = 48, humans: int | None = None,
         seed: int = 0, threads: int | None = None, report=say, eval_seed: int = 100, rounds: int = 1,
         last: int | None = None, loader_workers: int | None = None, loader_context: str = "spawn",
-        train_threads: int | None = None, rollout_threads: int | None = None, compile: bool = False) -> Policy:
+        train_threads: int | None = None, rollout_threads: int | None = None, compile: bool = False,
+        device: str | None = None) -> Policy:
     """Train one policy and test it on ``scenes * rounds`` fresh scenes. ``report(**status)`` hears about it.
     ``humans`` uses the operator's first K episodes, ``last`` the latest K."""
     tell = lambda stage, p, **kw: report(which=which, stage=stage, progress=round(p, 4), **kw)      # noqa: E731
@@ -42,7 +43,7 @@ def fit(data: Path | str, which: str, out: Path | str, steps: int = 30000, scene
                        last=last, workers=loader_workers, context=loader_context).sample(MOST_PAIRS, seed)
     policy = train(data, loader.feat, steps, seed=seed, threads=train_threads or threads or 8, log=None,
                    on_step=lambda i, n, loss: tell("training", LOAD + TRAIN * i / n, loss=round(loss, 5)),
-                   compile=compile)
+                   compile=compile, device=device)
     policy.info.update(which=which, humans=int(data.human_demos), demos=int(data.demos))
     res = rollout.run(policy, scenes, rounds, eval_seed, threads=rollout_threads if rollout_threads is not None else threads,
                       progress=lambda f: tell("testing", LOAD + TRAIN + (1 - LOAD - TRAIN) * f))
@@ -65,18 +66,20 @@ def main(argv=None) -> None:
     ap.add_argument("--last", type=int, default=None, help="use the operator's latest K episodes")
     ap.add_argument("--threads", type=int, default=None)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--device", default=None, help="torch device, for example cpu or cuda")
     a = ap.parse_args(argv)
     which = a.which.split(",")
     if len(which) == 1:
         fit(a.data, which[0], Path(a.out) / f"{which[0]}.pt", a.steps, a.scenes, a.humans, a.seed, a.threads,
-            last=a.last)
+            last=a.last, device=a.device)
         return
     # Side by side, each in a process of its own.
     procs = [subprocess.Popen([sys.executable, "-u", "-m", "kaiku.policy.fit", a.data, "--out", a.out, "--which", w,
                                "--steps", str(a.steps), "--scenes", str(a.scenes), "--seed", str(a.seed),
-                               *(["--humans", str(a.humans)] if a.humans else []),
-                               *(["--last", str(a.last)] if a.last else []),
-                               *(["--threads", str(a.threads)] if a.threads else [])]) for w in which]
+                               *( ["--humans", str(a.humans)] if a.humans else []),
+                               *( ["--last", str(a.last)] if a.last else []),
+                               *( ["--threads", str(a.threads)] if a.threads else []),
+                               *( ["--device", a.device] if a.device else [])]) for w in which]
     codes = [p.wait() for p in procs]
     if any(codes):
         say(stage="error", text="Training stopped early. The log above says why.")

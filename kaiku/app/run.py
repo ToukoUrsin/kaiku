@@ -23,6 +23,7 @@ import sys
 import tempfile
 import threading
 import time
+import socket
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -65,11 +66,12 @@ class Runner:
                  hand_solver: str | None = None,
                  policy: Path | str | None = None, train: str = "local", train_steps: int = 30000,
                  policy_timeout_s: float = 80.0, stall_s: float = 15.0, shared: bool = False,
-                 train_about: float | None = None):
+                 train_about: float | None = None, target_scenes: int | None = None):
         if seed is None:                                       # other scenes every time it is started
             seed = int(np.random.SeedSequence().generate_state(1)[0] % 2 ** 30)
         self.s = Session(n, seed=seed, threads=threads)
         self.n, self.seed = n, seed
+        self.target_scenes = target_scenes
         self.parts = parts
         self.hold_s, self.lead_timeout = hold_s, int(lead_timeout_s * CONTROL_HZ)
         self.sampler = Sampler(n, seed + 1, self.s.spread, self.s.vary_shape)
@@ -96,6 +98,12 @@ class Runner:
         self.want_mode = mode if mode in MODES else "gloves"
         self.op = self._operator(self.mode)
         self.rec = Recorder(self.s, record, operator=self._who())
+        if self.rec.root is not None:
+            meta = self.rec.root / "session.json"
+            if not meta.exists():
+                source = "smartgloves" if self.gloves else "emulated"
+                meta.write_text(json.dumps({"format": 1, "source": source, "start_time": time.time(),
+                                            "host": socket.gethostname()}, indent=2) + "\n")
         self.paused = False
         self.shared = shared                                   # one session for everybody who opens the page
         self._zip, self._zip_lock = None, threading.Lock()     # (scene file, zip) of the last download built
@@ -332,6 +340,9 @@ class Runner:
             self.history.append({"episode": t["episodes"], "parts": len(r.layouts[0].placements),
                                  "ok": int(clean[1:].sum()), "robots": self.n - 1, "lead_ok": bool(clean[0]),
                                  "saved": kept["kept"], "seconds": round(s.tick_no * DT, 1)})
+            if self.target_scenes and t["human"] >= self.target_scenes:
+                self.toast(f"You have {t['human']} of {self.target_scenes} clean scenes. You can stop with Ctrl-C.", "ok")
+                self.stop = True
         self.phase = "hold"
         self.hold_until = time.perf_counter() + self.hold_s
         if self.replaying and self.compare is not None:        # the comparison's second half: the same tables, echoed
@@ -531,6 +542,14 @@ class Runner:
                 self._end_visitor_turn("timeout")
                 return
         obs = s.observe()
+        if isinstance(self.op, GloveOperator) and not self.op.person and not self.op.healthy:
+            # A radio drop must never become a misleading demonstration. Keep the scene on screen
+            # long enough for the banner to explain it, then discard it and draw a fresh table.
+            reason = self.op.hud().get("message") or "The glove stream stopped."
+            self.toast(f"Scene dropped: {reason}", "warn")
+            self._end_episode(record=False)
+            self.hold_until = time.perf_counter() + 1.0
+            return
         cmd = self.op.update(obs)
         limit = int(150 * CONTROL_HZ) if self.mode == "visitor" else self.lead_timeout
         if self.op.done or s.tick_no >= limit:
@@ -603,7 +622,7 @@ class Runner:
             "episode": {"index": self.pol["rounds"] + 1, "parts": int(self.want.sum()), "sorted": int(self.sorted.sum()),
                         "elapsed_s": round(s.tick_no * DT, 1), "step": "Policy"} if alone else
             {"index": t["episodes"] + 1, "parts": parts, "sorted": int(self.sorted[0]),
-             "elapsed_s": round(s.tick_no * DT, 1), "step": self.op.label},
+             "elapsed_s": round(s.tick_no * DT, 1), "step": self.op.label, "target": self.target_scenes},
             "echo": {"robots": self.n, "done": int((self.states != RUNNING).sum()),
                      "ok": int((self.states == SUCCESS).sum()), "failed": int((self.states == FAILED).sum()),
                      "lag_s": 0.0, "lag_max_s": 0.0} if alone else
@@ -728,6 +747,7 @@ def main(argv=None) -> None:
                     help="where rkk-hand-solver serves solved hands (default: port 12277 on the gloves' host); "
                          "the fingers come from it while it runs, from kaiku's own solver otherwise")
     ap.add_argument("--session", default=None, metavar="DIR", help="replay a recorded human session")
+    ap.add_argument("--target", type=int, default=None, help="stop after this many clean lead scenes")
     ap.add_argument("--g1", type=int, default=None, metavar="PORT",
                     help="serve the lead robot's commands to the humanoid challenge's runner (its policy-server "
                          "protocol, port 8000 there), so a real G1 follows the operator; see kaiku/app/g1.py")
@@ -735,7 +755,7 @@ def main(argv=None) -> None:
     ensure()                                                   # the robot model, fetched on the first run
     r = Runner(a.n, a.port, a.host, a.seed, a.parts if a.parts == "auto" else int(a.parts), a.record,
                threads=a.threads, mode=a.mode, gloves=a.gloves, hand_solver=a.hand_solver, policy=a.policy, train=a.train,
-               train_steps=a.train_steps, shared=a.shared, train_about=a.train_about)
+               train_steps=a.train_steps, shared=a.shared, train_about=a.train_about, target_scenes=a.target)
     if a.session:
         r.session_dir = Path(a.session)
         r.mode = r.want_mode = "gloves"

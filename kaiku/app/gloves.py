@@ -1,7 +1,7 @@
-"""Start the Rokoko glove path and Kaiku with a small terminal checklist.
+"""The one command for a Smartglove sitting.
 
-This command owns only the processes it starts. It is deliberately text only: print the URL and
-let the operator choose when to open it.
+The checklist is intentionally plain text: it is readable on a phone and keeps waiting while the
+operator plugs in hardware. The command owns only processes it starts.
 """
 from __future__ import annotations
 
@@ -14,12 +14,14 @@ import subprocess
 import sys
 import time
 import signal
-from datetime import datetime
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 from kaiku.rgmp.glove import GloveStream
 
 SDK_BIN = Path.home() / ".local" / "share" / "rokoko-device-sdk" / "bin"
+TARGET_SCENES = 30  # enough points for the three-seed study while fitting a 25-minute sitting
 
 
 def _exe(name: str) -> str | None:
@@ -34,15 +36,42 @@ def _open(host: str, port: int, timeout: float = 0.25) -> bool:
         return False
 
 
+def _doctor(timeout: float = 4.0) -> dict[str, str | bool | None]:
+    """Read only useful, non-secret parts of `rokoko doctor`."""
+    exe = _exe("rokoko")
+    out: dict[str, str | bool | None] = {"sdk": exe is not None, "signed_in": None, "activated": None,
+                                         "licence": None, "version": None, "text": ""}
+    if not exe:
+        return out
+    try:
+        p = subprocess.run([exe, "doctor"], capture_output=True, text=True, timeout=timeout, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return out
+    text = p.stdout + "\n" + p.stderr
+    out["text"] = re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+", "[masked]", text)
+    match = re.search(r"driver[^0-9]*([0-9]+(?:\.[0-9]+)+)", text, re.I) or \
+        re.search(r"(?:sdk)[^0-9]*([0-9]+(?:\.[0-9]+)+)", text, re.I)
+    out["version"] = match.group(1) if match else None
+    low = text.lower()
+    out["signed_in"] = True if "signed in as" in low else None
+    if "activated" in low:
+        out["activated"] = any(x in low for x in ("activated ..... yes", "activated: yes", "activated yes"))
+    if "licence" in low or "license" in low:
+        out["licence"] = not bool(re.search(r"\bexpired\b|no seats?|0\s*/\s*\d+\s+seats", low))
+    return out
+
+
 class Checklist:
     """Probe the driver and solved stream without making a browser connection."""
 
     def __init__(self, host: str = "127.0.0.1", port: int = 12276, solver_port: int = 12277):
         self.host, self.port, self.solver_port = host, int(port), int(solver_port)
         self.stream: GloveStream | None = None
+        self.doctor = _doctor(timeout=1.0)
 
     def rows(self) -> list[tuple[str, bool, str]]:
         sdk = _exe("rokoko-sdk")
+        doctor = self.doctor
         driver = _open(self.host, self.port)
         solver = _open(self.host, self.solver_port)
         rates = {side: 0.0 for side in ("left", "right")}
@@ -54,18 +83,50 @@ class Checklist:
                 frame = self.stream.latest(side)
                 seen[side] = frame is not None
                 position[side] = bool(frame is not None and frame.coil_present)
+        sdk_ok = sdk is not None
+        one = any(seen.values())
+        if doctor.get("signed_in") is False:
+            sdk_fix = "Sign in to Rokoko on this Mac, then run this command again."
+        elif doctor.get("activated") is False:
+            sdk_fix = "Activate the Rokoko Device SDK on this Mac, then run this command again."
+        elif doctor.get("licence") is False:
+            sdk_fix = "Renew the Rokoko licence or free a seat, then run this command again."
+        elif not sdk_ok:
+            sdk_fix = "Install Rokoko Device SDK on this Mac, then run this command again."
+        else:
+            sdk_fix = "The SDK is installed; if it still fails, sign in and activate it."
         return [
-            ("SDK found and licensed", sdk is not None, "Install Rokoko Device SDK and sign in"),
-            ("driver running", driver, "Run rkk-hand-solver --emit world"),
-            ("hand solver answering", solver, "Run rkk-hand-solver --emit world"),
-            ("left glove streaming", seen["left"] and rates["left"] > 1, "Wake the left glove and check USB"),
-            ("right glove streaming", seen["right"] and rates["right"] > 1, "Wake the right glove and check USB"),
-            ("position from Coil Pro on both hands", all(position.values()), "Plug in the Coil Pro and move it near the gloves"),
+            ("SDK found and licensed", sdk_ok and doctor.get("signed_in") is not False and
+             doctor.get("activated") is not False and doctor.get("licence") is not False, sdk_fix),
+            ("driver running", driver, "Start the Rokoko driver and leave it running."),
+            ("hand solver answering", solver, "Start rkk-hand-solver with --emit world."),
+            ("left glove streaming", (seen["left"] and rates["left"] >= 40) or (one and not seen["left"]),
+             "The left glove rate is too low; move closer to its receiver." if seen["left"] else
+             "One glove is enough: fingers and pinch come from the glove; the other hand is optional."),
+            ("right glove streaming", (seen["right"] and rates["right"] >= 40) or (one and not seen["right"]),
+             "The right glove rate is too low; move closer to its receiver." if seen["right"] else
+             "One glove is enough: fingers and pinch come from the glove; the other hand is optional."),
+            ("position from Coil Pro on both hands", one,
+             "One glove works: fingers and pinch come from it; without a Coil Pro, position comes from the laptop camera."),
         ]
+
+    def messages(self) -> list[str]:
+        rows = self.rows()
+        out = [fix for _, ok, fix in rows if not ok]
+        if any(ok for name, ok, _ in rows if name in ("left glove streaming", "right glove streaming")) and self.stream:
+            frames = [self.stream.latest(s) for s in ("left", "right")]
+            if sum(f is not None for f in frames) == 1:
+                out.append("One glove is connected; fingers and pinch come from it, and the laptop camera supplies position when there is no Coil Pro.")
+        if self.stream is not None and self.stream.connected and not any(self.stream.latest(s) for s in ("left", "right")):
+            out.append("The driver is open but no glove frames arrived for 3 seconds; start streaming in Rokoko.")
+        return out
 
     @property
     def ready(self) -> bool:
-        return all(ok for _, ok, _ in self.rows())
+            rows = self.rows()
+            glove_ok = any(name.endswith("glove streaming") and ok for name, ok, _ in rows)
+            return all(ok for name, ok, _ in rows if name not in ("left glove streaming", "right glove streaming",
+                                                                    "position from Coil Pro on both hands")) and glove_ok
 
     def close(self) -> None:
         if self.stream is not None:
@@ -76,11 +137,20 @@ class Checklist:
         self.stream = GloveStream(self.host, self.port).start()
         end = time.monotonic() + seconds
         previous = None
+        silent_since = time.monotonic()
+        warned_silent = False
         while time.monotonic() < end:
             current = self.rows()
             if live and current != previous:
                 _print(current)
                 previous = current
+            if self.stream.connected and not any(self.stream.latest(s) for s in ("left", "right")):
+                if not warned_silent and time.monotonic() - silent_since >= 3.0:
+                    print("The driver is open but no glove frames arrived for 3 seconds; start streaming in Rokoko.", flush=True)
+                    warned_silent = True
+            else:
+                silent_since = time.monotonic()
+                warned_silent = False
             if self.ready:
                 return True
             time.sleep(0.1)
@@ -100,17 +170,37 @@ def _session_path(value: str | None) -> Path:
     return Path.home() / "kaiku-sessions" / datetime.now().strftime("%Y%m%d-%H%M")
 
 
-def _fallback_session() -> Path | None:
-    root = Path.home() / "kaiku-sessions"
-    candidates = [p for p in root.iterdir()] if root.exists() else []
-    def has_human(p: Path) -> bool:
-        try:
-            return any(json.loads(line).get("env") == 0 and json.loads(line).get("source") == "human"
-                       for line in (p / "episodes.jsonl").read_text().splitlines() if line.strip())
-        except (OSError, ValueError):
-            return False
-    candidates = [p for p in candidates if p.is_dir() and (p / "episodes.jsonl").exists() and has_human(p)]
-    return max(candidates, key=lambda p: p.stat().st_mtime) if candidates else None
+def _free_port(preferred: int) -> tuple[int, bool]:
+    if not _open("127.0.0.1", preferred):
+        return preferred, False
+    port = preferred + 1
+    while _open("127.0.0.1", port):
+        port += 1
+    return port, True
+
+
+def _write_metadata(session: Path, source: str, stream: GloveStream | None = None, driver_version: str | None = None) -> None:
+    data = {"format": 1, "source": source, "start_time": time.time(),
+            "start_iso": datetime.now(timezone.utc).isoformat(), "host": socket.gethostname(),
+            "glove_count": 2, "coil_present": None}
+    if stream is not None:
+        frames = [stream.latest(side) for side in ("left", "right")]
+        data.update({"driver_version": driver_version, "firmware": stream.firmware,
+                     "glove_count": sum(frame is not None for frame in frames),
+                     "coil_present": any(bool(frame and frame.coil_present) for frame in frames)})
+    (session / "session.json").write_text(json.dumps(data, indent=2) + "\n")
+
+
+def _done(session: Path, started: float, source: str, target: int | None = None) -> None:
+    episodes = 0
+    try:
+        episodes = sum(1 for line in (session / "episodes.jsonl").read_text().splitlines()
+                       if line.strip() and json.loads(line).get("env") == 0)
+    except (OSError, ValueError):
+        pass
+    summary = {"scenes_kept": episodes, "scenes_dropped": 0, "seconds": round(time.time() - started, 1),
+               "source": source, "target": target}
+    (session / "DONE").write_text(json.dumps(summary, indent=2) + "\n")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -122,49 +212,52 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--solver-port", type=int, default=12277)
     ap.add_argument("--n", type=int, default=48)
     ap.add_argument("--session-dir", default=None, help="recording folder (default: ~/kaiku-sessions/YYYYMMDD-HHMM)")
-    ap.add_argument("--timeout", type=float, default=5.0, help="seconds to wait for the checklist")
+    ap.add_argument("--wait", type=float, default=300.0, help="seconds to wait for gloves (default: 300)")
+    ap.add_argument("--timeout", type=float, help=argparse.SUPPRESS)
     ap.add_argument("--kaiku-port", type=int, default=8651)
+    ap.add_argument("--target", type=int, default=TARGET_SCENES, help="clean scenes before suggesting you stop")
+    ap.add_argument("--emulator", action="store_true", help="use Kaiku's moving stand-in, without Rokoko hardware")
     args = ap.parse_args(argv)
+    if args.timeout is not None:
+        args.wait = args.timeout
     driver_host = args.driver_host or "127.0.0.1"
     children: list[subprocess.Popen] = []
-    driver_started = False
+    started = time.time()
+    session = _session_path(args.session_dir)
+    source = "emulated" if args.emulator else "smartgloves"
     check = Checklist(driver_host, args.port, args.solver_port)
     try:
-        driver_live = _open(driver_host, args.port)
-        if not _open(driver_host, args.solver_port):
-            solver = _exe("rkk-hand-solver")
-            if solver:
-                command = [solver, "--emit", "world"]
-                if driver_live:
-                    command.append("--no-driver")
-                children.append(subprocess.Popen(command, start_new_session=True))
-                driver_started = not driver_live
-        ready = check.wait(args.timeout, live=True)
+        if args.emulator:
+            ready = True
+        else:
+            driver_live = _open(driver_host, args.port)
+            if not args.check and not _open(driver_host, args.solver_port):
+                solver = _exe("rkk-hand-solver")
+                if solver:
+                    children.append(subprocess.Popen([solver, "--emit", "world", "--driver-arg=--auto-stream-usb"], start_new_session=True))
+            ready = check.wait(args.wait if not args.check else min(args.wait, 1.0), live=True)
         if args.check:
             return 0 if ready else 1
         if not ready:
-            fallback = _fallback_session()
-            if fallback is None:
-                print("Gloves are not ready. Fix the unchecked lines, then run this command again.", file=sys.stderr)
-                return 1
-            print(f"Gloves are not ready. Replaying the last clean session: {fallback}", flush=True)
-            run = subprocess.Popen([sys.executable, "-m", "kaiku.app.run", "--n", str(args.n), "--host", args.host,
-                                    "--port", str(args.kaiku_port), "--session", str(fallback)],
-                                   start_new_session=True)
-            children.append(run)
-            print(f"[x] Kaiku running: http://127.0.0.1:{args.kaiku_port}/", flush=True)
-            return run.wait()
-        session = _session_path(args.session_dir)
+            print("The gloves are not ready yet. Fix the unchecked line above and run this command again.", file=sys.stderr)
+            return 1
+        if check.stream is not None and check.stream.emulated:
+            source = "emulated"
         session.mkdir(parents=True, exist_ok=True)
-        raw = session / "kaiku.rgmp.record"
-        rec = subprocess.Popen([sys.executable, "-m", "kaiku.rgmp.record", "--host", driver_host,
-                                "--port", str(args.port), "--out", str(raw)], start_new_session=True)
-        children.append(rec)
-        run = subprocess.Popen([sys.executable, "-m", "kaiku.app.run", "--n", str(args.n), "--host", args.host,
-                                "--port", str(args.kaiku_port), "--gloves", f"{driver_host}:{args.port}",
-                                "--record", str(session)], start_new_session=True)
+        _write_metadata(session, source, check.stream, str(check.doctor.get("version") or "") or None)
+        kaiku_port, changed = _free_port(args.kaiku_port)
+        if changed:
+            print(f"Port {args.kaiku_port} is already in use; using port {kaiku_port} instead.", flush=True)
+        command = [sys.executable, "-m", "kaiku.app.run", "--n", str(args.n), "--host", args.host,
+                   "--port", str(kaiku_port), "--record", str(session), "--target", str(args.target)]
+        if not args.emulator:
+            raw = session / "kaiku.rgmp.record"
+            children.append(subprocess.Popen([sys.executable, "-m", "kaiku.rgmp.record", "--host", driver_host,
+                                               "--port", str(args.port), "--out", str(raw)], start_new_session=True))
+            command += ["--gloves", f"{driver_host}:{args.port}"]
+        run = subprocess.Popen(command, start_new_session=True)
         children.append(run)
-        print(f"[x] Kaiku running: http://127.0.0.1:{args.kaiku_port}/", flush=True)
+        print(f"Kaiku running: http://127.0.0.1:{kaiku_port}/", flush=True)
         return run.wait()
     except KeyboardInterrupt:
         return 130
@@ -183,9 +276,8 @@ def main(argv: list[str] | None = None) -> int:
                         os.killpg(child.pid, signal.SIGKILL)
                     except OSError:
                         child.kill()
-        if driver_started:
-            # The solver starts the driver in its own process tree; terminate its process only.
-            pass
+        if session.exists() and not args.check:
+            _done(session, started, source, args.target)
 
 
 if __name__ == "__main__":
