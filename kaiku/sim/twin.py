@@ -17,8 +17,15 @@ the floor.
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+# Headless Linux workers have no GLFW display.  MuJoCo's EGL backend uses the
+# software renderer when no GPU is present (the Daytona CPU sandboxes do this),
+# and must be selected before importing mujoco.
+if sys.platform.startswith("linux") and not os.environ.get("MUJOCO_GL"):
+    os.environ["MUJOCO_GL"] = "egl" if not os.environ.get("DISPLAY") else "glfw"
 
 import mujoco
 import numpy as np

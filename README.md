@@ -106,38 +106,36 @@ python -m kaiku.rgmp.replay session.rgmp                      # and serve it aga
 python -m kaiku.policy.fit demos --out policies               # train with and without echoes, test both
 python -m kaiku.policy.rollout policies/kaiku.pt              # 48 robots, 48 new scenes, no operator
 python -m kaiku.data.export demos out --limit 20              # LeRobot v3.0 and GR00T (the page's Dataset tab downloads the last scene)
-pytest                                                        # 139 tests
+pytest                                                        # 142 tests
 ```
 
 ## What is real and what is not
 
 - Everything runs in a MuJoCo twin of the Aaltonomous sorting station. No real G1 has moved yet. The way there is built: `--g1 8000` serves the lead robot to the humanoid challenge's own runner as a policy server ([docs/G1.md](docs/G1.md)). With the runner's mock robot it followed the operator for 60 seconds through the official safety filter: 1,800 ticks, 29.6 commands a second, none clipped.
-- The policy reads where the parts are from the simulator, not from cameras. On the real station that has to come from the head camera.
+- The policy reads where the parts are from the simulator, not from cameras. On the real station that has to come from the head camera. Our first try at that sorts nothing yet (next section).
 - The operator in the study is the stand-in, recorded live at real time on the hosted demo. No real gloves have been worn yet. The glove path runs against Rokoko's real driver and hand solver (Device SDK 2026.10.20) with the driver's emulated Smartgloves II, and against Kaiku's own emulator and recordings.
 - The parts and bins are the challenge's (45 mm cube, cylinder and triangle; red, yellow and blue bins). 3 to 5 parts per scene.
 
-## From the camera, not the simulator
+## From the camera: not yet
 
-The policy can use `--perception camera`.  It takes only the head camera's colour and depth
-images, back-projects the coloured blobs with the calibrated `head_rgb` camera, and reads the
-top outline for shape and turn.  A hidden part keeps its last camera estimate until it is seen
-again.  On 200 rendered parts the clean estimate had 4.12 mm mean position error (15.87 mm at
-the 95th percentile), 20.89 degrees mean turn error after the shape's symmetry, 89% shape
-accuracy and 100% colour accuracy.  With 3 mm depth noise and one-pixel edge noise these were
-5.74 mm, 15.35 mm, 17.35 degrees, 43% and 100%.  The noisy shape number is deliberately left
-as measured; edge pixels are the part that still needs work.
+Every policy number above is for a policy that is told where the parts are by the simulator. We
+also ran the same policy with only the robot's head camera (colour and depth) to tell it. That
+does not work yet.
 
-The camera path tells the policy the estimated part position, turn, shape, colour/bin, next-part
-plan and nearby parts.  The simulator is still the referee for success and clipping, and supplies
-the robot's own arm and hand joint state (a real G1 measures that itself), the fixed camera
-calibration, and the known bin geometry.  No simulator object position, orientation or identity
-is passed to the policy in camera mode.  The full measurements are in
-[`perception.json`](kaiku/policy/pretrained/perception.json).
+| what tells the policy where the parts are | scenes sorted | parts sorted |
+|---|---:|---:|
+| the simulator | 96 of 96 | 370 of 370 |
+| the head camera | 0 of 96 | 19 of 370 |
+| the head camera, 3 mm depth noise and 1 px edge noise | 0 of 96 | 16 of 370 |
 
-For the same 96 seeded scenes, the short one-second smoke comparison was 0/96 complete scenes
-with simulator parts and 0/96 from the camera.  That is a wiring check, not a claim about the
-normal 80-second policy score; the camera renderer is intentionally kept out of the headline
-study numbers until a longer run is practical on this machine.
+Same policy, same 96 scenes, 80 seconds each, one seed. On 200 rendered parts the camera's
+estimate is 3.8 mm off on average (14.8 mm at the 95th percentile), reads the colour right every
+time and the shape 90.5% of the time (68.5% with the noise). A policy trained on exact places does
+not carry over to estimated ones as it is; training it on the camera's estimates is the next step.
+It is a simulated camera in the MuJoCo twin, not a real one on a real G1. In camera mode the policy
+still gets the robot's own joint angles and the bins' known places, and nothing else from the
+simulator. Scene by scene: [`perception_runs.jsonl`](kaiku/policy/pretrained/perception_runs.jsonl)
+and the files beside it; repeat it with `tools/measure_perception_policy.py`.
 
 ## Layout
 

@@ -98,6 +98,15 @@ class CameraPerception:
             d = d[..., 0]
         if self.depth_noise_mm:
             d = d + self.rng.normal(0.0, self.depth_noise_mm / 1000.0, d.shape)
+        if self.edge_noise_px:
+            # Model a depth edge moving by about one pixel.  Keep the colour mask
+            # intact: a camera's RGB segmentation remains a useful shape cue while
+            # the depth discontinuity is the noisy measurement.
+            gx = np.abs(d - np.roll(d, 1, axis=1))
+            gy = np.abs(d - np.roll(d, 1, axis=0))
+            edge = (gx > 0.002) | (gy > 0.002)
+            move = edge & (self.rng.random(d.shape) < min(1.0, self.edge_noise_px * 0.18))
+            d = np.where(move, np.roll(d, 1, axis=1), d)
         yy, xx = np.indices(d.shape)
         # MuJoCo's camera looks along -z; image y points down.
         c = np.stack(((xx - self.cx) * d / self.fx, (self.cy - yy) * d / self.fy, -d), -1)
@@ -131,13 +140,11 @@ class CameraPerception:
         out: list[PartEstimate] = []
         for colour, ec in expected.items():
             mask = (np.linalg.norm(chrom - ec, axis=-1) < 0.09) & (rgb.max(-1) > 35) & region
-            if self.edge_noise_px:
-                # A real depth edge jitters by about one pixel.  Drop a few boundary
-                # pixels so the outline code sees the same uncertainty.
-                boundary = ndimage.binary_dilation(mask) ^ ndimage.binary_erosion(mask)
-                drop = boundary & (self.rng.random(mask.shape) < min(1.0, self.edge_noise_px * 0.18))
-                mask &= ~drop
-            mask = ndimage.binary_closing(mask, iterations=1)
+            # Closing bridges small segmentation gaps before the convex-hull shape
+            # test; it is small compared with the 45 mm parts and does not join
+            # the minimum-spaced components.
+            mask = ndimage.binary_closing(mask, iterations=2 if self.edge_noise_px else 1)
+            mask = ndimage.binary_fill_holes(mask)
             labels, count = ndimage.label(mask, structure=np.ones((3, 3), int))
             for label in range(1, count + 1):
                 pix = labels == label
@@ -178,8 +185,37 @@ class CameraPerception:
                            np.dot(hull[:, 1], np.roll(hull[:, 0], -1)))) / 2.0
         perimeter = float(np.linalg.norm(np.diff(np.vstack([hull, hull[:1]]), axis=0), axis=1).sum()) if len(hull) > 2 else 1.0
         compact = 4.0 * np.pi * area / max(perimeter * perimeter, 1e-9)
-        shape = min(("cube", "cylinder", "triangle"), key=lambda s: abs(compact -
-                    {"cube": 0.785, "cylinder": 0.92, "triangle": 0.605}[s]))
+        if self.edge_noise_px and len(hull) >= 3:
+            # The projected top-face area separates the cube from the two
+            # rounder silhouettes after depth noise; compactness then separates
+            # triangle from cylinder.  These scale with the known part size,
+            # rather than a particular camera resolution.
+            if area > self.scene.size * self.scene.size * 0.69:
+                shape = "cube"
+            elif compact < 0.79:
+                shape = "triangle"
+            else:
+                shape = "cylinder"
+            # Corner reduction is a fallback for very small components where
+            # area is unstable.
+            # Under edge noise compactness drifts toward a circle.  Reduce the
+            # convex hull to its corners: a triangle has three, a cube four,
+            # while a cylinder keeps many.  The tolerance is 10% of a part.
+            poly = hull.copy()
+            while len(poly) > 3:
+                prev, cur, nxt = np.roll(poly, 1, axis=0), poly, np.roll(poly, -1, axis=0)
+                v = nxt - prev
+                w = cur - prev
+                d = np.abs(v[:, 0] * w[:, 1] - v[:, 1] * w[:, 0]) / np.maximum(np.linalg.norm(v), 1e-9)
+                j = int(np.argmin(d))
+                if d[j] > self.scene.size * 0.10:
+                    break
+                poly = np.delete(poly, j, axis=0)
+            if area < self.scene.size * self.scene.size * 0.35:
+                shape = "triangle" if len(poly) <= 3 else shape
+        else:
+            shape = min(("cube", "cylinder", "triangle"), key=lambda s: abs(compact -
+                        {"cube": 0.785, "cylinder": 0.92, "triangle": 0.605}[s]))
         centre = xy.mean(0)
         a = np.arctan2(xy[:, 1] - centre[1], xy[:, 0] - centre[0])
         k = {"cube": 4, "cylinder": 0, "triangle": 3}[shape]

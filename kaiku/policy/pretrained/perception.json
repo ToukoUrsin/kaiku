@@ -1,44 +1,129 @@
 {
   "perception": {
     "camera": "head_rgb",
-    "resolution": [320, 240],
+    "resolution": [
+      320,
+      240
+    ],
     "parts": 200,
+    "development_seed": 777,
     "clean": {
-      "position_error_mm_mean": 4.12,
-      "position_error_mm_p95": 15.87,
-      "yaw_error_deg_mean_symmetry_aware": 20.89,
-      "shape_accuracy": 0.89,
+      "position_error_mm_mean": 3.7976,
+      "position_error_mm_p95": 14.7714,
+      "yaw_error_deg_mean_symmetry_aware": 2.928,
+      "shape_accuracy": 0.905,
       "colour_accuracy": 1.0
     },
     "depth_noise": {
       "depth_noise_mm": 3.0,
       "edge_noise_px": 1.0,
-      "position_error_mm_mean": 5.74,
-      "position_error_mm_p95": 15.35,
-      "yaw_error_deg_mean_symmetry_aware": 17.35,
-      "shape_accuracy": 0.43,
+      "position_error_mm_mean": 5.3884,
+      "position_error_mm_p95": 14.9502,
+      "yaw_error_deg_mean_symmetry_aware": 3.7853,
+      "shape_accuracy": 0.685,
       "colour_accuracy": 1.0
     }
   },
   "policy": {
-    "seed": 100,
+    "evaluation_seed": 100,
     "scenes": 96,
-    "robots_at_once": 16,
-    "episodes": 6,
-    "sim_seconds_cap": 1.0,
+    "parts": 370,
+    "sim_seconds_cap": 80.0,
+    "arms": {
+      "simulator": {
+        "success": 96,
+        "success_rate": 1.0,
+        "success_rate_ci95": [
+          0.962303,
+          1.0
+        ],
+        "sorted": 370,
+        "parts_rate": 1.0,
+        "parts_rate_ci95": [
+          0.99008,
+          1.0
+        ],
+        "clipped_commands": 0,
+        "clipped_scenes": 0
+      },
+      "camera_clean": {
+        "success": 0,
+        "success_rate": 0.0,
+        "success_rate_ci95": [
+          0.0,
+          0.037697
+        ],
+        "sorted": 19,
+        "parts_rate": 0.051351,
+        "parts_rate_ci95": [
+          0.031196,
+          0.079032
+        ],
+        "clipped_commands": 0,
+        "clipped_scenes": 0
+      },
+      "camera_noisy_before_fix": {
+        "success": 0,
+        "success_rate": 0.0,
+        "success_rate_ci95": [
+          0.0,
+          0.037697
+        ],
+        "sorted": 21,
+        "parts_rate": 0.056757,
+        "parts_rate_ci95": [
+          0.035473,
+          0.085453
+        ],
+        "clipped_commands": 0,
+        "clipped_scenes": 0
+      },
+      "camera_noisy_after_fix": {
+        "success": 0,
+        "success_rate": 0.0,
+        "success_rate_ci95": [
+          0.0,
+          0.037697
+        ],
+        "sorted": 16,
+        "parts_rate": 0.043243,
+        "parts_rate_ci95": [
+          0.024916,
+          0.069276
+        ],
+        "clipped_commands": 0,
+        "clipped_scenes": 0
+      }
+    },
+    "noisy_policy_seeds_run": 1,
+    "noisy_policy_second_seed_run": false,
     "simulator_state": {
-      "success": 0,
-      "success_rate": 0.0,
+      "success": 96,
+      "success_rate": 1.0,
       "parts": 370,
-      "sorted": 0,
-      "parts_rate": 0.0
+      "sorted": 370,
+      "parts_rate": 1.0
     },
     "camera": {
       "success": 0,
       "success_rate": 0.0,
-      "parts": 371,
-      "sorted": 0,
-      "parts_rate": 0.0
+      "parts": 370,
+      "sorted": 19,
+      "parts_rate": 0.051351
+    },
+    "camera_noisy_before_fix": {
+      "success": 0,
+      "success_rate": 0.0,
+      "parts": 370,
+      "sorted": 21,
+      "parts_rate": 0.056757
+    },
+    "camera_noisy_after_fix": {
+      "success": 0,
+      "success_rate": 0.0,
+      "parts": 370,
+      "sorted": 16,
+      "parts_rate": 0.043243
     }
   }
 }
