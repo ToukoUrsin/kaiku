@@ -40,6 +40,7 @@
       <div class="segmented" role="radiogroup" aria-label="Who drives the robots" data-ref="mode">
         <button type="button" role="radio" aria-checked="false" data-mode="gloves">Gloves</button>
         <button type="button" role="radio" aria-checked="false" data-mode="autopilot">Autopilot</button>
+        <button type="button" role="radio" aria-checked="false" data-mode="policy" title="The trained policy sorts new scenes with nobody driving">Policy</button>
       </div>
 
       <div class="topbar-end">
@@ -101,7 +102,7 @@
 
       <section class="story" aria-label="Demonstrations">
         <p class="story-chain">
-          <b>1</b> operator
+          <b data-ref="chain-count">1</b> <span data-ref="chain-who">operator</span>
           <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
           <b data-ref="robots">47</b> robots
         </p>
@@ -111,9 +112,9 @@
         </p>
         <p class="story-label" data-ref="demos-label">demonstrations saved</p>
         <dl class="story-stats">
-          <div><dt>Amplification</dt><dd data-ref="amplification">0</dd></div>
-          <div><dt>Echo yield</dt><dd data-ref="yield">0%</dd></div>
-          <div><dt>Per minute</dt><dd data-ref="rate">0</dd></div>
+          <div><dt data-ref="stat1-label">Amplification</dt><dd data-ref="amplification">0</dd></div>
+          <div><dt data-ref="stat2-label">Echo yield</dt><dd data-ref="yield">0%</dd></div>
+          <div><dt data-ref="stat3-label">Per minute</dt><dd data-ref="rate">0</dd></div>
           <div title="Every command passes the challenge's safety filter. Clipped means the filter had to change one.">
             <dt>Clipped commands</dt><dd data-ref="clipped">0</dd>
           </div>
@@ -146,9 +147,9 @@
       <div class="panes">
         <div class="pane" role="tabpanel" id="pane-live" aria-labelledby="tab-live" data-pane="live">
           <dl class="phone-stats" aria-label="Totals">
-            <div><dt>Amplification</dt><dd data-ref="amplification-2">0</dd></div>
-            <div><dt>Echo yield</dt><dd data-ref="yield-2">0%</dd></div>
-            <div><dt>Per minute</dt><dd data-ref="rate-2">0</dd></div>
+            <div><dt data-ref="stat1-label-2">Amplification</dt><dd data-ref="amplification-2">0</dd></div>
+            <div><dt data-ref="stat2-label-2">Echo yield</dt><dd data-ref="yield-2">0%</dd></div>
+            <div><dt data-ref="stat3-label-2">Per minute</dt><dd data-ref="rate-2">0</dd></div>
             <div><dt>Clipped</dt><dd data-ref="clipped-2">0</dd></div>
           </dl>
 
@@ -178,7 +179,7 @@
 
           <section class="block">
             <header class="block-head">
-              <h2>Scene <span data-ref="scene-index"></span></h2>
+              <h2><span data-ref="scene-word">Scene</span> <span data-ref="scene-index"></span></h2>
               <span class="num dim" data-ref="elapsed">0:00</span>
             </header>
             <div class="sorted">
@@ -210,7 +211,7 @@
               <span class="dim" data-ref="fleet-note"></span>
             </header>
             <div class="minimap" data-ref="minimap" role="group" aria-label="Robots. Select one to look closer."></div>
-            <dl class="pair">
+            <dl class="pair" data-ref="lag-pair">
               <div><dt>Mean echo delay</dt><dd class="num" data-ref="lag-mean">0.0 s</dd></div>
               <div><dt>Worst</dt><dd class="num" data-ref="lag-max">0.0 s</dd></div>
             </dl>
@@ -269,6 +270,21 @@
               <li><span class="swatch swatch-kaiku"></span>With Kaiku's echoes<b class="num" data-ref="policy-kaiku"></b></li>
               <li><span class="swatch swatch-plain"></span>Operator's demonstrations alone<b class="num" data-ref="policy-plain"></b></li>
             </ul>
+            <p class="finding" data-ref="finding" hidden></p>
+            <p class="note" data-ref="study-note" hidden></p>
+          </section>
+          <section class="block" data-ref="policy-now" hidden>
+            <header class="block-head">
+              <h2>The policy in this session</h2>
+              <button type="button" class="button button-primary" data-ref="drive">Let it drive</button>
+            </header>
+            <p class="lede" data-ref="drive-note"></p>
+            <dl class="rows">
+              <div class="row"><dt>Trained on</dt><dd data-ref="policy-data"></dd></div>
+              <div class="row"><dt>In testing</dt><dd data-ref="policy-test"></dd></div>
+              <div class="row"><dt>Same operator, no echoes</dt><dd class="num" data-ref="policy-alone"></dd></div>
+              <div class="row"><dt>On its own here</dt><dd data-ref="policy-here"></dd></div>
+            </dl>
           </section>
           <section class="block">
             <header class="block-head">

@@ -1,6 +1,6 @@
 """Behaviour cloning on the recorded demonstrations.
 
-    python -m kaiku.policy.train DATA --out policy.pt [--humans K] [--plain] [--steps 20000]
+    python -m kaiku.policy.train DATA --out policy.pt [--humans K] [--plain] [--steps 30000]
 
 ``--humans K`` uses the operator's first K episodes; ``--plain`` leaves their echoes out.
 """
@@ -40,9 +40,11 @@ def jitter(x: torch.Tensor, y: torch.Tensor, sl: dict, sigma: float, sigma_asked
     return x, y
 
 
-def train(data: Pairs, feat: Featurizer, steps: int = 20000, batch: int = 512, lr: float = 1e-3, width: int = 512,
+def train(data: Pairs, feat: Featurizer, steps: int = 30000, batch: int = 512, lr: float = 1e-3, width: int = 512,
           depth: int = 4, sigma: float = 0.004, sigma_asked: float = 0.002, seed: int = 0, threads: int = 8,
           log=print, every: int = 2000, on_step=None, device: str | None = None) -> Policy:
+    # 30,000 steps: at 20,000 the same data gave anything from 12 % to 92 % of scenes sorted, depending
+    # on which demonstrations were in it; at 30,000 every run we made sorted 96 % or more.
     torch.manual_seed(seed)
     torch.set_num_threads(threads)
     dev = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
@@ -85,7 +87,7 @@ def main(argv=None) -> None:
     ap.add_argument("--out", default="policy.pt")
     ap.add_argument("--humans", type=int, default=None, help="use the operator's first K episodes")
     ap.add_argument("--plain", action="store_true", help="the operator's own demonstrations only, no echoes")
-    ap.add_argument("--steps", type=int, default=20000)
+    ap.add_argument("--steps", type=int, default=30000)
     ap.add_argument("--stride", type=int, default=1)
     ap.add_argument("--threads", type=int, default=8)
     ap.add_argument("--seed", type=int, default=0)

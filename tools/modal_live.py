@@ -42,8 +42,8 @@ def live():
     if not Path(DEMOS).exists() and Path("/data/demos").exists():
         shutil.copytree("/data/demos", DEMOS)             # start from the demonstrations already collected
         vol.commit()
-    subprocess.Popen(["python", "-u", "-m", "kaiku.app.run", "--n", "48", "--port", str(PORT), "--record", DEMOS],
-                     cwd=REMOTE)
+    subprocess.Popen(["python", "-u", "-m", "kaiku.app.run", "--n", "48", "--port", str(PORT), "--record", DEMOS,
+                      "--train-steps", "30000"], cwd=REMOTE)
 
     def keep():
         while True:

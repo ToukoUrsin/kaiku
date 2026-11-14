@@ -21,16 +21,18 @@ WHICH = ("kaiku", "plain")
 
 
 class Trainer:
-    def __init__(self, data: Path | str | None, out: Path | str, backend: str = "local", steps: int = 20000,
-                 scenes: int = 48):
+    def __init__(self, data: Path | str | None, out: Path | str, backend: str = "local", steps: int = 30000,
+                 scenes: int = 48, last: int = 48):
         self.data = Path(data) if data else None
         self.out = Path(out)
         self.backend, self.steps, self.scenes = backend, steps, scenes
+        self.last = last                     # the operator's latest episodes: what a few minutes can train on
         self.proc: subprocess.Popen | None = None
         self.lock = threading.Lock()
         self.jobs: dict[str, dict] = {}
         self.error: str | None = None
-        self.finished = False                # set once per run; the runner clears it when it has the policies
+        self.finished = False                # the run has ended, well or badly
+        self.fresh = False                   # ... and nobody has picked its result up yet
 
     @property
     def busy(self) -> bool:
@@ -40,7 +42,8 @@ class Trainer:
         if self.busy or self.data is None:
             return False
         self.out.mkdir(parents=True, exist_ok=True)
-        common = [str(self.data), "--out", str(self.out), "--steps", str(self.steps), "--scenes", str(self.scenes)]
+        common = [str(self.data), "--out", str(self.out), "--steps", str(self.steps), "--scenes", str(self.scenes),
+                  "--last", str(self.last)]
         if self.backend == "modal":
             cmd = ["uvx", "modal", "run", "tools/modal_policy.py::live", "--data", *common]
         else:
@@ -49,7 +52,7 @@ class Trainer:
                    "kaiku.policy.fit", *common, "--threads", str(max(2, (os.cpu_count() or 4) // 4))]
         with self.lock:
             self.jobs = {w: {"stage": "loading", "progress": 0.0} for w in WHICH}
-            self.error, self.finished = None, False
+            self.error, self.finished, self.fresh = None, False, False
         self.proc = subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                                      start_new_session=True)
         threading.Thread(target=self._read, args=(self.proc,), daemon=True, name="kaiku-trainer").start()
@@ -77,7 +80,7 @@ class Trainer:
             done = all(j.get("stage") == "done" for j in self.jobs.values())
             if not done and self.error is None:
                 self.error = f"Training stopped ({last[-160:] or f'exit code {code}'})."
-            self.finished = True
+            self.finished = self.fresh = True
 
     def status(self) -> dict:
         """Where the training is: ``state`` idle, training, done or failed, and the two jobs."""

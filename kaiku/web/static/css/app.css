@@ -280,6 +280,16 @@ kbd {
   cursor: default;
 }
 
+.button-primary {
+  background: var(--text);
+  box-shadow: none;
+  color: var(--bg);
+}
+
+.button-primary:hover {
+  background: oklch(0.9 0.004 264);
+}
+
 .button-quiet {
   width: 28px;
   padding: 0;
@@ -1025,6 +1035,11 @@ kbd {
   background: var(--text-3);
 }
 
+/* a round the policy sorted with nobody driving */
+.history-bars i[data-policy]::after {
+  background: var(--text);
+}
+
 .history-bars i:last-child {
   animation: grow 500ms var(--ease-out);
 }
@@ -1239,6 +1254,19 @@ kbd {
   width: 14px;
   height: 2px;
   border-radius: 1px;
+}
+
+.finding {
+  margin-top: var(--s-4);
+  color: var(--text);
+  font-size: var(--t-14);
+  font-weight: 500;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.finding + .note {
+  margin-top: 6px;
 }
 
 .swatch-kaiku {

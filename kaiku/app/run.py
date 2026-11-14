@@ -46,11 +46,14 @@ STUDY = HERE / "policy" / "pretrained" / "study.json"
 
 
 class Runner:
-    def __init__(self, n: int = 48, port: int = 8651, host: str = "0.0.0.0", seed: int = 0, parts: str | int = "auto",
+    def __init__(self, n: int = 48, port: int = 8651, host: str = "0.0.0.0", seed: int | None = None,
+                 parts: str | int = "auto",
                  record: Path | str | None = None, hold_s: float = 1.6, lead_timeout_s: float = 90.0,
                  threads: int | None = None, mode: str = "gloves", gloves: str | None = None,
-                 policy: Path | str | None = None, train: str = "local", train_steps: int = 20000,
+                 policy: Path | str | None = None, train: str = "local", train_steps: int = 30000,
                  policy_timeout_s: float = 80.0, stall_s: float = 15.0):
+        if seed is None:                                       # other scenes every time it is started
+            seed = int(np.random.SeedSequence().generate_state(1)[0] % 2 ** 30)
         self.s = Session(n, seed=seed, threads=threads)
         self.n = n
         self.parts = parts
@@ -88,6 +91,7 @@ class Runner:
         self.want = np.zeros(n, int)
         self.last_gain = 0
         self.pol = {"rounds": 0, "scenes": 0, "ok": 0, "parts": 0, "sorted": 0, "clipped": 0}
+        self.trained: dict | None = None                       # what the last press of Train came to
         self.study = json.loads(STUDY.read_text()) if STUDY.exists() else {}
         out = Path(record) / "policies" if record else None
         self.trainer = Trainer(record, out or "policies", train, train_steps)
@@ -242,13 +246,23 @@ class Runner:
                     self.want_mode = self.mode
             self.loading = None
         st = self.trainer.status()
-        if st["state"] in ("done", "failed") and self.trainer.finished:
-            self.trainer.finished = False
+        if self.trainer.fresh:
+            self.trainer.fresh = False
             if st["state"] == "done":
-                self.loading = self.pool.submit(self._load, self.trainer.out / "kaiku.pt")
-                jobs = st["jobs"]
-                self.toast(f"Trained. With the echoes it sorts {jobs['kaiku'].get('success', 0):.0%} of new scenes, "
-                           f"with the operator's demonstrations alone {jobs['plain'].get('success', 0):.0%}.", "info")
+                k, p = st["jobs"]["kaiku"], st["jobs"]["plain"]
+                new, old = k.get("success", 0.0), (self.policy.info.get("success") or 0.0) if self.policy else -1.0
+                # The one that sorts more drives. A training run of a few minutes can come out
+                # worse than the policy that was already here; then that one stays.
+                keep = new + 0.02 >= old
+                self.trained = {"kaiku": new, "plain": p.get("success", 0.0), "humans": k.get("humans"),
+                                "demos": k.get("demos"), "scenes": k.get("scenes"), "in_use": keep}
+                text = (f"Trained. With the echoes it sorts {new:.0%} of new scenes, "
+                        f"with the operator's demonstrations alone {p.get('success', 0.0):.0%}.")
+                if keep:
+                    self.loading = self.pool.submit(self._load, self.trainer.out / "kaiku.pt")
+                else:
+                    text += f" The policy already here sorts {old:.0%}, so it keeps driving."
+                self.toast(text, "info")
             else:
                 self.toast(st["error"] or "Training failed.", "warn")
 
@@ -395,7 +409,8 @@ class Runner:
         out = {"state": "none", "progress": 0.0, "stage": None, "loss": info.get("loss"),
                "success": info.get("success"), "plain": self.plain.get("success"),
                "humans": info.get("humans"), "demos": info.get("demos"), "tested_on": info.get("scenes"),
-               "curve": self.study.get("curve", []), "study": self.study.get("about"),
+               "curve": self.study.get("curve", []), "study": self.study.get("about"), "trained": self.trained,
+               "error": st.get("error") if st["state"] == "failed" else None,
                "alone": {"rounds": p["rounds"], "scenes": p["scenes"], "ok": p["ok"], "parts": p["parts"],
                          "sorted": p["sorted"], "clipped": p["clipped"]}}
         if st["state"] == "training":
@@ -442,7 +457,7 @@ def main(argv=None) -> None:
     ap.add_argument("--n", type=int, default=48, help="robots, the operator's included")
     ap.add_argument("--port", type=int, default=8651)
     ap.add_argument("--host", default="0.0.0.0")
-    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--seed", type=int, default=None, help="for the same scenes again (default: new ones every run)")
     ap.add_argument("--parts", default="auto", help="auto, 3, 4 or 5 parts per scene")
     ap.add_argument("--record", default=None, help="folder to save the demonstrations in")
     ap.add_argument("--threads", type=int, default=None)
@@ -450,7 +465,7 @@ def main(argv=None) -> None:
     ap.add_argument("--policy", default=None, help="a trained policy (default: the one shipped with Kaiku)")
     ap.add_argument("--train", default="local", choices=("local", "modal"),
                     help="where the Train button trains: this machine, or a rented GPU through Modal")
-    ap.add_argument("--train-steps", type=int, default=20000)
+    ap.add_argument("--train-steps", type=int, default=30000)
     ap.add_argument("--gloves", default=None, metavar="HOST[:PORT]",
                     help="RGMP address of the Rokoko driver; without it the stand-in operator drives")
     a = ap.parse_args(argv)

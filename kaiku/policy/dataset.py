@@ -40,6 +40,13 @@ class Pairs:
             keep &= self.human
         return Pairs(self.x[keep], self.y[keep], self.episode[keep], self.human[keep])
 
+    def sample(self, most: int, seed: int = 0) -> "Pairs":
+        """At most ``most`` pairs, drawn evenly: what fits beside the network on one GPU."""
+        if len(self.x) <= most:
+            return self
+        keep = np.sort(np.random.default_rng(seed).choice(len(self.x), most, replace=False))
+        return Pairs(self.x[keep], self.y[keep], self.episode[keep], self.human[keep], self.demos, self.human_demos)
+
 
 def rows_of(root: Path | str) -> list[dict]:
     side = Path(root) / "episodes.jsonl"
@@ -106,10 +113,13 @@ class Loader:
         return out
 
     def load(self, root: Path | str, max_episodes: int | None = None, stride: int = 1, log=None,
-             echoes: bool = True, progress=None, workers: int | None = None) -> Pairs:
+             echoes: bool = True, progress=None, workers: int | None = None, skip: int = 0,
+             last: int | None = None) -> Pairs:
         """Every demonstration in a recorder folder (of its first ``max_episodes`` operator
         episodes that the operator's own robot completed). Without ``echoes``, the operator's
-        own demonstrations only. ``progress(done, total)`` is called after every episode.
+        own demonstrations only; ``skip`` leaves out that many of the earliest episodes, and
+        ``last`` keeps only that many of the latest.
+        ``progress(done, total)`` is called after every episode.
         ``workers`` processes share the episodes (default: one per core, up to 16)."""
         root = Path(root)
         by_file: dict[str, list[dict]] = {}
@@ -117,7 +127,9 @@ class Loader:
             by_file.setdefault(r["file"], []).append(r)
         # The operator's own run failed: nothing to compare against. A file still being written: next time.
         names = [n for n in sorted(by_file) if any(r["source"] == "human" for r in by_file[n]) and (root / n).exists()]
-        names = names[:max_episodes]
+        names = names[skip:][:max_episodes]
+        if last:
+            names = names[-last:]
         if not names:
             raise ValueError(f"no finished demonstrations in {root}")
         jobs = [(root, n, by_file[n], echoes, stride) for n in names]

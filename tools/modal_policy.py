@@ -31,7 +31,7 @@ app = modal.App("kaiku-policy", image=image)
 vol = modal.Volume.from_name("kaiku-demos", create_if_missing=True)
 
 
-@app.function(gpu="T4", cpu=16, memory=32768, timeout=3 * 3600, volumes={"/data": vol})
+@app.function(gpu="T4", cpu=16, memory=49152, timeout=3 * 3600, volumes={"/data": vol})
 def job(cfg: dict) -> dict:
     import sys
     sys.path.insert(0, REMOTE)
@@ -44,13 +44,14 @@ def job(cfg: dict) -> dict:
     t0 = time.time()
     log = lambda m: print(f"[{cfg['name']}] {m}", flush=True)      # noqa: E731
     loader = Loader()
-    data = loader.load("/data/demos", cfg["humans"], cfg.get("stride", 1))
+    data = loader.load(cfg.get("data") or "/data/demos", cfg["humans"], cfg.get("stride", 1), skip=cfg.get("skip", 0))
     demos, humans = data.demos, data.human_demos
     if cfg["plain"]:
         data = data.pick(np.unique(data.episode), echoes=False)
         demos = humans
+    data = data.sample(cfg.get("most", 3_500_000), cfg.get("seed", 0))          # what one T4 holds
     log(f"{len(data.x)} pairs, {demos} demonstrations ({humans} by the operator), loaded in {time.time() - t0:.0f} s")
-    policy = train(data, loader.feat, cfg.get("steps", 20000), cfg.get("batch", 512), width=cfg.get("width", 512),
+    policy = train(data, loader.feat, cfg.get("steps", 30000), cfg.get("batch", 512), width=cfg.get("width", 512),
                    depth=cfg.get("depth", 4), sigma=cfg.get("sigma", 0.004), sigma_asked=cfg.get("sigma_asked", 0.002),
                    seed=cfg.get("seed", 0), threads=16, log=log)
     policy.info.update(humans=int(humans), demos=int(demos), plain=bool(cfg["plain"]))
@@ -90,13 +91,14 @@ def fit_remote(cfg: dict) -> dict:
     sys.path.insert(0, REMOTE)
     from kaiku.policy.fit import fit
 
-    policy = fit(cfg["data"], cfg["which"], f"/data/policies/{cfg['name']}.pt", cfg["steps"], cfg["scenes"])
+    policy = fit(cfg["data"], cfg["which"], f"/data/policies/{cfg['name']}.pt", cfg["steps"], cfg["scenes"],
+                 last=cfg.get("last"))
     vol.commit()
     return policy.info
 
 
 @app.local_entrypoint()
-def live(data: str, out: str, steps: int = 20000, scenes: int = 48):
+def live(data: str, out: str, steps: int = 30000, scenes: int = 48, last: int = 48):
     """The demonstrations of a running session -> ``out/kaiku.pt`` and ``out/plain.pt``."""
     say = lambda **m: print("KAIKU " + json.dumps(m), flush=True)       # noqa: E731
     src, dst, name = Path(data), Path(out), f"live_{int(time.time())}"
@@ -114,7 +116,7 @@ def live(data: str, out: str, steps: int = 20000, scenes: int = 48):
             if f not in have:
                 up.put_file(src / f, f"/live/{f}")
         up.put_file(side, "/live/episodes.jsonl")
-    cfgs = [{"which": w, "name": f"{name}_{w}", "data": "/data/live", "steps": steps, "scenes": scenes}
+    cfgs = [{"which": w, "name": f"{name}_{w}", "data": "/data/live", "steps": steps, "scenes": scenes, "last": last}
             for w in ("kaiku", "plain")]
     try:
         infos = list(fit_remote.map(cfgs))
@@ -130,8 +132,9 @@ def live(data: str, out: str, steps: int = 20000, scenes: int = 48):
 
 
 @app.local_entrypoint()
-def main(humans: str = "1,2,4,8,16,32", only: str = "", name: str = "curve", steps: int = 20000, rounds: int = 2,
-         stride: int = 1, out: str = "", retest: str = "", every: str = "12", parts: int = 0, seeds: str = "0"):
+def main(humans: str = "1,2,4,8,16,32", only: str = "", name: str = "curve", steps: int = 30000, rounds: int = 2,
+         stride: int = 1, out: str = "", retest: str = "", every: str = "12", parts: int = 0, seeds: str = "0", data: str = "",
+         skip: int = 0):
     out_path = Path(out or f"/bulk2/runs/robotteleop/policy/{name}.jsonl")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if retest:
@@ -146,8 +149,11 @@ def main(humans: str = "1,2,4,8,16,32", only: str = "", name: str = "curve", ste
                     if only and only != ("plain" if plain else "kaiku"):
                         continue
                     cfgs.append({"name": f"{name}_{'plain' if plain else 'kaiku'}_{k}_s{seed}", "humans": k,
-                                 "plain": plain, "steps": steps, "rounds": rounds, "stride": stride,
-                                 "every": int(every.split(",")[0]), "parts": parts or None, "seed": seed})
+                                 "plain": plain, "steps": steps, "rounds": rounds,
+                                 # every second tick of the largest sets, so they fit in memory while loading
+                                 "stride": stride if plain else max(stride, -(-k // 64)),
+                                 "every": int(every.split(",")[0]), "parts": parts or None, "seed": seed,
+                                 "data": data, "skip": skip})
         fn = job
     # Written as they come in, so a run that is cut short keeps what it has.
     with open(out_path, "a") as f:

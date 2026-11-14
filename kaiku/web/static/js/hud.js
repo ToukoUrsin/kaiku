@@ -24,8 +24,10 @@ const SOURCE_TEXT = {
   'stand-in': 'Stand-in operator · emulated Smartgloves II',
   gloves: 'Smartgloves II · live',
   autopilot: 'Autopilot · scripted motion',
+  policy: 'Trained policy · nobody is driving',
 };
-const TAG_TEXT = { 'stand-in': 'Stand-in operator', gloves: 'Operator', autopilot: 'Autopilot' };
+const TAG_TEXT = { 'stand-in': 'Stand-in operator', gloves: 'Operator', autopilot: 'Autopilot', policy: 'Policy' };
+const STAGE_TEXT = { loading: 'Reading the demonstrations', training: 'Training', testing: 'Testing on scenes it has not seen', done: 'Finishing' };
 const TOAST_MS = 4200;
 const MAX_TOASTS = 3;
 
@@ -55,7 +57,7 @@ export class Hud {
     this.partsChoice = 'auto';
     this.samplePolicy = flags.sample ? samplePolicy() : null;
 
-    this.demos = { shown: 0, goal: 0, known: false, tickUntil: 0, gainUntil: 0 };
+    this.demos = { shown: 0, goal: 0, known: false, alone: false, tickUntil: 0, gainUntil: 0 };
     this.tag = { x: -1, y: -1, visible: false };
 
     this.onShot = () => {};
@@ -84,8 +86,10 @@ export class Hud {
       const button = event.target.closest('[data-mode]');
       if (!button || button.getAttribute('aria-checked') === 'true') return;
       button.dataset.pending = '';
+      setTimeout(() => delete button.dataset.pending, 4000);      // the runner may say no (no policy yet)
       command('mode', button.dataset.mode);
     });
+    el.drive.addEventListener('click', () => command('mode', this.hud.mode === 'policy' ? 'gloves' : 'policy'));
     el.shots.addEventListener('click', (event) => {
       const button = event.target.closest('[data-shot]');
       if (button) this.onShot(button.dataset.shot);
@@ -229,8 +233,21 @@ export class Hud {
     const robots = echo.robots ?? Math.max(0, (this.nEnvs || 1) - 1);
     this.text('robots', String(robots));
 
-    const demos = (totals.human_demos || 0) + (totals.robot_demos || 0);
+    // With the policy driving there is no operator: the page counts what the robots do alone.
+    const alone = this.hud.mode === 'policy';
+    const policy = this.hud.policy || {};
+    const tally = policy.alone || {};
+    this.text('chain-count', alone ? '0' : '1');
+    this.text('chain-who', alone ? 'operators' : 'operator');
+
+    // While recording, the count is what is on disk: it carries on where the last session stopped.
+    const session = (totals.human_demos || 0) + (totals.robot_demos || 0);
+    const demos = alone ? tally.ok || 0 : dataset.recording && dataset.episodes > session ? dataset.episodes : session;
     const counter = this.demos;
+    if (counter.alone !== alone) {
+      counter.alone = alone;
+      counter.known = false;          // another count altogether: show it, do not roll to it
+    }
     if (!counter.known) {
       counter.shown = demos;
       counter.known = this.hud.totals != null;
@@ -241,12 +258,23 @@ export class Hud {
       this.text('gain', `+${demos - counter.goal}`);
     }
     counter.goal = demos;
-    this.text('demos-label', dataset.recording ? 'demonstrations saved' : 'demonstrations');
+    this.text('demos-label', alone ? 'new scenes sorted with nobody driving'
+      : dataset.recording ? 'demonstrations saved' : 'demonstrations');
 
-    const amplification = Number.isFinite(totals.amplification) ? `${trim(totals.amplification)}×` : '0×';
-    const yieldText = Number.isFinite(totals.yield) ? `${Math.round(totals.yield * 100)}%` : '0%';
-    const rate = Number.isFinite(totals.demos_per_min) ? String(Math.round(totals.demos_per_min)) : '0';
-    const clipped = count(totals.clipped_steps || 0);
+    const labels = alone ? ['Success', 'Operator demos', 'With echoes'] : ['Amplification', 'Echo yield', 'Per minute'];
+    labels.forEach((label, i) => {
+      this.text(`stat${i + 1}-label`, label);
+      this.text(`stat${i + 1}-label-2`, label);
+    });
+    const share = tally.scenes ? tally.ok / tally.scenes : policy.success;
+    const amplification = alone ? (Number.isFinite(share) ? percent(share) : '0%')
+      : Number.isFinite(totals.amplification) ? `${trim(totals.amplification)}×` : '0×';
+    const yieldText = alone ? count(policy.humans || 0)
+      : Number.isFinite(totals.yield) ? `${Math.round(totals.yield * 100)}%` : '0%';
+    const rate = alone ? count(policy.demos || 0)
+      : Number.isFinite(totals.demos_per_min) ? String(Math.round(totals.demos_per_min)) : '0';
+    const clippedSteps = alone ? tally.clipped || 0 : totals.clipped_steps || 0;
+    const clipped = count(clippedSteps);
     this.text('amplification', amplification);
     this.text('amplification-2', amplification);
     this.text('yield', yieldText);
@@ -255,13 +283,15 @@ export class Hud {
     this.text('rate-2', rate);
     this.text('clipped', clipped);
     this.text('clipped-2', clipped);
-    this.attr('clipped', 'data-alert', totals.clipped_steps > 0);
-    this.attr('clipped-2', 'data-alert', totals.clipped_steps > 0);
+    this.attr('clipped', 'data-alert', clippedSteps > 0);
+    this.attr('clipped-2', 'data-alert', clippedSteps > 0);
 
     const who = operator.source === 'autopilot'
       ? 'Autopilot drives one robot.'
       : operator.source === 'gloves' ? 'One operator in Smartgloves II.' : 'Stand-in operator in emulated Smartgloves II.';
-    this.text('caption', `${who} ${robots} robots repeat every motion, each in its own scene.`);
+    this.text('caption', alone
+      ? `Nobody is driving. A policy trained on the demonstrations sorts ${robots} scenes it has never seen.`
+      : `${who} ${robots} robots repeat every motion, each in its own scene.`);
   }
 
   renderOperator() {
@@ -276,29 +306,33 @@ export class Hud {
 
     for (const side of ['left', 'right']) {
       const glove = operator[side] || {};
-      const status = glove.connected ? sentence(glove.status || 'connected') : 'No signal';
+      const status = glove.connected ? sentence(glove.status || 'connected') : source === 'policy' ? 'Not in use' : 'No signal';
       this.text(`${side}-status`, status);
       this.text(`${side}-hz`, glove.connected && Number.isFinite(glove.hz) ? `${Math.round(glove.hz)} Hz` : '');
       this.attr(`${side}-dot`, 'data-state', !glove.connected ? null : glove.status === 'tracking' ? 'tracking' : 'weak');
     }
-    this.text('calibrated', operator.calibrated ? 'Calibrated' : 'Not calibrated');
+    this.text('calibrated', operator.calibrated ? 'Calibrated' : source === 'policy' ? 'Not needed' : 'Not calibrated');
     const calibrating = this.hud.episode?.step === 'calibrating';
     this.text('calibrate', calibrating ? 'Calibrating' : operator.calibrated ? 'Recalibrate' : 'Calibrate');
-    this.attr('calibrate', 'disabled', calibrating || source === 'autopilot');
+    this.attr('calibrate', 'disabled', calibrating || source === 'autopilot' || source === 'policy');
   }
 
   renderEpisode() {
     const episode = this.hud.episode || {};
     const parts = episode.parts || 0;
     const sorted = Math.min(episode.sorted || 0, parts);
+    const alone = this.hud.mode === 'policy';
+    this.text('scene-word', alone ? 'Round' : 'Scene');
     this.text('scene-index', episode.index != null ? String(episode.index) : '');
     this.text('elapsed', clock(episode.elapsed_s || 0));
     this.text('sorted-text', parts ? `${sorted} of ${parts} parts sorted` : 'No parts on the table yet');
 
     const pips = this.el.pips;
-    while (pips.children.length < parts) pips.append(document.createElement('i'));
-    while (pips.children.length > parts) pips.lastChild.remove();
-    for (let i = 0; i < parts; i++) pips.children[i].toggleAttribute('data-on', i < sorted);
+    const dots = alone ? 0 : parts;          // a round is every robot's parts: too many to draw one by one
+    while (pips.children.length < dots) pips.append(document.createElement('i'));
+    while (pips.children.length > dots) pips.lastChild.remove();
+    for (let i = 0; i < dots; i++) pips.children[i].toggleAttribute('data-on', i < sorted);
+    this.show('steps', !alone);
 
     const step = episode.step;
     const at = STEP_ORDER.indexOf(step);
@@ -313,13 +347,13 @@ export class Hud {
         else item.removeAttribute('aria-current');
       }
     }
-    this.text('step-now', STEP_TEXT[step] || '');
+    this.text('step-now', alone ? 'Every robot is sorting a scene it has never seen' : STEP_TEXT[step] || '');
   }
 
   renderHistory() {
     const history = Array.isArray(this.hud.history) ? this.hud.history.slice(-40) : [];
     const last = history[history.length - 1];
-    const key = `${history.length}:${last?.episode}:${last?.ok}`;
+    const key = `${history.length}:${last?.episode}:${last?.ok}:${last?.policy}`;
     if (key === this.historyKey) return;
     this.historyKey = key;
 
@@ -332,12 +366,17 @@ export class Hud {
       bar.style.setProperty('--ok-share', `${Math.round(share * 100)}%`);
       bar.toggleAttribute('data-full', share >= 1);
       bar.toggleAttribute('data-lead-failed', entry.lead_ok === false);
-      bar.title = `Scene ${entry.episode}: ${entry.ok} of ${robots} echoes sorted it`
-        + (entry.lead_ok === false ? ', the operator did not' : '');
+      bar.toggleAttribute('data-policy', Boolean(entry.policy));
+      bar.title = entry.policy
+        ? `Round ${entry.episode}, nobody driving: ${entry.ok} of ${robots} robots sorted their scene`
+        : `Scene ${entry.episode}: ${entry.ok} of ${robots} echoes sorted it`
+          + (entry.lead_ok === false ? ', the operator did not' : '');
       return bar;
     });
     this.el.history.replaceChildren(...bars);
-    this.text('history-note', last ? `Scene ${last.episode}: ${last.ok} of ${last.robots} echoes` : '');
+    this.text('history-note', !last ? '' : last.policy
+      ? `Round ${last.episode}: ${last.ok} of ${last.robots} on their own`
+      : `Scene ${last.episode}: ${last.ok} of ${last.robots} echoes`);
   }
 
   buildMinimap(layout) {
@@ -383,6 +422,7 @@ export class Hud {
     }
     const robots = echo.robots ?? 0;
     this.text('fleet-note', !robots ? '' : echo.done > 0 ? `${echo.ok ?? 0} of ${robots} sorted` : `${robots} working`);
+    this.show('lag-pair', this.hud.mode !== 'policy');
     this.text('lag-mean', seconds(echo.lag_s));
     this.text('lag-max', seconds(echo.lag_max_s));
   }
@@ -412,25 +452,61 @@ export class Hud {
       drawChart(this.el.chart, curve);
       this.show('chart-empty', curve.length === 0);
       const best = curve[curve.length - 1];
-      this.text('policy-kaiku', Number.isFinite(best?.kaiku) ? `${Math.round(best.kaiku * 100)}%` : '');
-      this.text('policy-plain', Number.isFinite(best?.plain) ? `${Math.round(best.plain * 100)}%` : '');
+      this.text('policy-kaiku', Number.isFinite(best?.kaiku) ? percent(best.kaiku) : '');
+      this.text('policy-plain', Number.isFinite(best?.plain) ? percent(best.plain) : '');
+      // the point where the echoes change the most
+      let widest = null;
+      for (const point of curve) {
+        if (!Number.isFinite(point.kaiku) || !Number.isFinite(point.plain)) continue;
+        if (!widest || point.kaiku - point.plain > widest.kaiku - widest.plain) widest = point;
+      }
+      this.show('finding', Boolean(widest));
+      if (widest) {
+        this.text('finding', `From ${widest.demos} demonstrations by the operator: ${percent(widest.plain)} alone, `
+          + `${percent(widest.kaiku)} with echoes.`);
+      }
+      const study = policy?.study;
+      this.show('study-note', Boolean(study?.runs && study?.scenes));
+      if (study?.runs && study?.scenes) {
+        this.text('study-note', `Each point is ${study.runs} training runs, tested on ${study.scenes} scenes neither policy had seen.`);
+      }
     }
     this.show('policy-badge', Boolean(policy?.sample));
+
+    const success = Number.isFinite(policy?.success) ? policy.success : null;
+    const driving = this.hud.mode === 'policy';
+    const has = success != null && state !== 'none';
+    this.show('policy-now', has);
+    if (has) {
+      this.text('drive', driving ? 'Take back control' : 'Let it drive');
+      this.text('drive-note', driving
+        ? 'It is driving every robot now. Nobody is wearing gloves.'
+        : 'Hand every robot to the policy. Each one gets a scene it has never seen.');
+      const echoes = Math.max(0, (policy.demos || 0) - (policy.humans || 0));
+      this.text('policy-data', Number.isFinite(policy.humans)
+        ? `${count(policy.humans)} by the operator, ${count(echoes)} echoes` : 'Demonstrations from this session');
+      this.text('policy-test', `${percent(success)} of ${policy.tested_on || 0} new scenes sorted`);
+      this.text('policy-alone', Number.isFinite(policy.plain) ? percent(policy.plain) : 'Not trained');
+      const tally = policy.alone || {};
+      this.text('policy-here', tally.scenes ? `${count(tally.ok)} of ${count(tally.scenes)} scenes sorted` : 'Not run yet');
+    }
 
     const training = state === 'training';
     const progress = Math.min(1, Math.max(0, policy?.progress || 0));
     this.show('train-meter', training);
     if (training) this.el['train-fill'].style.transform = `scaleX(${progress})`;
     this.attr('train', 'disabled', training);
-    this.text('train', training ? 'Training' : state === 'none' ? 'Train both' : 'Train again');
-    const loss = Number.isFinite(policy?.loss) ? `, loss ${policy.loss.toFixed(4)}` : '';
-    const success = Number.isFinite(policy?.success) ? ` It sorts ${Math.round(policy.success * 100)}% of new scenes.` : '';
-    this.text('train-note', {
-      none: 'Nothing has been trained in this session. Training uses the demonstrations saved so far.',
-      training: `Training both policies: ${Math.round(progress * 100)}%${loss}.`,
-      ready: `Both policies are trained.${success}`,
-      running: `The policy trained with echoes is driving the robots.${success}`,
-    }[state] || '');
+    this.text('train', training ? 'Training' : 'Train both');
+    const loss = Number.isFinite(policy?.loss) && policy?.stage === 'training' ? `, loss ${policy.loss.toFixed(4)}` : '';
+    const trained = policy?.trained;
+    this.text('train-note', training
+      ? `${STAGE_TEXT[policy.stage] || 'Training'}: ${Math.round(progress * 100)}%${loss}.`
+      : policy?.error ? policy.error
+        : trained ? `Last run, on ${trained.scenes || 0} new scenes: ${percent(trained.kaiku)} with the echoes, `
+          + `${percent(trained.plain)} with the operator's demonstrations alone.`
+          + (trained.in_use ? '' : ' The policy that was already here sorts more, so it keeps driving.')
+          : 'Trains two policies on the latest demonstrations of this session, one with the echoes and one without, '
+            + 'then tests both on scenes neither has seen. About four minutes.');
   }
 
   renderControls() {
@@ -461,7 +537,12 @@ export class Hud {
     } else if (hud.episode?.step === 'calibrating') {
       banner = { level: 'info', text: 'Calibrating. Hold both hands flat and still' };
     } else if (hud.status === 'settling' && hud.echo?.robots) {
-      banner = { level: 'ok', text: `Scene ${hud.episode?.index ?? ''} sorted by ${hud.echo.ok ?? 0} of ${hud.echo.robots} echoes` };
+      banner = {
+        level: 'ok',
+        text: hud.mode === 'policy'
+          ? `${hud.echo.ok ?? 0} of ${hud.echo.robots} robots sorted their scene with nobody driving`
+          : `Scene ${hud.episode?.index ?? ''} sorted by ${hud.echo.ok ?? 0} of ${hud.echo.robots} echoes`,
+      };
     }
 
     this.bannerRun = banner?.run || null;
@@ -492,12 +573,13 @@ export class Hud {
     if (env < 0) return;
     const { envs = {}, episode = {} } = this.hud;
     const state = this.states ? this.states[env] : IDLE;
-    this.text('focus-title', env === 0 ? "The operator's robot" : `Robot ${env + 1}`);
     this.text('focus-state', STATE_TEXT[state] || STATE_TEXT[IDLE]);
     this.attr('focus-dot', 'data-state', STATE_NAMES[state] || 'idle');
-    const parts = episode.parts || 0;
+    const alone = this.hud.mode === 'policy';
+    const parts = envs.parts?.[env] ?? (alone ? 0 : episode.parts || 0);
+    this.text('focus-title', env === 0 && !alone ? "The operator's robot" : `Robot ${env + 1}`);
     this.text('focus-sorted', parts ? `${Math.min(envs.sorted?.[env] ?? 0, parts)} of ${parts}` : 'None yet');
-    this.text('focus-lag', env === 0 ? 'Leads' : seconds(envs.lag_s?.[env]));
+    this.text('focus-lag', alone ? 'No operator' : env === 0 ? 'Leads' : seconds(envs.lag_s?.[env]));
     this.text('focus-clipped', count(envs.clipped?.[env] || 0));
   }
 
@@ -575,6 +657,10 @@ export class Hud {
 
 function count(n) {
   return Math.round(n).toLocaleString('en-US');
+}
+
+function percent(share) {
+  return `${Math.round(share * 100)}%`;
 }
 
 function trim(n) {

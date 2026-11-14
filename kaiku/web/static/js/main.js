@@ -66,10 +66,16 @@ async function boot() {
 
   let lag = null;
   let running = false;
+  let alone = false;              // the policy is driving: no operator, so no echo to draw
   stream.onHud = (message) => {
     const data = flags.preview ? previewHud(message, flags.preview) : message;
     lag = Array.isArray(data.envs?.lag_s) ? data.envs.lag_s : null;
     running = data.status === 'running';
+    if ((data.mode === 'policy') !== alone) {
+      // The policy drives every robot, so look at all of them; with an operator, look at the operator.
+      alone = data.mode === 'policy';
+      if (rig.focus < 0 && rig.shot in rig.shots) rig.goTo(alone ? 'overview' : flags.shot);
+    }
     hands.setHands(data.operator?.hands || null, performance.now());
     hud.setHud(data);
   };
@@ -179,7 +185,7 @@ async function boot() {
     markers.update(stream.state, lag, seconds, dt);
 
     // the echo rings run while motion is flowing and rest when it is not
-    ripple += ((flowing && running ? 1 : 0) - ripple) * (1 - Math.exp(-dt * 3));
+    ripple += ((flowing && running && !alone ? 1 : 0) - ripple) * (1 - Math.exp(-dt * 3));
     stage.ring.uRipple.value = ripple;
 
     stage.aimShadow(rig.target(target), rig.distance);
