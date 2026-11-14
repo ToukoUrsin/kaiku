@@ -29,6 +29,9 @@ VIDEO_KEYS = tuple(f"observation.images.{x}" for x in CAMS)
 GROUPS = {"left_arm": (0, 7), "right_arm": (7, 14), "left_hand": (14, 21), "right_hand": (21, 28)}
 ROBOT_TYPE = "unitree_g1_29dof_dex3"
 ANNOTATION = "annotation.human.task_description"
+PARTS = "observation.environment_state"      # where the parts are: what the shipped policy reads besides the robot
+PARTS_MAX = 5                                 # a scene has 3 to 5 parts; a scene with fewer is padded with zeros
+POSE = ("x", "y", "z", "qw", "qx", "qy", "qz")
 
 
 def arm_velocity(q: np.ndarray, fps: float = FPS) -> np.ndarray:
@@ -53,19 +56,22 @@ def _names(prefixes: tuple[str, str], arm_names: list[str], hand_names: list[str
     return [f"{prefixes[0]}.{x}" for x in arm_names] + [f"{prefixes[1]}.{x}" for x in hand_names]
 
 
-def _feature_info(arm_names: list[str], hand_names: list[str], depth: bool = False) -> dict:
+def _feature_info(arm_names: list[str], hand_names: list[str], cameras: bool = False, depth: bool = False) -> dict:
+    """What every frame holds. The camera streams are listed only when their videos were rendered."""
     names = _names(("arm_q", "hand_q"), arm_names, hand_names)
     action_names = _names(("arm_q_target", "hand_q_target"), arm_names, hand_names)
     f = {
         "observation.state": {"dtype": "float32", "shape": [28], "names": names},
         "observation.arm_dq": {"dtype": "float32", "shape": [14], "names": [f"arm_dq.{x}" for x in arm_names]},
+        PARTS: {"dtype": "float32", "shape": [PARTS_MAX * 7],
+                "names": [f"part_{i}.{k}" for i in range(PARTS_MAX) for k in POSE]},
         "action": {"dtype": "float32", "shape": [28], "names": action_names},
     }
-    for key in VIDEO_KEYS:
+    for key in VIDEO_KEYS if cameras else ():
         f[key] = {"dtype": "video", "shape": [H, W, 3], "names": ["height", "width", "channels"],
                   "info": {"video.height": H, "video.width": W, "video.codec": "h264", "video.pix_fmt": "yuv420p",
                            "video.fps": FPS, "video.channels": 3, "has_audio": False}}
-    if depth:
+    if cameras and depth:
         f["observation.images.head_depth"] = {"dtype": "video", "shape": [H, W, 1],
                                                "names": ["height", "width", "channels"],
                                                "info": {"is_depth_map": True, "depth_unit": "mm"}}
@@ -80,10 +86,18 @@ def _feature_info(arm_names: list[str], hand_names: list[str], depth: bool = Fal
     return f
 
 
-def _columns(state, action, dq, task_index, episode_index, start):
+def _part_poses(parts: np.ndarray) -> np.ndarray:
+    """(T, P, 7) part poses as (T, PARTS_MAX * 7): position and quaternion of each part, in the layout's order."""
+    out = np.zeros((len(parts), PARTS_MAX, 7), np.float32)
+    count = min(parts.shape[1], PARTS_MAX)
+    out[:, :count] = parts[:, :count]
+    return out.reshape(len(parts), -1)
+
+
+def _columns(state, action, dq, parts, task_index, episode_index, start):
     n = len(state)
     return {"observation.state": state.astype(np.float32), "observation.arm_dq": dq.astype(np.float32),
-            "action": action.astype(np.float32), "timestamp": (np.arange(n) / FPS).astype(np.float32),
+            PARTS: _part_poses(parts), "action": action.astype(np.float32), "timestamp": (np.arange(n) / FPS).astype(np.float32),
             "frame_index": np.arange(n, dtype=np.int64), "episode_index": np.full(n, episode_index, np.int64),
             "index": np.arange(start, start + n, dtype=np.int64), "task_index": np.full(n, task_index, np.int64),
             ANNOTATION: np.full(n, task_index, np.int64), "next.reward": np.zeros(n, np.float32),
@@ -234,15 +248,20 @@ def _prepare_episode(src: Path, row: dict):
 def _card(root: Path, count: int, frames: int, cameras: bool, depth: bool, fmt: str) -> None:
     camera_note = ("Cameras were rendered by kinematic replay in the Kaiku MuJoCo twin using the challenge calibration."
                    if cameras else
-                   "Camera videos were not rendered in this export; rerun with --render-cameras on a machine with MuJoCo EGL.")
+                   "No camera video is in this export and `meta/info.json` lists none; rerun with --render-cameras on a "
+                   "machine with MuJoCo EGL to add the twin's three cameras.")
     depth_note = ("included as a zero-free head-depth stream when requested." if depth
                   else "not included (the recorder has no depth).")
     (root / "DATA_CARD.md").write_text(f"""# Kaiku demonstrations
 
 This dataset contains {count} simulated Unitree G1 + Dex3 sorting demonstrations ({frames} frames at 30 Hz).
 Each recorder row is one episode and is clipped to its recorded `span`; no kept row had a clipped safety command.
-The operator is a scripted stand-in wearing emulated smartgloves unless the sidecar says otherwise. Echo rows are
-kinematic fan-out copies with their own scene layout. `observation.arm_dq` is derived from measured arm angles with
+`meta/aalto_episodes.jsonl` says for every episode who did it: `source` is `operator` (the robot somebody drove) or
+`echo` (one of the other robots redoing that run around its own parts, in physics), and `driven_by` names the
+operator: the scripted stand-in in emulated Smartgloves, a visitor's pointer or camera hand, or real Smartgloves.
+`observation.environment_state` is where the parts are: {PARTS_MAX} parts times position (x, y, z) and quaternion
+(w, x, y, z), in the order of that episode's `layout`, zeros for parts a scene does not have. The simulator gives it;
+with the robot state it is what the shipped policy reads. `observation.arm_dq` is derived from measured arm angles with
 a central difference at 30 Hz (one-sided differences at episode boundaries), because the recorder has no velocities.
 {camera_note}
 The GR00T copy is LeRobot v2.1 with `meta/modality.json`; the other copy is the LeRobot v3.0-compatible direct layout
@@ -286,7 +305,7 @@ def export(recorder_dir: str | Path, out_dir: str | Path, *, limit: int | None =
         state, action, parts, a, b = _prepare_episode(src, row)
         instruction = row.get("instruction", "Sort the parts into the coloured bins.")
         task = tasks.setdefault(instruction, len(tasks))
-        cols = _columns(state, action, arm_velocity(state[:, :14]), task, ep, total)
+        cols = _columns(state, action, arm_velocity(state[:, :14]), parts, task, ep, total)
         videos = {}
         if renderer:
             frames = {k: [] for k in CAMS}
@@ -299,21 +318,25 @@ def export(recorder_dir: str | Path, out_dir: str | Path, *, limit: int | None =
             for key, frames in videos.items():
                 _encode_video(frames, root / "videos" / f"chunk-{chunk:03d}" / key / f"episode_{ep:06d}.mp4")
         episodes.append({"episode_index": ep, "tasks": [instruction], "length": b - a})
-        side.append({"episode_index": ep, "source": row.get("source", "human"), "operator_episode": row.get("episode"),
+        lead = row.get("source", "human") != "echo"
+        side.append({"episode_index": ep, "source": "operator" if lead else "echo",
+                     "driven_by": row.get("operator") if lead else "echo of the operator's run",
+                     "parts": len(row.get("layout") or []) or int(parts.shape[1]), "operator_episode": row.get("episode"),
                      "frames": [a, b], "clipped_steps": 0, "success": row.get("success", True), "task": row.get("task"),
                      "instruction": instruction, "mapping": row.get("mapping"), "layout": row.get("layout"),
                      "operator": row.get("operator"), "lag_s": row.get("lag_s")})
         stats.append({"episode_index": ep, "stats": _stats(cols, videos, b - a)})
         total += b - a
-    features = _feature_info(arm_names, hand_names, depth=False)
+    features = _feature_info(arm_names, hand_names, cameras=bool(renderer), depth=False)
     info_common = {"robot_type": ROBOT_TYPE, "total_episodes": len(episodes), "total_frames": total,
-                   "total_tasks": len(tasks), "total_videos": len(episodes) * len(CAMS), "fps": FPS,
+                   "total_tasks": len(tasks), "total_videos": len(episodes) * len(CAMS) if renderer else 0, "fps": FPS,
                    "splits": {"train": f"0:{len(episodes)}"}, "features": features}
+    video_path = ({"video_path": "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4"}
+                  if renderer else {})
     info_g = {"codebase_version": "v2.1", "chunks_size": 1000, "total_chunks": (len(episodes) + 999) // 1000,
-              "data_path": "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet",
-              "video_path": "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4", **info_common}
+              "data_path": "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet", **video_path, **info_common}
     info_v = {"codebase_version": "v3.0", "data_path": "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet",
-              "video_path": "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4", **info_common}
+              **video_path, **info_common}
     _jsonl(groot / "meta" / "episodes.jsonl", episodes); _jsonl(v3 / "meta" / "episodes.jsonl", episodes)
     tasks_rows = [{"task_index": i, "task": text} for text, i in tasks.items()]
     for root, info in ((groot, info_g), (v3, info_v)):
@@ -324,7 +347,7 @@ def export(recorder_dir: str | Path, out_dir: str | Path, *, limit: int | None =
         if root == groot:
             (root / "meta" / "modality.json").write_text(json.dumps({"state": {k: {"start": a, "end": b} for k, (a, b) in GROUPS.items()},
                 "action": {k: {"start": a, "end": b} for k, (a, b) in GROUPS.items()},
-                "video": {k.split(".")[-1]: {"original_key": k} for k in VIDEO_KEYS},
+                "video": {k.split(".")[-1]: {"original_key": k} for k in VIDEO_KEYS} if renderer else {},
                 "annotation": {"human.task_description": {"original_key": "task_index"}}}, indent=2))
         _card(root, len(episodes), total, bool(renderer), False, "v2.1" if root == groot else "v3.0")
     return {"episodes": len(episodes), "frames": total, "groot": groot, "lerobot": v3}

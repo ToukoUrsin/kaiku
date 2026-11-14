@@ -57,7 +57,7 @@ h2 { font-size: 76px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 6
   <p class="kicker">The problem</p>
   <h2>A robot learns a job by watching a person do it.</h2>
   <p class="lede">Sorting parts took our robot 128 demonstrations to get to 92%.<br>
-  Every one of them is a person in gloves, at one robot, at one table.</p>
+  Each one is the whole job, done once at one robot and one table. In real use that is a person's time. Ours came from a scripted hand.</p>
 </section>
 <section class="slide picture" style="background-image:linear-gradient(180deg,#0c0d10e6 0%,#0c0d1099 16%,#0c0d1000 30%),url(img/overview.jpg)">
   <div class="caption">
@@ -75,8 +75,8 @@ h2 { font-size: 76px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 6
   </ol>
 </section>
 <section class="slide figure">
-  <h2>16 demonstrations: under 1% alone, 81% with echoes.</h2>
-  <p class="lede">32 with echoes beat 128 without. The operator wears the gloves a quarter of the time.</p>
+  <h2>32 demonstrations: 58% alone, 95% with echoes.</h2>
+  <p class="lede">32 with echoes beat 128 without (92%). The operator wears the gloves a quarter of the time.</p>
   <svg class="chart" viewBox="0 0 1620 620" width="1620" height="620" role="img" aria-label="Share of new scenes sorted, by number of demonstrations, alone and with echoes">
 <line class="axis" x1="110" x2="1380" y1="520.0" y2="520.0"/>
 <text class="tick" x="86" y="529.0" text-anchor="end">0%</text>
@@ -92,29 +92,29 @@ h2 { font-size: 76px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 6
 <text class="tick" x="1168.3333333333333" y="568" text-anchor="middle">64</text>
 <text class="tick" x="1380.0" y="568" text-anchor="middle">128</text>
 <text class="axis-title" x="1416" y="568">demonstrations</text>
-<line class="gap" x1="745.0" x2="745.0" y1="504.355" y2="153.72299999999996"/>
+<line class="gap" x1="956.6666666666666" x2="956.6666666666666" y1="233.49400000000003" y2="86.84199999999998"/>
 <path class="series plain" d="M110.0 520.0 L321.7 520.0 L533.3 520.0 L745.0 518.4 L956.7 247.5 L1168.3 131.6 L1380.0 85.9"/>
 <circle class="dot plain" cx="110.0" cy="520.0" r="7"/>
 <circle class="dot plain" cx="321.7" cy="520.0" r="7"/>
 <circle class="dot plain" cx="533.3" cy="520.0" r="7"/>
-<circle class="dot plain" cx="745.0" cy="518.4" r="11"/>
-<circle class="dot plain" cx="956.7" cy="247.5" r="7"/>
+<circle class="dot plain" cx="745.0" cy="518.4" r="7"/>
+<circle class="dot plain" cx="956.7" cy="247.5" r="11"/>
 <circle class="dot plain" cx="1168.3" cy="131.6" r="7"/>
 <circle class="dot plain" cx="1380.0" cy="85.9" r="7"/>
 <path class="series kaiku" d="M110.0 516.8 L321.7 413.9 L533.3 350.3 L745.0 139.7 L956.7 72.8 L1168.3 58.1 L1380.0 54.9"/>
 <circle class="dot kaiku" cx="110.0" cy="516.8" r="7"/>
 <circle class="dot kaiku" cx="321.7" cy="413.9" r="7"/>
 <circle class="dot kaiku" cx="533.3" cy="350.3" r="7"/>
-<circle class="dot kaiku" cx="745.0" cy="139.7" r="11"/>
-<circle class="dot kaiku" cx="956.7" cy="72.8" r="7"/>
+<circle class="dot kaiku" cx="745.0" cy="139.7" r="7"/>
+<circle class="dot kaiku" cx="956.7" cy="72.8" r="11"/>
 <circle class="dot kaiku" cx="1168.3" cy="58.1" r="7"/>
 <circle class="dot kaiku" cx="1380.0" cy="54.9" r="7"/>
-<text class="value" x="719.0" y="131.72299999999996" text-anchor="end">81%</text>
-<text class="value quiet" x="719.0" y="492.355" text-anchor="end">under 1%</text>
+<text class="value" x="930.6666666666666" y="64.84199999999998" text-anchor="end">95%</text>
+<text class="value quiet" x="930.6666666666666" y="221.49400000000003" text-anchor="end">58%</text>
 <text class="name" x="1416" y="50.88799999999998">with echoes</text>
 <text class="name quiet" x="1416" y="115.90800000000002">operator alone</text>
 </svg>
-  <p class="note">Share of 96 scenes nobody had seen in which every part ended in its own bin. Mean of 3 training runs. Other sets of 16 gave 0% to 31% alone.</p>
+  <p class="note">Share of 96 scenes nobody had seen in which every part ended in its own bin. Mean of 3 training runs. At 16 demonstrations: under 1% alone, 81% with echoes (other sets of 16 gave 0% to 31% alone).</p>
 </section>
 <section class="slide figure">
   <p class="kicker">Against redoing it afterwards, from recordings</p>
@@ -134,7 +134,7 @@ h2 { font-size: 76px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 6
   <h2>Built on the challenge's own parts.</h2>
   <ol class="points">
     <li><b>Real Smartgloves on a real person.</b> Rokoko's driver and hand solver read them. Kaiku takes their stream as it is.</li>
-    <li><b>The G1 gets its real commands.</b> The challenge's own runner took 1,800 in a row through its safety filter, none clipped.</li>
+    <li><b>The commands a real G1 takes.</b> The challenge's own runner, with its mock robot, took 1,800 in a row through its safety filter, none clipped.</li>
     <li><b>The data is the challenge's format,</b> LeRobot v3.0 and GR00T, ready to train on.</li>
     <li class="quiet"><b>Not yet: a real G1.</b> Everything runs in a physics twin of the sorting station.</li>
   </ol>

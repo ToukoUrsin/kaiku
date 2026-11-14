@@ -24,7 +24,7 @@ W, H = 1920, 1080
 WORDS = {
     "none": {
         "title": "One hand,<br>48 robots.",
-        "each": "Every one of them is a person at one robot, at one table.",
+        "each": "Each one is the whole job, done once at one robot and one table.",
         "quarter": "The operator works a quarter of the time.",
         "after": "Then nobody drives.",
         "rokoko": "<b>A person's hand drives the fingers,</b> seen by a camera, down the path Rokoko's gloves use. "
@@ -32,7 +32,7 @@ WORDS = {
     },
     "gloves": {
         "title": "One pair of<br>Rokoko gloves,<br>48 robots.",
-        "each": "Every one of them is a person in gloves, at one robot, at one table.",
+        "each": "Each one is the whole job, done once at one robot and one table.",
         "quarter": "The operator wears the gloves a quarter of the time.",
         "after": "Then the gloves come off.",
         "rokoko": "<b>Real Smartgloves on a real person.</b> Rokoko's driver and hand solver read them. Kaiku takes their stream as it is.",
@@ -77,7 +77,7 @@ def chart(curve: list[dict]) -> str:
     for x, point in zip(xs, curve):
         out.append(f'<text class="tick" x="{x}" y="{bottom + 48}" text-anchor="middle">{point["demos"]}</text>')
     out.append(f'<text class="axis-title" x="{right + 36}" y="{bottom + 48}">demonstrations</text>')
-    marked = next(i for i, p in enumerate(curve) if p["demos"] == 16)
+    marked = next(i for i, p in enumerate(curve) if p["demos"] == 32)
     out.append(f'<line class="gap" x1="{xs[marked]}" x2="{xs[marked]}" y1="{y(curve[marked]["plain"]) - 14}" '
                f'y2="{y(curve[marked]["kaiku"]) + 14}"/>')
     for series in ("plain", "kaiku"):
@@ -100,6 +100,9 @@ def slides(study: dict, words: dict, base: dict) -> list[str]:
     curve = [p for p in study["curve"] if p["demos"] >= 2]
     by = {p["demos"]: p for p in study["curve"]}
     about = study["about"]
+    # Who did the demonstrations the study counts: said as it is, whatever drives the demo now.
+    whose = ("In real use that is a person's time. Ours came from a scripted hand." if "stand-in" in about.get("operator", "stand-in")
+             else "Ours came from a person in Rokoko gloves.")
     return [
         f"""<section class="slide cover" style="background-image:linear-gradient(90deg,#0c0d10 0%,#0c0d10f2 26%,#0c0d1000 56%),url(img/lead.jpg)">
   <div class="mark">Kaiku</div>
@@ -110,7 +113,7 @@ def slides(study: dict, words: dict, base: dict) -> list[str]:
   <p class="kicker">The problem</p>
   <h2>A robot learns a job by watching a person do it.</h2>
   <p class="lede">Sorting parts took our robot 128 demonstrations to get to {pct(by[128]["plain"])}.<br>
-  {words["each"]}</p>
+  {words["each"]} {whose}</p>
 </section>""",
         """<section class="slide picture" style="background-image:linear-gradient(180deg,#0c0d10e6 0%,#0c0d1099 16%,#0c0d1000 30%),url(img/overview.jpg)">
   <div class="caption">
@@ -128,10 +131,10 @@ def slides(study: dict, words: dict, base: dict) -> list[str]:
   </ol>
 </section>""",
         f"""<section class="slide figure">
-  <h2>16 demonstrations: {pct(by[16]["plain"])} alone, {pct(by[16]["kaiku"])} with echoes.</h2>
-  <p class="lede">32 with echoes beat 128 without. {words["quarter"]}</p>
+  <h2>32 demonstrations: {pct(by[32]["plain"])} alone, {pct(by[32]["kaiku"])} with echoes.</h2>
+  <p class="lede">32 with echoes beat 128 without ({pct(by[128]["plain"])}). {words["quarter"]}</p>
   {chart(curve)}
-  <p class="note">Share of {about["scenes"]} scenes nobody had seen in which every part ended in its own bin. Mean of {about["runs"]} training runs. Other sets of 16 gave 0% to 31% alone.</p>
+  <p class="note">Share of {about["scenes"]} scenes nobody had seen in which every part ended in its own bin. Mean of {about["runs"]} training runs. At 16 demonstrations: {pct(by[16]["plain"])} alone, {pct(by[16]["kaiku"])} with echoes (other sets of 16 gave 0% to 31% alone).</p>
 </section>""",
         f"""<section class="slide figure">
   <p class="kicker">Against redoing it afterwards, from recordings</p>
@@ -151,7 +154,7 @@ def slides(study: dict, words: dict, base: dict) -> list[str]:
   <h2>Built on the challenge's own parts.</h2>
   <ol class="points">
     <li>{words["rokoko"]}</li>
-    <li><b>The G1 gets its real commands.</b> The challenge's own runner took 1,800 in a row through its safety filter, none clipped.</li>
+    <li><b>The commands a real G1 takes.</b> The challenge's own runner, with its mock robot, took 1,800 in a row through its safety filter, none clipped.</li>
     <li><b>The data is the challenge's format,</b> LeRobot v3.0 and GR00T, ready to train on.</li>
     <li class="quiet"><b>Not yet: a real G1.</b> Everything runs in a physics twin of the sorting station.</li>
   </ol>

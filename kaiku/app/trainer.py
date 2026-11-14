@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 WHICH = ("kaiku", "plain")
 SMOOTH_S = 45.0                      # how slowly the time left may change its mind
-MODAL_ABOUT_MIN = 4.0                # what a run on rented GPUs takes, start to result
+MODAL_ABOUT_MIN = 6.0                # what a run on rented GPUs takes, start to result (5.9 measured on the hosted demo)
 MODAL_RUNS = int(os.environ.get("KAIKU_MODAL_RUNS", "40"))     # rented runs a demo may start; after that it trains here
 
 

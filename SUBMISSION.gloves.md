@@ -26,7 +26,7 @@ Every command is checked against the speed and workspace limits Junction's human
 
 ## How we used Modal
 
-Every number above was trained on Modal, 63 runs in all, each on its own GPU. The Train both button on the live page trains two policies on Modal while you watch, one with the echoes and one without, about four minutes from the click to the result.
+Every number above was trained on Modal, 63 runs in all, each on its own GPU. The Train both button on the live page trains two policies on Modal while you watch, one with the echoes and one without, about six minutes from the click to the result.
 
 ## Deck line
 
@@ -34,7 +34,7 @@ One operator in Rokoko gloves drives one robot. 47 more redo the job on their ow
 
 ## Booth pitch
 
-One person wore Rokoko gloves and sorted parts with one robot. Behind it 47 more robots did the same job, each on a table where the parts lie somewhere else. A policy trained on 16 demonstrations sorted almost no new scenes. With the echoes, 81%. That is the recording playing now. Hold your hand up to the camera and you drive it yourself.
+One person wore Rokoko gloves and sorted parts with one robot. Behind it 47 more robots did the same job, each on a table where the parts lie somewhere else. A policy trained on 32 demonstrations sorted 58% of new tables. With the echoes, 95%. That is the recording playing now. Hold your hand up to the camera and you drive it yourself.
 
 ## If it was one glove
 
