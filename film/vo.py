@@ -140,7 +140,7 @@ def main() -> None:
     out = work / "vo"
     out.mkdir(parents=True, exist_ok=True)
     for shot in film["shots"]:
-        for key in ("vo", "vo_real"):
+        for key in ("vo", "vo_real", "vo_bare"):
             for line in shot.get(key, []):
                 text = spoken(film, line["text"])
                 k = line_key(text, voice)

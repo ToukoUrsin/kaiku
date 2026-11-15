@@ -98,6 +98,8 @@
    "label_robot": "The robot's hand, same moment",
    "head_real": "A person's hand in a Rokoko Smartglove drives the robot",
    "label_real": "A real hand, a real glove",
+   "head_bare": "A person's hand drives the robot",
+   "label_bare": "Our own hand, read by the laptop's camera",
    "vo": [
     {
      "at": 0.5,
@@ -108,6 +110,12 @@
     {
      "at": 0.5,
      "text": "This is a person's hand in a Rokoko glove. The glove drives the first robot's fingers."
+    }
+   ],
+   "vo_bare": [
+    {
+     "at": 0.5,
+     "text": "This is our own hand at Junction. The laptop's camera reads it, and the first robot follows."
     }
    ]
   },

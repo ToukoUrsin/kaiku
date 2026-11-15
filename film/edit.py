@@ -222,7 +222,8 @@ def plan(work: Path, use_open: bool = True) -> None:
     fill = lambda text: text.format(**{k: v for k, v in n.items() if k != "about"})
     e = html.escape
     kind = (clips / "shot2.kind").read_text().strip() if (clips / "shot2.kind").exists() else "standin"
-    real = kind == "real"
+    real = kind in ("real", "bare")                             # bare: our own hand at the laptop's camera, no glove
+    sfx = "_bare" if kind == "bare" else "_real"
     facts: dict = {"shot1": kind, "shots": {}, "checks": []}
     ok = facts["checks"].append
     shots = {s["id"]: s for s in film["shots"]}
@@ -267,7 +268,7 @@ def plan(work: Path, use_open: bool = True) -> None:
     # ---- voice: where every line and every word falls
     t, total, vo, srt = 0.0, round(sum(dur(s) for s in film["shots"]), 3), [], []
     for shot in film["shots"]:
-        lines = shot.get("vo_real", shot["vo"]) if shot.get("swappable") and real else shot.get("vo", [])
+        lines = shot.get("vo" + sfx, shot["vo"]) if shot.get("swappable") and real else shot.get("vo", [])
         for ln in lines:
             text = spoken(film, ln["text"])
             key = line_key(text, film["voice"])
@@ -390,7 +391,7 @@ def plan(work: Path, use_open: bool = True) -> None:
         recipe[sid] = {"inputs": ["-i", "in/shot2.mp4"] + (last if op else []), "n": 2 if op else 1,
                        "over": [{"file": "ov-1", "a": words_at, "b": dur(s), **({"in": 0.4} if op else {})}],
                        "graph": graph + out_of_open(1) if op else graph.replace("[pic]", "[base]")}
-        pages["ov-1"] = (full, head(s["head_real"]) + f"<div class=pill style='left:56px;bottom:52px;font-size:40px'>{e(s['label_real'])}</div>")
+        pages["ov-1"] = (full, head(s["head" + sfx]) + f"<div class=pill style='left:56px;bottom:52px;font-size:40px'>{e(s['label' + sfx])}</div>")
         facts["match"] = {**facts.get("match", {}), "picture": [pw, ph], "hand_in_picture": hand, "starts_at": [round(v) for v in box], "ends_at": [round(v) for v in fit]}
     else:
         take = (work / takes["hand"]["take"]).resolve()

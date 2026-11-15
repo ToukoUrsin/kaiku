@@ -4,6 +4,8 @@
 #   film/make.sh v5                          the no-gloves film: the cold open, then film of a real hand played into the page as its camera
 #   film/make.sh v5 --no-open                the body alone, without the cold open and the end card (kaiku-nogloves-v5-noopen.mp4)
 #   film/make.sh v6 --shot2 glove.mp4        the same film with a phone clip of a real gloved hand as its first shot, with the gloves words
+#   film/make.sh v6 --shot2 hand.mp4 --bare  the same with a phone clip of our own bare hand driving the page through the laptop's camera:
+#                                            no gloves words (kaiku-hand-v6.mp4)
 #       [--from 3]                           start 3 s into the clip (default 0)
 #       [--turn 90|180|270]                  turn the clip clockwise, if it plays on its side
 #       [--hand 0.5,0.45,0.5]                where the hand is in the (turned) clip when it starts: centre x, centre y, height,
@@ -18,13 +20,14 @@
 set -euo pipefail
 work=${KAIKU_FILM_WORK:-/bulk3/runs/robotteleop/film/v5/work}
 films=${KAIKU_FILM_OUT:-/bulk3/runs/robotteleop/film}
-ver=v5; shot2=""; from=0; turn=0; hand=0.5,0.45,0.5; open=""; tag=""
+ver=v5; shot2=""; from=0; turn=0; hand=0.5,0.45,0.5; open=""; tag=""; bare=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --shot2) shot2=$2; shift 2 ;;
     --from) from=$2; shift 2 ;;
     --turn) turn=$2; shift 2 ;;
     --hand) hand=$2; shift 2 ;;
+    --bare) bare=1; shift ;;
     --no-open) open=--no-open; tag=-noopen; shift ;;
     *) ver=$1; shift ;;
   esac
@@ -39,7 +42,7 @@ if [ -n "$shot2" ] && [ "$shot2" != standin ]; then
   # A phone clip of a real gloved hand, any size, upright or sideways: the whole picture is kept (edit.py puts it over
   # a blurred copy of itself where it does not fill 16:9). Sound is dropped. An HDR clip is brought down to ordinary video.
   [ -f "$shot2" ] || { echo "STOP: no such clip: $shot2"; exit 1; }
-  cut=gloves
+  cut=gloves; [ -z "$bare" ] || cut=hand                        # --bare: a bare hand in front of the laptop's camera, no glove words
   len=$(/usr/bin/python -c "import json;print(json.load(open('film/film.json'))['shots'][0]['dur_real'])")
   have=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$shot2")
   /usr/bin/python -c "import sys;sys.exit(0 if float('$have') - float('$from') >= float('$len') - 0.05 else 1)" \
@@ -57,7 +60,7 @@ if [ -n "$shot2" ] && [ "$shot2" != standin ]; then
   nice -n 10 ffmpeg -y -loglevel error -ss "$from" -i "$shot2" -an -t "$len" \
     -vf "${hdr}${rot}fps=30,scale=1920:1080:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1,format=yuv420p" \
     -c:v libx264 -preset medium -crf 14 -pix_fmt yuv420p "$work/clips/shot2.mp4"
-  echo real > "$work/clips/shot2.kind"
+  [ -n "$bare" ] && echo bare > "$work/clips/shot2.kind" || echo real > "$work/clips/shot2.kind"
   echo "$hand" > "$work/clips/shot2.hand"
 else
   echo standin > "$work/clips/shot2.kind"                      # the hand film: edit.py puts it together from take hand

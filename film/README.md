@@ -98,6 +98,16 @@ What it changes, and nothing else:
 - Voice: "This is a person's hand in a Rokoko glove. The glove drives the first robot's fingers."
 - The hand film's credit leaves shot 1 and the end.
 
+With no glove, the same slot takes a phone clip of our own bare hand driving the hosted page through
+the laptop's camera (hand and screen in one picture, a part sorted):
+
+    film/make.sh v6 --shot2 /path/to/hand.mp4 --bare
+
+It is written to `kaiku-hand-v6.mp4`. Head: "A person's hand drives the robot". Label: "Our own hand,
+read by the laptop's camera". Voice: "This is our own hand at Junction. The laptop's camera reads it,
+and the first robot follows." No word of it says gloves. Checked on 15 November 2026 with a stand-in
+clip in a copy of the work folder (1:55.1); the test film was deleted.
+
 Everything after shot 1 is the same film, word for word. The gloves words are true only of a clip
 that shows what they say: a real glove on a real hand, driving Kaiku. `film/make.sh v5` alone goes
 back to the hand film and rebuilds the no-gloves film.
