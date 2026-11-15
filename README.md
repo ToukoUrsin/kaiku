@@ -118,15 +118,13 @@ pytest                                                        # the tests, about
 
 ## From the camera
 
-The camera path now keeps a coloured part's last stable tabletop estimate while a hand hides or carries it. The tracker filters depth jitter, uses the robot's own hand position and commanded finger closure while carrying, and retires a track when that hand opens at the part's known colour bin. In one traced scene the hand-covered estimate rose from the 34 mm tabletop height to 154 mm, while the held track stayed with the hand and was retired on release. Across 30 static noisy frames the raw estimate moved 1.03 mm per frame on average. The camera's measured initial error is 3.8 mm on average and 14.8 mm at the 95th percentile; colour was 100% and shape was 90.5% clean, 68.5% with the noise. A single noisy shape read can still send a part to the wrong motion.
-
 | what tells the policy where the parts are | scenes sorted | parts sorted |
 |---|---:|---:|
 | the simulator | 96 of 96 | 370 of 370 |
-| the head camera, tracked | 8 of 96 | 127 of 370 |
-| the head camera, 3 mm depth noise and 1 px edge noise, tracked | 7 of 96 | 110 of 370 |
+| the head camera | 18 of 96 | 189 of 370 |
+| the head camera with 3 mm depth noise and 1 px edge noise | 20 of 96 | 190 of 370 |
 
-Same pretrained policy, same held-out 96 scenes, one seed, 80 seconds per scene. In camera mode it gets the robot's own joint angles, the bins' known places, and the head camera's colour and depth images. It gets no simulator part positions, identities, contact flags or in-hand flags. The camera is rendered in the MuJoCo twin, not from a real G1 camera. Scene by scene: [`perception_camera_clean_100_after_tracker.jsonl`](kaiku/policy/pretrained/perception_camera_clean_100_after_tracker.jsonl), [`perception_camera_noisy_100_after_tracker.jsonl`](kaiku/policy/pretrained/perception_camera_noisy_100_after_tracker.jsonl), and [`perception_simulator_100.jsonl`](kaiku/policy/pretrained/perception_simulator_100.jsonl). Repeat it with `tools/measure_perception_policy.py`.
+The camera uses `camera_noisy_shape.pt`; the simulator row uses `kaiku.pt`. In three zero-progress scenes, the first large error was a 31.8 degree cube yaw error at 0.4 seconds, a 43.2 degree triangle yaw error in the first frame, and a 10.9 mm position shift at 2.8 seconds while a closed hand was over the part. The policy now decides each tabletop pose, yaw, and shape from clear frames, keeps it while a hand is near, follows the hand while carrying, and looks again after a failed grasp. It sees the robot joints, known bin places, and head-camera colour and depth images. The camera is rendered in the MuJoCo twin, so the robot, parts, bins, and physics remain simulated.
 
 ## Layout
 

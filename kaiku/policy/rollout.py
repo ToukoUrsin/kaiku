@@ -72,9 +72,17 @@ class Pilot:
             self.cam_done = np.zeros((self.s.n, P), bool)
             self.cam_carried = np.zeros((self.s.n, P), bool)
             self.cam_shape_votes = np.zeros((self.s.n, P, 3), int)
+            self.cam_shape_locked = np.zeros((self.s.n, P), bool)
+            self.cam_locked = np.zeros((self.s.n, P), bool)
             for i in range(n):
                 self._camera_estimates[i] = self.perception.observe(self.s.sim.data[i])
                 self._set_camera_parts(i, self._camera_estimates[i])
+                # A stationary head camera gives several independent depth-edge
+                # samples before the first move.  Decide shape once from that vote.
+                for _ in range(4):
+                    self._set_camera_parts(i, self.perception.observe(self.s.sim.data[i]))
+                self.cam_shape_locked[i, self.cam_present[i]] = True
+                self.cam_locked[i, self.cam_present[i]] = True
                 k = min(P, len(self._camera_estimates[i]))
                 if k:
                     order, side = plan_for(self.cam_pos[i, :k], self.cam_bins[i, :k])
@@ -83,6 +91,7 @@ class Pilot:
                     self.cam_shape[i, :k] = self.cam_shape[i, order]
                     self.cam_bins[i, :k] = self.cam_bins[i, order]
                     self.cam_present[i, :k] = self.cam_present[i, order]
+                    self.cam_locked[i, :k] = self.cam_locked[i, order]
                     self.side[i, :k] = side
                 self.present[i] = self.cam_present[i]
             self.rows = np.arange(n)[:, None]
@@ -188,9 +197,19 @@ class Pilot:
                 k = next((q for q in range(P) if not self.cam_present[i, q] and not self.cam_done[i, q]), None)
                 if k is None:
                     continue
-            near_hand = np.linalg.norm(hand_pos - e.pos[None, :], axis=1) < 0.09
-            hand_silhouette = bool(np.any(near_hand & (close > 0.30)) and
-                                   e.pos[2] > self.feat.rest_z + 0.012)
+            ref_pos = self.cam_pos[i, k].copy()
+            near_hand = np.linalg.norm(hand_pos - (ref_pos if self.cam_present[i, k] else e.pos)[None, :], axis=1) < 0.10
+            # Do not call a tabletop approach a grasp.  A track becomes carried
+            # only after the commanded fingers close and FK shows the hand lifting.
+            lifted_hand = hand_pos[:, 2] > self.feat.rest_z + 0.025
+            hand_silhouette = bool(np.any(near_hand & (close > 0.30) & lifted_hand))
+            if self.cam_carried[i, k]:
+                # Once lifted, the hand's FK is the only valid position estimate,
+                # even when the camera sees a partial coloured silhouette.
+                if obs is not None:
+                    self.cam_pos[i, k] = hand_pos[int(self.side[i, k])]
+                used.add(k)
+                continue
             # A component in the expected bin is a camera confirmation that the
             # released part is done.  Put the track at a known safe point inside
             # the bin, rather than trusting a wall/edge depth pixel.
@@ -203,7 +222,13 @@ class Pilot:
                 self.cam_present[i, k] = False
                 used.add(k)
                 continue
-            if self.cam_carried[i, k] or hand_silhouette:
+            # While a hand is near a tabletop part, keep the last clear-frame
+            # estimate.  The visible blob is no longer a measurement of the
+            # part's centre or yaw.
+            if self.cam_present[i, k] and bool(np.any(near_hand)) and not hand_silhouette:
+                used.add(k)
+                continue
+            if hand_silhouette:
                 self.cam_carried[i, k] = True
                 # The colour track supplies identity and shape, while the robot's
                 # own FK hand position supplies the current centre once the part
@@ -214,20 +239,24 @@ class Pilot:
                     self.cam_pos[i, k] = hand_pos[side]
                 used.add(k)
                 continue
-            # Exponential filtering removes frame-to-frame depth jitter while
-            # preserving a real tabletop move.  Shape votes make a single noisy
-            # outline harmless without inventing an identity.
+            # Before the first move, average the clear frames.  Afterwards the
+            # tabletop place and yaw stay fixed until a failed grasp asks for a
+            # fresh look.
             alpha = 0.35
-            if not self.cam_shape_votes[i, k].any():
-                self.cam_pos[i, k] = e.pos
-                self.cam_yaw[i, k] = e.yaw
-            else:
-                self.cam_pos[i, k] = (1.0 - alpha) * self.cam_pos[i, k] + alpha * e.pos
-                self.cam_yaw[i, k] = (1.0 - alpha) * self.cam_yaw[i, k] + alpha * e.yaw
-            self.cam_shape_votes[i, k, _SHAPE_CODE[e.shape]] += 1
-            self.cam_shape[i, k] = int(np.argmax(self.cam_shape_votes[i, k]))
+            if not self.cam_locked[i, k]:
+                if not self.cam_shape_votes[i, k].any():
+                    self.cam_pos[i, k] = e.pos
+                    self.cam_yaw[i, k] = e.yaw
+                else:
+                    self.cam_pos[i, k] = (1.0 - alpha) * self.cam_pos[i, k] + alpha * e.pos
+                    self.cam_yaw[i, k] = (1.0 - alpha) * self.cam_yaw[i, k] + alpha * e.yaw
+            if not self.cam_shape_locked[i, k]:
+                self.cam_shape_votes[i, k, _SHAPE_CODE[e.shape]] += 1
+                self.cam_shape[i, k] = int(np.argmax(self.cam_shape_votes[i, k]))
             self.cam_bins[i, k] = b
             self.cam_present[i, k] = True
+            if self.cam_shape_locked[i, k]:
+                self.cam_locked[i, k] = True
             used.add(k)
 
         # Once the carried hand reaches its destination and opens, the camera
@@ -243,6 +272,15 @@ class Pilot:
             if bool(np.any(near_bin & (close < 0.25))):
                 self.cam_present[i, k] = False
                 self.cam_done[i, k] = True
+            elif bool(np.any(close < 0.25)):
+                # A failed grasp or an early release needs a fresh camera match;
+                # retaining the old hand position makes the policy repeat a stale
+                # track instead of trying the part it can now see again.
+                self.cam_present[i, k] = False
+                self.cam_carried[i, k] = False
+                self.cam_shape_votes[i, k] = 0
+                self.cam_shape_locked[i, k] = True
+                self.cam_locked[i, k] = False
 
     def _camera_update(self, obs) -> None:
         for i in range(self.s.n):

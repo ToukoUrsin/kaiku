@@ -46,6 +46,8 @@ def main(argv=None) -> None:
     ap.add_argument("--shard", type=int, default=0)
     ap.add_argument("--shards", type=int, default=1)
     ap.add_argument("--max-s", type=float, default=80.0)
+    ap.add_argument("--policy", default=None,
+                    help="checkpoint; camera arms default to the noisy-camera checkpoint")
     a = ap.parse_args(argv)
     perception = None
     depth_noise = edge_noise = 0.0
@@ -59,7 +61,9 @@ def main(argv=None) -> None:
         a.episodes = 6
     scene_offset = a.shard * a.n * a.episodes
     records: list[dict] = []
-    result = run(Policy.load("kaiku/policy/pretrained/kaiku.pt"), n=a.n, episodes=a.episodes,
+    policy_path = a.policy or ("kaiku/policy/pretrained/camera_noisy_shape.pt"
+                               if a.arm.startswith("camera") else "kaiku/policy/pretrained/kaiku.pt")
+    result = run(Policy.load(policy_path), n=a.n, episodes=a.episodes,
                  seed=a.seed, max_s=a.max_s, threads=None, perception=perception,
                  depth_noise_mm=depth_noise, edge_noise_px=edge_noise, scene_records=records,
                  log=print, scene_offset=scene_offset)

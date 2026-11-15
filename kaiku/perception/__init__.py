@@ -156,7 +156,11 @@ class CameraPerception:
                 span = np.ptp(pts[:, :2], axis=0)
                 if span.max() > self.scene.size * 2.8 or span.min() < self.scene.size * 0.18:
                     continue
-                top = pts[:, 2] >= np.quantile(pts[:, 2], 0.55)
+                # Noise thickens the depth edge, so use a tighter top slice for
+                # noisy camera frames while retaining the broader clean silhouette
+                # needed for small triangular faces.
+                top_q = 0.85 if (self.depth_noise_mm or self.edge_noise_px) else 0.55
+                top = pts[:, 2] >= np.quantile(pts[:, 2], top_q)
                 xy = pts[top, :2]
                 if len(xy) < 4:
                     continue

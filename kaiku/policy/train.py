@@ -18,7 +18,8 @@ from kaiku.policy.features import Featurizer
 from kaiku.policy.model import Net, Policy
 
 
-def jitter(x: torch.Tensor, y: torch.Tensor, sl: dict, sigma: float, sigma_asked: float
+def jitter(x: torch.Tensor, y: torch.Tensor, sl: dict, sigma: float, sigma_asked: float,
+           shape_error: float = 0.0
            ) -> tuple[torch.Tensor, torch.Tensor]:
     """Two things the demonstrations never show, added to each batch.
 
@@ -35,13 +36,21 @@ def jitter(x: torch.Tensor, y: torch.Tensor, sl: dict, sigma: float, sigma_asked
     x[:, sl["to_part"]] -= d * has
     x[:, sl["to_bin"]] -= d * has
     x[:, sl["lead"]] += e - d
+    if shape_error:
+        # Camera outlines occasionally confuse the three printed silhouettes.
+        bad = torch.rand(B, device=x.device) < shape_error
+        replacement = torch.randint(3, (B,), device=x.device)
+        old = x[:, sl["shape"]].argmax(-1)
+        replacement = torch.where(replacement == old, (replacement + 1) % 3, replacement)
+        x[bad, sl["shape"]] = torch.nn.functional.one_hot(replacement[bad], 3).to(x.dtype)
     y = y.clone()
     y[:, :, :6] -= e[:, None]
     return x, y
 
 
 def train(data: Pairs, feat: Featurizer, steps: int = 30000, batch: int = 512, lr: float = 1e-3, width: int = 512,
-          depth: int = 4, sigma: float = 0.004, sigma_asked: float = 0.002, seed: int = 0, threads: int = 8,
+          depth: int = 4, sigma: float = 0.004, sigma_asked: float = 0.002, shape_error: float = 0.0,
+          seed: int = 0, threads: int = 8,
           log=print, every: int = 2000, on_step=None, device: str | None = None, compile: bool = False) -> Policy:
     # 30,000 steps: at 20,000 the same data gave anything from 12 % to 92 % of scenes sorted, depending
     # on which demonstrations were in it; at 30,000 every run we made sorted 96 % or more.
@@ -66,7 +75,7 @@ def train(data: Pairs, feat: Featurizer, steps: int = 30000, batch: int = 512, l
     t0, run = time.time(), 0.0
     for step in range(1, steps + 1):
         idx = torch.randint(M, (batch,), generator=g, device=dev)
-        xb, yb = jitter(x[idx], y[idx], feat.slices, sigma, sigma_asked) if sigma else (x[idx], y[idx])
+        xb, yb = jitter(x[idx], y[idx], feat.slices, sigma, sigma_asked, shape_error) if sigma else (x[idx], y[idx])
         pred = net((xb - x_mean) / x_std).view(batch, y.shape[1], y.shape[2])
         loss = torch.nn.functional.smooth_l1_loss(pred, (yb - y_mean) / y_std, beta=0.05)
         opt.zero_grad(set_to_none=True)
@@ -97,6 +106,7 @@ def main(argv=None) -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--width", type=int, default=512)
     ap.add_argument("--depth", type=int, default=4)
+    ap.add_argument("--shape-error", type=float, default=0.0)
     ap.add_argument("--batch", type=int, default=512)
     a = ap.parse_args(argv)
     loader = Loader()
@@ -105,7 +115,8 @@ def main(argv=None) -> None:
         data = data.pick(np.unique(data.episode), echoes=False)
     print(f"{len(data.x)} pairs from {len(np.unique(data.episode))} operator episodes"
           f" ({'no echoes' if a.plain else 'with echoes'})")
-    policy = train(data, loader.feat, a.steps, a.batch, width=a.width, depth=a.depth, seed=a.seed, threads=a.threads)
+    policy = train(data, loader.feat, a.steps, a.batch, width=a.width, depth=a.depth,
+                   shape_error=a.shape_error, seed=a.seed, threads=a.threads)
     policy.info.update(humans=int(len(np.unique(data.episode))), plain=bool(a.plain), data=str(Path(a.data)))
     policy.save(a.out)
     print(f"-> {a.out}  {policy.info}")
