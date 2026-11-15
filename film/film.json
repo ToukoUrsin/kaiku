@@ -3,7 +3,7 @@
  "cut": "nogloves",
  "fps": 30,
  "open": {
-  "about": "The cold open and the end card, made elsewhere. The build reads them from dir when it runs and puts them in front and last as they are, picture and sound, at whatever length they have then. It stops if the whole film is over max seconds. film/make.sh vN --no-open builds the body alone. end: \"\" drops the end card. Shot 1 starts on the open's last frame: its picture fills the frame for hold seconds with its hand where the robot's hand is in that frame (measured in the frame; hand is used when the frame is not a bright hand on black: centre and size in film pixels), after a dissolve of dissolve seconds (one film frame: the open's maker asks for a cut on its last frame), then moves to its place over move seconds. film_hand: the hand in the hand film's picture at the start of shot 1 (centre x, centre y, height, as shares of the picture). grow: the picture is enlarged until it fills the frame, but its hand is never more than this many times the robot hand's height.",
+  "about": "The cold open and the end card, made elsewhere. The build reads them from dir when it runs and puts them in front and last as they are, picture and sound, at whatever length they have then. It stops if the whole film is over max seconds. film/make.sh vN --no-open builds the body alone. end: \"\" drops the end card. Shot 1 starts on the open's last frame: its picture fills the frame for hold seconds with its hand where the robot's hand is in that frame (measured in the frame; hand is used when the frame is not a bright hand on black: centre and size in film pixels), after a cut from the open's last frame (dissolve 0, as the open's maker asks; a dissolve of N seconds is used only when it is longer than one film frame), then moves to its place over move seconds. film_hand: the hand in the hand film's picture at the start of shot 1 (centre x, centre y, height, as shares of the picture). grow: the picture is enlarged until it fills the frame, but its hand is never more than this many times the robot hand's height (1.0 since v5: the hand after the cut is as tall as the robot's hand before it, and where the picture does not reach the frame's edge it runs softly into a blurred copy of itself).",
   "dir": "/bulk3/runs/opens/final/kaiku",
   "file": "open.mp4",
   "sound": "open.wav",
@@ -25,8 +25,8 @@
    0.545,
    0.59
   ],
-  "grow": 1.3,
-  "dissolve": 0.033,
+  "grow": 1.0,
+  "dissolve": 0,
   "hold": 1.1,
   "move": 0.7
  },
@@ -65,7 +65,7 @@
   "matched_demos": 16,
   "matched_demos_say": "sixteen",
   "matched_replay": "8%",
-  "matched_replay_say": "eight percent",
+  "matched_replay_say": "eight",
   "matched_kaiku": "73%",
   "matched_kaiku_say": "seventy-three",
   "runner_commands": 1800,
@@ -75,19 +75,27 @@
   "hand_credit": "Hand: S. Perquin, CC BY-SA 4.0",
   "hand_credit_long": "Hand film: “Finger-counting in Dutch” by S. Perquin, Wikimedia Commons, CC BY-SA 4.0",
   "runner_commands_shown": "1,800",
-  "runner_commands_low": "eighteen hundred"
+  "runner_commands_low": "eighteen hundred",
+  "study_echoes": 1498,
+  "study_echoes_shown": "1,498",
+  "matched_tables": 752,
+  "matched_tables_shown": "752",
+  "matched_replay_kept": 5,
+  "matched_replay_kept_say": "five",
+  "matched_kaiku_kept": 214,
+  "matched_kaiku_kept_say": "two hundred and fourteen"
  },
  "shots": [
   {
    "id": "1-hand",
-   "dur": 7.1,
+   "dur": 6.8,
    "dur_real": 10.0,
    "swappable": true,
    "clip": "shot2.mp4",
    "about": "The swappable shot, and the one the cold open cuts to: it starts full frame on the hand, where the robot's hand was in the open's last frame, then the picture moves to its place (see open). Without --shot2 it is the hand film: the page's own camera picture beside the robot's hand, both from take hand (film/hand.py), lined up on the clock they were recorded with. With film/make.sh vN --shot2 FILE the phone clip of a gloved hand is the picture, for dur_real seconds, and head_real, label_real and vo_real are used: the only words in the film that say gloves.",
    "head": "A real hand moves the robot's fingers",
-   "label": "Film of a hand, played into the page as its camera",
-   "label_robot": "The robot's hand, same run, same moment",
+   "label": "Film of a hand, as the page's camera",
+   "label_robot": "The robot's hand, same moment",
    "head_real": "A person's hand in a Rokoko Smartglove drives the robot",
    "label_real": "A real hand, a real glove",
    "vo": [
@@ -111,7 +119,7 @@
    "lines": [
     "A twin of Junction's G1 sorting station",
     "The policy is told where the parts are",
-    "On the live page, a scripted hand drives when no visitor does"
+    "No visitor driving? A scripted hand drives"
    ],
    "cues": [
     "a twin",
@@ -128,7 +136,7 @@
   {
    "id": "3-fleet",
    "dur": 6.5,
-   "head": "{fleet_others} echoes redo the driven robot's job, each on its own table",
+   "head": "1 robot driven, {fleet_others} echoes, each on its own table",
    "vo": [
     {
      "at": 0.2,
@@ -152,7 +160,7 @@
    "id": "5-with",
    "dur": 14.5,
    "mark": "Real time",
-   "pill": "Every clean run is saved as a demonstration",
+   "pill": "Clean runs are saved as demonstrations",
    "pill_cue": "Every",
    "vo": [
     {
@@ -167,9 +175,9 @@
   },
   {
    "id": "6-study",
-   "dur": 10.8,
-   "about": "The one number slide. cues: each big number appears as the voice starts to say it; then_cue the same for the line under them.",
-   "head": "A policy trained on {study_demos} demonstrations",
+   "dur": 13.0,
+   "about": "The one number slide. Whose demonstrations they are is said with the numbers, and the echoes are counted on screen. cues: each big number appears as the voice starts to say it; then_cue the same for the line under them.",
+   "head": "A policy trained on the scripted hand's {study_demos} demonstrations",
    "big": [
     [
      "{study_alone}",
@@ -177,55 +185,62 @@
     ],
     [
      "{study_with_echoes}",
-     "with their echoes"
+     "with their {study_echoes_shown} echoes"
     ]
    ],
-   "then": "{study_demos} with echoes beat {study_many} without",
-   "then_sub": "{study_many} demonstrations alone: {study_many_alone}",
-   "note": "Share of {study_scenes} unseen scenes sorted, mean of {study_runs} training runs. The study's demonstrations came from a scripted hand.",
+   "then": "{study_demos} + {study_echoes_shown} echoes beat {study_many} alone",
+   "then_sub": "{study_many} demonstrations alone: {study_many_alone}. The echoes cost no one's time.",
+   "note": "Share of {study_scenes} unseen scenes sorted, mean of {study_runs} training runs.",
    "vo": [
     {
      "at": 0.2,
-     "text": "A policy trained on {study_demos_say} demonstrations sorts {study_alone_say} of new scenes. With their echoes, {study_with_echoes_say}. {study_demos_cap} with echoes beat {study_many_say} without."
+     "text": "A policy trained on the scripted hand's {study_demos_say} demonstrations sorts {study_alone_say} of new scenes. With their echoes, {study_with_echoes_say}, more than with {study_many_say} demonstrations. The echoes cost no one's time."
     }
    ],
    "cues": [
     "{study_alone_say}",
     "{study_with_echoes_say}"
    ],
-   "then_cue": "{study_demos_cap}"
+   "then_cue": "more than"
   },
   {
    "id": "7-matched",
-   "dur": 8.3,
-   "head": "The same {matched_demos} demonstrations, multiplied two ways",
+   "dur": 12.2,
+   "head": "The same {matched_demos} demonstrations, the same {matched_tables_shown} tables",
    "big": [
     [
+     "{matched_replay_kept}",
+     "clean runs kept by our MimicGen-style replay",
      "{matched_replay}",
-     "MimicGen-style replay"
+     "of new tables sorted by a policy trained with the {matched_replay_kept}"
     ],
     [
+     "{matched_kaiku_kept}",
+     "clean runs kept by Kaiku's echoes",
      "{matched_kaiku}",
-     "Kaiku's echoes"
+     "trained with the {matched_kaiku_kept}"
     ]
    ],
-   "note": "Share of {study_scenes} unseen tables sorted. The replay is our own implementation, not MimicGen's code.",
+   "note": "Each policy: the {matched_demos} demonstrations plus the runs kept, tested on {study_scenes} unseen tables, mean of {study_runs} runs. The replay is our own, not MimicGen's code.",
    "vo": [
     {
      "at": 0.3,
-     "text": "From the same {matched_demos_say} demonstrations, our own MimicGen-style replay reaches {matched_replay_say}. Kaiku's echoes reach {matched_kaiku_say}."
+     "text": "From the same {matched_demos_say} demonstrations, our MimicGen-style replay kept {matched_replay_kept_say} runs, Kaiku's echoes {matched_kaiku_kept_say}. Policies trained on them sort {matched_replay_say} and {matched_kaiku_say} percent."
     }
    ],
    "cues": [
-    "{matched_replay_say}",
-    "{matched_kaiku_say}"
-   ]
+    "{matched_replay_kept_say} runs",
+    "Kaiku's echoes",
+    "{matched_replay_say} and",
+    "{matched_kaiku_say} percent"
+   ],
+   "about": "The same 16 demonstrations turned into more two ways on the same 752 tables: how many clean runs each kept, then what a policy trained with them sorts. cues: each count and each share appears as the voice says it."
   },
   {
    "id": "8-runner",
    "dur": 8.3,
    "about": "The runner's log is on screen for takes.runner.for seconds (5 at most), printing its lines when the runner printed them. Its summary line arrives where the voice starts cut_cue, and the part of it that matters is shown large.",
-   "head": "The humanoid challenge's own runner and safety filter, with a mock robot",
+   "head": "The challenge's own runner and safety filter, with a mock robot",
    "label_robot": "A local Kaiku. The runner follows this robot's commands.",
    "vo": [
     {
@@ -242,7 +257,7 @@
   },
   {
    "id": "9-nobody",
-   "dur": 10.0,
+   "dur": 7.0,
    "mark": "Real time",
    "head": "Then nobody drives",
    "vo": [
@@ -279,8 +294,8 @@
    "sim": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:38px!important;line-height:1.25!important;max-width:980px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.app[data-clean] .story{opacity:0!important}.banner{display:none!important}.tag{font-size:30px!important;padding:8px 18px!important}",
    "fleet": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{opacity:0!important}.app[data-clean] .story{opacity:0!important}.banner{display:none!important}.tag{font-size:30px!important;padding:8px 18px!important}",
    "close": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{opacity:0!important}.app[data-clean] .story{opacity:0!important}.tag{display:none!important}.app[data-clean] .banner:not([hidden]){display:flex!important;opacity:1!important;font-size:46px!important;padding:20px 40px!important;top:40px!important}.app[data-clean] .banner .banner-dot{width:20px!important;height:20px!important}.app[data-clean] .banner-action{display:none!important}",
-   "count": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:38px!important;line-height:1.25!important;max-width:980px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.app[data-clean] .story{opacity:0!important}.tag{display:none!important}.app[data-clean] .banner:not([hidden]){display:flex!important;opacity:1!important;font-size:46px!important;padding:20px 40px!important;top:40px!important}.app[data-clean] .banner .banner-dot{width:20px!important;height:20px!important}.app[data-clean] .banner-action{display:none!important}",
-   "with": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:38px!important;line-height:1.25!important;max-width:980px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.tag{display:none!important}.app[data-clean] .banner:not([hidden]){display:flex!important;opacity:1!important;font-size:46px!important;padding:20px 40px!important;top:40px!important}.app[data-clean] .banner .banner-dot{width:20px!important;height:20px!important}.app[data-clean] .banner-action{display:none!important}.app[data-clean] .story{transform:scale(1.8)!important;transform-origin:left bottom!important}.story-stats{display:none!important}",
+   "count": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:38px!important;line-height:1.25!important;max-width:600px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.app[data-clean] .story{opacity:0!important}.tag{display:none!important}.app[data-clean] .banner:not([hidden]){display:flex!important;opacity:1!important;font-size:46px!important;padding:20px 40px!important;top:40px!important}.app[data-clean] .banner .banner-dot{width:20px!important;height:20px!important}.app[data-clean] .banner-action{display:none!important}",
+   "with": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:38px!important;line-height:1.25!important;max-width:600px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.tag{display:none!important}.app[data-clean] .banner:not([hidden]){display:flex!important;opacity:1!important;font-size:46px!important;padding:20px 40px!important;top:40px!important}.app[data-clean] .banner .banner-dot{width:20px!important;height:20px!important}.app[data-clean] .banner-action{display:none!important}.app[data-clean] .story{transform:scale(1.8)!important;transform-origin:left bottom!important}.story-stats{display:none!important}",
    "stage": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.story,.caption,.banner,.tag{display:none!important}",
    "panel": "[data-ref=\"opening\"]{display:none!important}.banner{display:none!important}",
    "nobody": "[data-ref=\"opening\"]{display:none!important}.drive-tools{display:none!important}.app[data-clean] .caption{font-size:38px!important;line-height:1.25!important;max-width:980px!important;color:#fff!important;text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.8)!important}.app[data-clean] .story{opacity:0!important}.tag{display:none!important}.app[data-clean] .banner:not([hidden]){display:flex!important;opacity:1!important;font-size:46px!important;padding:20px 40px!important;top:40px!important}.app[data-clean] .banner .banner-dot{width:20px!important;height:20px!important}.app[data-clean] .banner-action{display:none!important}",
@@ -293,7 +308,8 @@
    "push": "(()=>{const r=window.kaiku.rig,f=[...r.frame],a=100000+14000;const go=()=>{const k=1-0.05*Math.min(1,Math.max(0,(performance.now()-a)/7000));r.frame=[f[0]*k,f[1]*k];r.refit();requestAnimationFrame(go);};go();})()",
    "three": "(()=>{const r=window.kaiku.rig;r.look({target:[-2.35, 3.1, 0.6],azimuth:-0.12,polar:0.95,frame:[4.9, 2.4]},0.01);r.shiftGoal.set(0,0);r.shift.set(0,0);})()",
    "three-b": "(()=>{const r=window.kaiku.rig;r.look({target:[-2.35, -3.1, 0.6],azimuth:0.14,polar:0.9,frame:[4.9, 2.4]},0.01);r.shiftGoal.set(0,0.3);r.shift.set(0,0.3);})()",
-   "panel": "(()=>{window.kaiku.stage.render=()=>{};const d=document.querySelector('[data-ref=baselines]');if(d)d.open=true;})()"
+   "panel": "(()=>{window.kaiku.stage.render=()=>{};const d=document.querySelector('[data-ref=baselines]');if(d)d.open=true;})()",
+   "wide": "(()=>{const r=window.kaiku.rig;r.zoom(1.12);r.shiftGoal.set(0.05,0.1);r.shift.set(0.05,0.1);})()"
   },
   "clips": {
    "1-robot": {
@@ -336,7 +352,8 @@
     "start": 44.5,
     "end": 51.5,
     "query": "clean=1&shot=overview&quality=high",
-    "css": "count"
+    "css": "count",
+    "init": "wide"
    },
    "5-close": {
     "rec": "operator",
@@ -353,11 +370,12 @@
     "end": 83.4,
     "query": "clean=1&shot=overview&quality=high",
     "css": "with",
-    "whole": true
+    "whole": true,
+    "init": "wide"
    },
    "6-back": {
     "rec": "operator",
-    "start": 125.0,
+    "start": 124.0,
     "end": 137.0,
     "query": "clean=1&shot=overview&quality=high",
     "css": "stage"
@@ -365,7 +383,7 @@
    "7-robots": {
     "rec": "operator",
     "start": 95.0,
-    "end": 106.0,
+    "end": 107.3,
     "query": "clean=1&shot=overview&quality=high",
     "css": "stage",
     "init": "three-b",
@@ -421,6 +439,6 @@
    "on": 1.2,
    "for": 5.0
   },
-  "init_about": "three: the three tables at the end of the first rank, from in front. three-b: the three at its other end. push: a slow push in over the 7 s from 14 s (the page's clock is 100000 ms at the recording's start)."
+  "init_about": "three: the three tables at the end of the first rank, from in front. three-b: the three at its other end. push: a slow push in over the 7 s from 14 s (the page's clock is 100000 ms at the recording's start). wide: all 48 a little further back and higher, so the driven robot in front and its table are whole; the page's own line beside it is narrower (count, with) and stays clear of it."
  }
 }

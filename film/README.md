@@ -2,18 +2,21 @@
 
 The no-gloves cut: nobody has worn real Rokoko gloves with Kaiku, and nothing in it says so.
 Films and everything they are made from live in `/bulk3/runs/robotteleop/film/` (not in git).
-v4's work files are under `/bulk3/runs/robotteleop/film/v4/`; its recordings are v3's
-(`v4/rec` and `v4/hand` point at `v3/rec` and `v3/hand`).
+v5's work files are under `/bulk3/runs/robotteleop/film/v5/`; its recordings are v3's
+(`v5/rec` and `v5/hand` point at `v3/rec` and `v3/hand`). v5 reuses v4's takes and films again only the
+two wide shots of the comparison (a little further back, so the driven robot in front and its table are
+whole and the page's line beside it covers nothing), the robots under the replay comparison (1.2 s longer)
+and the number slide's background (1 s longer).
 
 ## Build it
 
-    film/make.sh v4
+    film/make.sh v5
 
-Writes `/bulk3/runs/robotteleop/film/kaiku-nogloves-v4.mp4`, a contact sheet (one frame every 2 s),
+Writes `/bulk3/runs/robotteleop/film/kaiku-nogloves-v5.mp4`, a contact sheet (one frame every 2 s),
 captions (`.srt`) and a report (lengths, loudness, the planned silence, what shot 1 is and where its
 hand was put) next to it. Only what changed is made again. The cut renders in a `drun` sandbox.
 
-With the final open (11 s) the film is 1:49.1: open 0:11, body 1:36.1, end card 0:02.
+With the final open (11 s) the film is 1:51.9: open 0:11, body 1:38.9, end card 0:02.
 
 ## The cold open and the end card
 
@@ -30,23 +33,25 @@ Every build reads them from that folder as they are then:
   It prints a note when the film is over 1:50 (`open.aim`).
 - Shot 1 starts on the open's last frame (a robot hand held upright on black). The build finds the
   robot's hand in that frame (the bright shape: its top, its middle, its width) and puts the hand
-  film full frame with its hand there, on a cut (the open's maker asks for a cut, no dissolve). After 1.1 s the picture moves to its
-  place beside the robot's hand. If the last frame is not a bright hand on black, `open.hand` in
+  film there, its hand as tall as the robot's hand (`open.grow` 1.0), on a plain cut: the open's last frame is the last
+  frame of the open, the next one is the hand (`open.dissolve` 0; a dissolve is drawn only when it is longer than one
+  film frame). Where the picture does not reach the frame's edge it runs softly into a blurred copy of itself. After
+  1.1 s the picture moves to its place beside the robot's hand. If the last frame is not a bright hand on black, `open.hand` in
   `film.json` is used and the build says so.
 
-**When the final open is in the folder, this rebuilds the film with it. Nothing is edited:**
+**When the open in the folder changes, this rebuilds the film with it. Nothing is edited:**
 
-    film/make.sh v4
+    film/make.sh v5
 
-To build the body alone, without the open and the end card (`kaiku-nogloves-v4-noopen.mp4`):
+To build the body alone, without the open and the end card (`kaiku-nogloves-v5-noopen.mp4`):
 
-    film/make.sh v4 --no-open
+    film/make.sh v5 --no-open
 
 To drop only the end card, set `open.end` to `""` in `film.json`.
 
 ## Shot 1: a real hand
 
-Shot 1 (7.1 s) is film of a real hand, played into the hosted page as its camera. The page reads it
+Shot 1 (6.8 s) is film of a real hand, played into the hosted page as its camera. The page reads it
 as it reads a visitor's camera and the lead robot's fingers follow. The film shows the page's own
 camera picture and the robot's hand side by side, from one run, lined up on the clock they were
 recorded with (the build stops if any picture is more than 0.12 s from its robot frame, if the page
@@ -66,12 +71,12 @@ the turn back at the end. `takes.hand.take` in `film.json` names the take the fi
 
 One command, no JSON to edit:
 
-    film/make.sh v5 --shot2 /path/to/glove.mp4
+    film/make.sh v6 --shot2 /path/to/glove.mp4
 
 `glove.mp4` is a phone clip of a real hand in a Rokoko glove driving Kaiku: 10 seconds or longer,
 any size, upright or sideways. Three options, all optional:
 
-    film/make.sh v5 --shot2 /path/to/glove.mp4 --from 3 --turn 90 --hand 0.5,0.4,0.55
+    film/make.sh v6 --shot2 /path/to/glove.mp4 --from 3 --turn 90 --hand 0.5,0.4,0.55
 
 `--from 3` starts 3 s into the clip. `--turn 90` (or 180, 270) turns it clockwise, for a clip that
 plays on its side. `--hand` says where the hand is in the (turned) clip when it starts: its centre
@@ -80,10 +85,10 @@ from the left, its centre from the top, and its height, as shares of the picture
 
 What it changes, and nothing else:
 
-- The film is written to `kaiku-gloves-v5.mp4` (with `.srt`, contact sheet, report). The no-gloves
+- The film is written to `kaiku-gloves-v6.mp4` (with `.srt`, contact sheet, report). The no-gloves
   film is not overwritten.
-- The first shot after the open is the clip instead of the hand film, for 10 s instead of 7.1 s
-  (`dur_real` in `film.json`), so the film is 2.9 s longer (1:52.0 with the 11 s draft open; the
+- The first shot after the open is the clip instead of the hand film, for 10 s instead of 6.8 s
+  (`dur_real` in `film.json`), so the film is 3.2 s longer (1:55.1 with the 11 s open; the
   2:00 stop still applies).
 - It lines up with the open's last frame the same way: the clip starts with its hand where the
   robot's hand was and about as tall, then after 1.1 s settles to show the whole picture. Where the
@@ -94,8 +99,13 @@ What it changes, and nothing else:
 - The hand film's credit leaves shot 1 and the end.
 
 Everything after shot 1 is the same film, word for word. The gloves words are true only of a clip
-that shows what they say: a real glove on a real hand, driving Kaiku. `film/make.sh v4` alone goes
-back to the hand film.
+that shows what they say: a real glove on a real hand, driving Kaiku. `film/make.sh v5` alone goes
+back to the hand film and rebuilds the no-gloves film.
+
+Checked again on 15 November 2026 with a 15 s stand-in cut from the hand film's camera pictures, turned on its
+side (`film/make.sh v6 --shot2 standin.mp4 --from 1 --turn 90 --hand 0.48,0.545,0.59`, in a copy of the work
+folder): 1:55.1, a plain cut from the open's last frame to the clip, its hand on the robot's hand, the gloves head,
+label and voice. The test film was deleted.
 
 Checked on 14 November 2026 with two 15 s test clips cut from the hand film: one on its side, as a
 whole film (`--from 2 --turn 90 --hand 0.45,0.6,0.55`, 1:52.0, the hand on the robot's hand at the
@@ -108,15 +118,17 @@ Everything spoken, every number and all timing is in `film/film.json`. Edit, the
 
 The build stops unless every number in `numbers` is what the checked-in files say
 (`kaiku/policy/pretrained/study.json`, `baselines.json`, the runner's `summary.json`) and what the
-page said in the take that shows it. Nothing is typed in the edit only. It also stops if the number
-slide is longer than 12 s, the runner's log is on screen for more than 5 s, the hand film runs
-outside 6 to 8 s, the body is not between 1:25 and 1:47, or the whole film passes 2:00. A take may be
+page said in the take that shows it. Nothing is typed in the edit only. It also stops if the runner's log is on screen for more than 5 s, the hand film runs
+outside 6 to 8 s, the number slide is longer than 13 s, the body is not between 1:25 and 1:47, or the whole film passes 2:00.
+The number slide must say on screen and in the voice that the study's demonstrations are the scripted hand's, and
+count their echoes (`study.json`, the row with 32); the replay comparison's counts (5 and 214 clean runs of 752) are
+checked against `baselines.json`. A take may be
 longer than its shot (the shot uses its start). When the hosted page changes, record it again (both
 only listen, apart from what `--at` names; never Train both):
 
     nice -n 10 /usr/bin/python film/rec.py https://kaiku-echo.fly.dev /bulk3/runs/robotteleop/film/v3/rec/operator --seconds 175 --wait copyfree --at '22:copy_scene:null'
     nice -n 10 /usr/bin/python film/rec.py https://kaiku-echo.fly.dev /bulk3/runs/robotteleop/film/v3/rec/policy --seconds 75 --wait standin --at '6:mode:"policy"'
-    film/g1log.sh /bulk3/runs/robotteleop/film/v4/work
+    film/g1log.sh /bulk3/runs/robotteleop/film/v5/work
 
 then set the `start`/`end` of the clips in `film.json`, move the changed `work/clips/N-*` and
 `work/jobs/N-*` away, and run `film/make.sh vN`.
@@ -134,7 +146,7 @@ in shot 1, 28 px at the end), the label on the runner's robot (34 px) and the ru
 
 ## The voice
 
-`voice.provider` in `film.json` picks who speaks. v3 and v4 are Gemini's speech model (voice
+`voice.provider` in `film.json` picks who speaks. v3, v4 and v5 are Gemini's speech model (voice
 Charon), because ElevenLabs had no credit left (it resets on 5 December 2026). The word timings for
 the captions are Deepgram's transcription of each line, and the build stops if what was heard is not
 the line's own words. The music is v2's score, kept for the same reason. `film.json` says how to go back.
@@ -156,4 +168,4 @@ the line's own words. The music is v2's score, kept for the same reason. `film.j
 Recordings used, all under `/bulk3/runs/robotteleop/film/v3/`: `rec/operator` (the hosted page, 48
 robots: the fleet, the comparison with and without Kaiku), `rec/policy` (Policy mode), `rec/g1` (the
 local Kaiku the runner followed) and `hand/take4` (shot 1). v4 films them again from new cameras
-(three neighbouring tables, close) and with larger type; nothing new was pressed on the live page.
+(three neighbouring tables, close) and with larger type; nothing new was pressed on the live page for v4 or v5.
