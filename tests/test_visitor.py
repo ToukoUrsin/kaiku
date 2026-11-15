@@ -195,3 +195,36 @@ def test_the_page_is_told_where_a_part_that_was_let_go_came_to_rest():
         assert v.where(ob.index, np.r_[at, s.scene.counter_z - 0.5])["where"] == "off"
     finally:
         s.close()
+
+
+def test_an_empty_hand_is_not_carried_to_a_bin_and_a_new_turn_starts_with_nobodys_choices():
+    s = Session(1, seed=7, reachable_only=True)
+    v = VisitorOperator(s)
+    placement = s.layouts[0].placements[0]
+    ob = s.scene.by_name[placement.name]
+    v.set_command({"x": placement.pos[0], "y": placement.pos[1], "grip": True})
+    for _ in range(600):
+        s.tick(v.update(s.observe()))
+        if v.phase == "carry":
+            break
+    assert v.phase == "carry" and v.hud()["holding"]
+    # the part is taken out of the hand (it slipped, or the grasp never had it)
+    address = s.twin.obj_qadr[ob.index]
+    s.sim.data[0].qpos[address:address + 3] = [placement.pos[0], placement.pos[1], s.scene.rest_z]
+    s.sim.data[0].qvel[:] = 0.0
+    for _ in range(40):
+        s.tick(v.update(s.observe()))
+    told = v.hud()
+    assert v.phase == "idle" and v.held == -1                      # nothing is carried on to a bin
+    assert told["dropped"] and not told["holding"] and told["over"] is None
+    _ticks(s, v, 5)
+    assert v.phase == "idle"                                       # the held button does not grasp again by itself
+    v.set_command({"x": placement.pos[0], "y": placement.pos[1], "grip": False})
+    _ticks(s, v, 2)
+    assert not v.again                                             # a new press does
+
+    v.set_command({"x": 0.3, "y": 0.0, "grip": True, "own": True})
+    assert v.own and v.asked
+    v.turn()                                                       # another visitor: not the last one's grasp
+    assert not v.own and not v.asked and not v.grip and v.world is None
+    s.close()

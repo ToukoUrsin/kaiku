@@ -13,7 +13,7 @@ Writes `/bulk3/runs/robotteleop/film/kaiku-nogloves-v4.mp4`, a contact sheet (on
 captions (`.srt`) and a report (lengths, loudness, the planned silence, what shot 1 is and where its
 hand was put) next to it. Only what changed is made again. The cut renders in a `drun` sandbox.
 
-With the draft open (11 s) the film is 1:49.1: open 0:11, body 1:36.1, end card 0:02.
+With the final open (11 s) the film is 1:49.1: open 0:11, body 1:36.1, end card 0:02.
 
 ## The cold open and the end card
 
@@ -30,7 +30,7 @@ Every build reads them from that folder as they are then:
   It prints a note when the film is over 1:50 (`open.aim`).
 - Shot 1 starts on the open's last frame (a robot hand held upright on black). The build finds the
   robot's hand in that frame (the bright shape: its top, its middle, its width) and puts the hand
-  film full frame with its hand there, after a 0.35 s dissolve. After 1.1 s the picture moves to its
+  film full frame with its hand there, on a cut (the open's maker asks for a cut, no dissolve). After 1.1 s the picture moves to its
   place beside the robot's hand. If the last frame is not a bright hand on black, `open.hand` in
   `film.json` is used and the build says so.
 

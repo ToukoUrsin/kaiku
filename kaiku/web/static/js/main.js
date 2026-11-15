@@ -311,9 +311,9 @@ async function boot() {
   };
   new ResizeObserver(resize).observe(stageElement);
   // the words over a driver's table grow and shrink with what they say: the table keeps clear of them
-  new ResizeObserver(() => {
+  new ResizeObserver(() => requestAnimationFrame(() => {
     if (rig.shot === 'drive' && within(hud.el['drive-card']).bottom + 8 > wordsEnd) place();
-  }).observe(hud.el['drive-card']);
+  })).observe(hud.el['drive-card']);
   hud.onLayout = resize;
   resize();
 

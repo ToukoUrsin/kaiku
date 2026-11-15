@@ -89,6 +89,12 @@ class VisitorOperator:
         self.last_command = 0.0
         self.begin()
 
+    def turn(self) -> None:
+        """Another visitor has the robots: what the one before chose and showed is not theirs."""
+        if self.glove is None:                                # a glove on this machine is one person's sitting
+            self.own, self.asked = False, False
+        self.grip, self.world, self.points = False, None, None
+
     def begin(self) -> None:
         self.command[:] = [0.28, 0.0]
         self.grip = False
@@ -133,6 +139,8 @@ class VisitorOperator:
         # What the page tells the visitor and nothing else reads: a pinch with no part under it, a part that fell.
         self.missed_at = -1e9
         self.dropped_at = -1e9
+        self.again = False                                    # a grasp took nothing: the next one starts with a new press
+        self.away = 0                                         # control steps the part being carried has not been at the hand
         self.held_since = None                                # since when their own fingers have held a part
         self.lost = False                                     # their own grasp, and nothing sees the hand: it holds
         self.let_go = None                                    # the part that just left the hand, until it lies still
@@ -251,6 +259,19 @@ class VisitorOperator:
                 return name
         return None
 
+    def _over(self) -> str | None:
+        """The bin the hand is over, for the page's "let go". The hand follows the pointer at its own speed:
+        while it carries a part and is still on its way, it is not over the bin the pointer is over."""
+        name = self._bin_at(self.command)
+        if name is None or self.seen is None or self.phase != "carry":
+            return name
+        return name if np.linalg.norm(self.seen.pinch[0, self.side, :2] - self.command) < 0.05 else None
+
+    @property
+    def busy(self) -> bool:
+        """A part is in the hand or on its way into a bin: not the moment to deal a new scene."""
+        return (self.held >= 0 and self.phase in ("pick", "carry", "release")) or self.held_since is not None
+
     def _start_release(self) -> None:
         side = SIDES[self.side]
         target_bin = self._bin_at(self.command)
@@ -260,7 +281,7 @@ class VisitorOperator:
             name, shape, pos, yaw, finger = self.plan
             wps = plan_pick_place(self.scene, name, shape, pos, yaw, target_bin, slot=self.slots[target_bin],
                                   speed=self.pace, finger_dir=finger)[4:]
-            wps[0].duration = float(np.clip(4.0 * np.linalg.norm(wps[0].point - self.pinch[self.side]), 0.5, 1.3))
+            wps[0].duration = float(np.clip(4.0 * np.linalg.norm(wps[0].point - self.pinch[self.side]), 0.5, 2.5))
             self.release_target = wps[1].point
         else:
             # Anywhere else: put it down where the hand is.
@@ -514,20 +535,28 @@ class VisitorOperator:
             self.dir[s] = 0.0
             # The robot's fingers already follow the visitor's while the hand is free.
             self.hand[s] = HAND_OPEN.copy() if posture is None else posture
-            if grip and not self._start_pick(obs):
+            if not grip:
+                self.again = False
+            elif not self.again and not self._start_pick(obs):
                 self.missed_at = now                           # nothing under the hand: the page says so
         if self.phase == "pick" and self.job is not None:
             st = self.job.update(DT, obs.pinch[0, self.side], obs.rot[0, self.side])
             self.pinch[self.side], self.rot[self.side], self.hand[self.side] = st.point, st.rot, st.hand
             if self.job.done:
                 self.job = None
-                self.phase = "carry"
+                self.phase, self.away = "carry", 0
         elif self.phase == "carry":
             self._toward(self.side, np.r_[self.command, self.carry_z])
             self.hand[self.side] = HAND_CLOSED.copy()
-            if self.held >= 0 and np.linalg.norm(obs.obj_pos[0, self.held] - obs.pinch[0, self.side]) > 0.08:
-                self.dropped_at = now                          # it slipped out: the page says so
-            if not grip:
+            away = self.held < 0 or np.linalg.norm(obs.obj_pos[0, self.held] - obs.pinch[0, self.side]) > 0.08
+            self.away = self.away + 1 if away else 0
+            if self.away * DT > 0.4:
+                # The hand is empty: the grasp took nothing or the part slipped out. The page says so, the hand
+                # opens, and nothing is carried to a bin that is not in it.
+                self.dropped_at, self.again = now, True
+                self.phase, self.held, self.away = "idle", -1, 0
+                self.hand[self.side] = HAND_OPEN.copy()
+            elif not grip:
                 self._start_release()
         elif self.phase == "release" and self.job is not None:
             st = self.job.update(DT, obs.pinch[0, self.side], obs.rot[0, self.side])
@@ -602,7 +631,7 @@ class VisitorOperator:
                 "missed": time.monotonic() - self.missed_at < MISSED_S and not held,
                 "dropped": time.monotonic() - self.dropped_at < DROPPED_S and not held,
                 "holding": self.held >= 0 and self.phase in ("carry", "release"),
-                "over": self._bin_at(self.command),
+                "over": self._over(),
                 # A part being let go: over which bin (None: onto the table). Then where it came to rest.
                 "into": self.release_bin if self.phase == "release" else None,
                 "landed": self._landed(),

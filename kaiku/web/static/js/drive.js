@@ -28,6 +28,7 @@ export class Drive {
     this.table = null;                // the parts and bins, as the runner last told them
     this.want = null;                 // the bin the part in the hand belongs in
     this.at = null;                   // where the hand is asked to be: {x, y} on the table
+    this.screen = null;               // where the pointer last was on the page: the view can move under it
     this.grip = false;
     this.pointer = null;
     this.last = 0;
@@ -69,6 +70,7 @@ export class Drive {
     if (!mine) {
       this.pointer = null;
       this.at = null;
+      this.screen = null;
       this.grip = false;
       this.own = false;
       this.stopCamera();
@@ -98,6 +100,7 @@ export class Drive {
   }
 
   aim(clientX, clientY, grip) {
+    this.screen = { x: clientX, y: clientY };
     const p = this.onTable(clientX, clientY);
     if (!p) return;
     const r = this.table?.reach;                // the runner keeps the hand in here: show it where it will be
@@ -106,8 +109,23 @@ export class Drive {
     this.dirty = true;
   }
 
+  /** The view moves under a pointer that is held still (the camera flies in as a turn starts): the hand
+   *  is asked to be where the pointer is on the table now, not where it was when the pointer last moved. */
+  reaim() {
+    if (!this.screen || this.camera || !this.at) return;
+    const p = this.onTable(this.screen.x, this.screen.y);
+    if (!p) return;
+    const r = this.table?.reach;
+    const x = r ? Math.min(r[2], Math.max(r[0], p.x)) : p.x;
+    const y = r ? Math.min(r[3], Math.max(r[1], p.y)) : p.y;
+    if (Math.hypot(x - this.at.x, y - this.at.y) < 0.002) return;
+    this.at = { x, y };
+    this.dirty = true;
+  }
+
   /** Once a frame: send what changed, keep the hold alive, draw the marks on the table. */
   frame(now, seconds) {
+    if (this.active) this.reaim();
     if (this.active && this.at && (this.dirty || now - this.last > 400) && now - this.last >= SEND_MS) {
       this.last = now;
       this.dirty = false;
@@ -232,6 +250,7 @@ export class Drive {
   }
 
   stopCamera() {
+    this.screen = null;               // the pointer's last place is old news after a hand drove
     const camera = this.camera;
     if (!camera) return;
     this.camera = null;

@@ -6,7 +6,7 @@ gloves with Kaiku and nothing in it says so. With the draft cold open (11 s) it 
 
 ## The story
 
-1. Cold open, made elsewhere: "One hand. 48 simulated robots." It ends on a robot hand held upright
+1. Cold open, made elsewhere: "One hand drives / 48 simulated robots." It ends on a robot hand held upright
    on black. The film cuts from it to a real hand in the same place.
 2. A real hand moves a robot's fingers. Then, once: everything here is a simulator, the policy is
    told where the parts are, and on the live page a scripted hand drives when no visitor does.
@@ -25,7 +25,7 @@ draft open; the build takes whatever length the open has.
 
 | Time | Screen | Voiceover, word for word | In the film's own type |
 |---|---|---|---|
-| 0:00 to 0:11 | The cold open, as it is: its picture and its sound, nothing of ours over it | none | none (the open's own: "One hand. 48 simulated robots.") |
+| 0:00 to 0:11 | The cold open, as it is: its picture and its sound, nothing of ours over it | none | none (the open's own: "One hand drives / 48 simulated robots.") |
 | 0:11 to 0:18.1 | The hand film full frame, its hand where the robot's hand was in the open's last frame; after 1.1 s it moves beside the robot's hand, same run, same moment | "This is film of a real hand, played into the page as its camera. The robot's fingers follow it." | "A real hand moves the robot's fingers"; "Film of a hand, played into the page as its camera"; "Hand: S. Perquin, CC BY-SA 4.0"; "The robot's hand, same run, same moment" |
 | 0:18.1 to 0:30.1 | The driven robot close, the page's own line under it | "Everything here runs in a simulator, a twin of Junction's G1 sorting station. The policy is told where the parts are. On the live page, a scripted hand drives when no visitor does." | "Everything here runs in a simulator"; "A twin of Junction's G1 sorting station"; "The policy is told where the parts are"; "On the live page, a scripted hand drives when no visitor does" |
 | 0:30.1 to 0:36.6 | All 48 robots sorting, slow push in | "Forty-seven echoes redo the driven robot's job as it happens, each on its own table." | "47 echoes redo the driven robot's job, each on its own table" |

@@ -444,7 +444,7 @@ export class Hud {
     const amplification = alone ? (tally.scenes ? percent(tally.ok / tally.scenes) : String(echo.ok ?? 0))
       : Number.isFinite(totals.amplification) ? trim(totals.amplification) : '0';
     const yieldText = alone ? count(policy.humans || 0)
-      : Number.isFinite(totals.yield) ? `${Math.round(totals.yield * 100)}%` : '0%';
+      : Number.isFinite(totals.yield) ? share(totals.yield) : '0%';
     const rate = alone ? count(Math.max(0, (policy.demos || 0) - (policy.humans || 0)))
       : Number.isFinite(totals.demos_per_min) ? String(Math.round(totals.demos_per_min)) : '0';
     const clippedSteps = alone ? tally.clipped || 0 : totals.clipped_steps || 0;
@@ -761,9 +761,12 @@ export class Hud {
     if (!unseen) this.unseenAt = 0;
     else if (!this.unseenAt) this.unseenAt = performance.now();
     if (unseen && performance.now() - this.unseenAt > 400 && phase !== 'wait' && table && !operator.expired) {
-      say = camera ? 'Your hand is not in the picture' : 'The glove is not sending';
-      more = held || operator.holding ? `The robot keeps hold of the part until it ${camera ? 'sees your hand' : 'hears from the glove'} again.`
-        : camera ? 'Hold it up to the camera. The robot waits until it sees it.' : 'The robot waits until it does.';
+      // Their own grasp with the pointer alone: no camera and no glove, so nothing can close the fingers.
+      const none = !camera && !glove;
+      say = camera ? 'Your hand is not in the picture' : none ? 'Nothing sees your fingers' : 'The glove is not sending';
+      more = none ? `${held || operator.holding ? 'The robot keeps hold of the part. ' : ''}Choose Use my hand, or Helped grasp to sort with the pointer alone.`
+        : held || operator.holding ? `The robot keeps hold of the part until it ${camera ? 'sees your hand' : 'hears from the glove'} again.`
+          : camera ? 'Hold it up to the camera. The robot waits until it sees it.' : 'The robot waits until it does.';
     }
     this.text('drive-say', say);
     this.text('drive-more', more);
@@ -904,7 +907,8 @@ export class Hud {
       if (cell) this.onFocus(Number(cell.dataset.env) === this.focus ? -1 : Number(cell.dataset.env));
     });
     if (!this.minimapRoom) {
-      this.minimapRoom = new ResizeObserver(() => this.fitMinimap());
+      // on the next frame: fitting inside the observer's own pass makes the browser report a loop
+      this.minimapRoom = new ResizeObserver(() => requestAnimationFrame(() => this.fitMinimap()));
       this.minimapRoom.observe(map.closest('.pane'));
       this.minimapRoom.observe(map.closest('.pane').parentElement);
     }
@@ -969,7 +973,7 @@ export class Hud {
     this.show('ds-get', Boolean(dataset.download));
     // The size of the zip the runner last built, when it has built one. Until then a range, not a guess.
     this.text('ds-size', `One demonstration from every robot that sorted it, as LeRobot v3.0 and GR00T. ${Number.isFinite(dataset.zip_mb)
-      ? `The last download was ${Math.max(1, Math.round(dataset.zip_mb))} MB.` : '30 to 50 MB.'}`);
+      ? `The last download was ${Math.max(1, Math.round(dataset.zip_mb))} MB.` : '40 to 60 MB.'}`);
     this.show('ds-where', !this.hud.shared);                          // a path on the server says nothing to a visitor
     this.text('ds-path', dataset.path || 'Not recording to disk');
     this.show('ds-copy', Boolean(dataset.path));
@@ -1050,7 +1054,7 @@ export class Hud {
     const progress = Math.min(1, Math.max(0, policy?.progress || 0));
     this.show('train-meter', training);
     if (training) this.el['train-fill'].style.transform = `scaleX(${progress})`;
-    const trainHeld = !training && held?.why === 'visitor' ? held : null;
+    const trainHeld = null;                                 // training is rented elsewhere: a visitor's turn does not hold it
     this.attr('train', 'disabled', training || Boolean(trainHeld));
     this.attr('train', 'title', trainHeld ? trainHeld.text : null);
     this.text('train', training ? 'Training' : 'Train both');
@@ -1069,7 +1073,7 @@ export class Hud {
     if (trained && !training) {
       this.text('train-last', `Last run here: ${percent(trained.kaiku)} with echoes, ${percent(trained.plain)} alone, `
         + `from ${trained.humans || 0} demonstrations, on ${trained.scenes || 0} test scenes.`
-        + (trained.in_use ? '' : ' The policy already here sorts more, so it keeps driving.'));
+        + (trained.in_use ? '' : ' The policy already here sorts more, so it stays.'));
     }
   }
 
@@ -1090,17 +1094,22 @@ export class Hud {
   renderBaselines(measured) {
     const arms = measured?.arms;
     const ok = Boolean(arms?.kaiku && arms?.plain && arms?.mimicgen);
+    const replay = measured?.made?.mimicgen;
+    const echo = measured?.made?.kaiku;
     this.show('baselines', ok);
     const key = ok ? JSON.stringify(measured) : '';
     if (!ok || key === this.baselinesKey) return;
     this.baselinesKey = key;
-    const { demos, tables, runs, made = {} } = measured;
-    this.text('baselines-lede', `A second measurement, on another ${demos} demonstrations. Three ways to train from them, `
-      + `each tested on ${tables} tables it had not seen, ${runs} runs each.`);
+    const { demos, tables, runs } = measured;
+    // Other demonstrations than the curve's, and said so: their number alone is not the curve's.
+    this.text('baselines-lede', `A second measurement, on ${demos} other demonstrations than the curve's, so their number alone differs. `
+      + `Each way to train from them was tested on ${tables} tables it had not seen, ${runs} runs each.`);
     const rows = [
-      ['kaiku', "With all of Kaiku's echoes"],
+      ['kaiku', echo ? `With all ${count(echo.clean)} of Kaiku's echoes` : "With all of Kaiku's echoes"],
+      // as many echoes as the replay kept: the fair count against it
+      ...(arms.kaiku_matched && replay ? [['kaiku_matched', `With ${count(replay.clean)} of Kaiku's echoes`]] : []),
+      ['mimicgen', replay ? `With the ${count(replay.clean)} MimicGen-style replays` : 'With MimicGen-style replays'],
       ['plain', `The ${demos} alone`],
-      ['mimicgen', 'With MimicGen-style replays'],
     ];
     this.el['baselines-bars'].replaceChildren(...rows.map(([name, label]) => {
       const arm = arms[name];
@@ -1136,8 +1145,6 @@ export class Hud {
       }
       return item;
     }));
-    const replay = made.mimicgen;
-    const echo = made.kaiku;
     this.text('baselines-note', "The replay is our own MimicGen-style re-implementation, not MimicGen's code."
       + (replay && echo ? ` On the same ${count(replay.attempts)} tables it made ${count(replay.clean)} clean demonstrations, `
         + `Kaiku ${count(echo.clean)}.` : ''));
@@ -1445,6 +1452,13 @@ function steady(rate) {
 }
 
 /** How fast the simulation runs against a clock, when it is not real time: "0.8× real time". */
+/** A share as a percentage that says 100% only when it is all of them. */
+function share(value) {
+  if (value >= 1) return '100%';
+  const tenths = Math.floor(value * 1000) / 10;
+  return `${tenths >= 99 ? tenths.toFixed(1) : Math.round(tenths)}%`;
+}
+
 function speed(perf, lead) {
   if (!Number.isFinite(perf?.realtime) || perf.realtime <= 0) return '';
   const rate = steady(perf.realtime);

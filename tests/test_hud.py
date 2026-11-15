@@ -95,7 +95,7 @@ def test_a_scene_keeps_its_number_until_the_next_starts_and_a_cut_one_is_not_cal
 def test_the_comparison_with_a_replay_is_served_from_the_file_that_measured_it(tmp_path):
     measured = json.loads(BASELINES.read_text())
     served = baselines()
-    assert set(served["arms"]) == {"plain", "mimicgen", "kaiku"}
+    assert set(served["arms"]) == {"plain", "mimicgen", "kaiku_matched", "kaiku"}
     for name, arm in served["arms"].items():
         source = measured["policy"]["arms"][name]
         assert arm["clean"] == source["clean"] and arm["scenes"] == source["scenes"]

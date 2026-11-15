@@ -49,6 +49,7 @@ PAUSE_S = 20.0                # how long a pause lasts on a session that everybo
 SWITCHED_S = 12.0             # how long the page says who handed the robots to the policy, or took them back
 MODES = ("gloves", "autopilot", "policy", "visitor")
 VISITOR_SCENE_S = 150.0                                # a scene a visitor drives is replaced after this long
+VISITOR_GRACE_S = 20.0                                 # and this much later when a part is in the hand just then
 TURN_S, IDLE_S = 240.0, 45.0                      # a visitor's turn at the robots, and how long it may sit untouched
 HELD_BY_COMPARISON = ("pause", "next_scene", "parts", "mode", "drive_start")   # what waits while a comparison runs
 COPY_EVERY_S = 30.0                               # everybody shares the page: the scene without the echo is not the only one shown
@@ -56,7 +57,7 @@ HERE = Path(__file__).resolve().parents[1]
 PRETRAINED = HERE / "policy" / "pretrained" / "kaiku.pt"
 STUDY = HERE / "policy" / "pretrained" / "study.json"
 BASELINES = HERE / "policy" / "pretrained" / "baselines.json"
-BASELINE_ARMS = ("plain", "mimicgen", "kaiku")      # what the page compares: the 16 alone, a replay's survivors, the echoes
+BASELINE_ARMS = ("plain", "mimicgen", "kaiku_matched", "kaiku")   # the 16 alone, a replay's survivors, as many echoes, all echoes
 
 
 def baselines(path: Path = BASELINES) -> dict | None:
@@ -320,6 +321,8 @@ class Runner:
         if int(client) in self.queue:
             self.queue.remove(int(client))
         self.driver_client = int(client)
+        if self.visitor is not None:
+            self.visitor.turn()
         self.turn_started = self.last_visitor_command = time.monotonic()
         self.want_mode = "visitor"
         if self.phase == "run":
@@ -518,7 +521,7 @@ class Runner:
                 if keep:
                     self.loading = self.pool.submit(self._load, self.trainer.out / "kaiku.pt")
                 else:
-                    text += f" The policy already here sorts {old:.0%}, so it keeps driving."
+                    text += f" The policy already here sorts {old:.0%}, so it stays."
                 self.toast(text, "info")
             else:
                 self.toast(st["error"] or "Training failed.", "warn")
@@ -554,8 +557,9 @@ class Runner:
                 if self.visitor.grip != was[1] or self.visitor.own != was[2] \
                         or float(np.abs(self.visitor.command - was[0]).max()) > 1e-4:
                     self.last_visitor_command = time.monotonic()
-            elif self.driver_client is not None and client != self.driver_client:
+            elif self.driver_client is not None and client != self.driver_client and name != "train":
                 continue                                       # a visitor has the robots: nobody else's buttons count
+                                                               # (training is rented elsewhere and touches no robot)
             elif name == "pause":
                 was, self.paused = self.paused, bool(value)
                 self.paused_by = client if self.paused else None
@@ -671,6 +675,8 @@ class Runner:
             return
         cmd = self.op.update(obs)
         limit = int(VISITOR_SCENE_S * CONTROL_HZ) if self.mode == "visitor" else self.lead_timeout
+        if self.mode == "visitor" and getattr(self.op, "busy", False):
+            limit += int(VISITOR_GRACE_S * CONTROL_HZ)         # a part in the hand is put down before the scene ends
         if self.op.done or s.tick_no >= limit:
             if self.mode == "visitor" and s.tick_no >= limit and not self.op.done:
                 self._visitor_expired = True
