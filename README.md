@@ -53,6 +53,7 @@ What this does and does not say:
 - These tables are harder than the ones the live demo draws: 637 of the 752 moved the parts 10 cm or more on average, and none was checked for reach. That is why the echo kept 28.5% here and keeps nearly every table live, where each follower's table is drawn within the robot's reach.
 - Where Kaiku does not win: the MimicGen-style batch took less time in total (1,199 s against 1,503 s), and on the 8 tables closest to the source it kept 2 while the echo kept 4. Per kept demonstration the echo took 7 s and the replay 240 s.
 - The 16 demonstrations came from the scripted stand-in operator, not from a person, and the policy reads part positions from the simulator.
+- The 9% for 16 demonstrations alone is not the 0.35% of the first table. These are another 16 demonstrations and another 96 test tables. A set of 16 is that uneven: on the live page the same comparison has given 0% to 31% alone.
 - An earlier pass with 10,000 steps on CPUs sorted no held-out table in any row. It is kept in `baselines.json` and is not the result above.
 
 To repeat it: `python tools/run_baseline_measure.py manifest ...` once, then `run` with `--method echo`, `mimicgen` and `copy` on that manifest, `tools/assemble_policy_dataset.py` for each, and `modal run tools/modal_matrix.py` for the policies (51 minutes of T4 time in all). The generation took 3,450 seconds of simulator time in sandboxes.

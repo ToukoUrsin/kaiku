@@ -11,6 +11,7 @@ const NEAR_M = 0.05;                  // a part this close to the pointer is the
 const PINCH_ON = 0.38;                // thumb tip to index tip, in hand lengths: closer is a pinch
 const PINCH_OFF = 0.55;               // further is open again
 const HAND_LOST_MS = 600;             // no hand in the picture for this long: it is not seen (one missed frame is not that)
+const HAND_LOST_LOOKS = 3;            // ... or for this many looks, on a machine that looks less often than that
 const BONES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
   [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17]];
 const MEDIAPIPE = new URL('../vendor/mediapipe/', import.meta.url).href;
@@ -84,7 +85,8 @@ export class Drive {
 
   /** The camera is on and has not seen a hand for a moment (or not yet at all). */
   get handLost() {
-    return Boolean(this.camera) && performance.now() - this.camera.seen > HAND_LOST_MS;
+    return Boolean(this.camera)
+      && performance.now() - this.camera.seen > Math.max(HAND_LOST_MS, HAND_LOST_LOOKS * this.camera.every);
   }
 
   /** Still waiting for the runner's yes. */
@@ -134,7 +136,7 @@ export class Drive {
       const camera = this.camera;
       if (camera) {
         value.input = 'camera';
-        if (camera.world && now - camera.seen < 400) {       // the hand itself, for the robot's fingers
+        if (camera.world && now - camera.seen < Math.max(400, 2.5 * camera.every)) {   // the hand itself, for the robot's fingers
           value.world = camera.world;
           value.right = camera.right;
           value.depth = camera.depth;
@@ -241,7 +243,7 @@ export class Drive {
       holder.style.setProperty('--cam-aspect', `${video.videoWidth} / ${video.videoHeight}`);
     }
     this.camera = { stream, landmarker, video, overlay, holder, smooth: null, seen: 0, stamp: -1,
-      world: null, right: true, depth: 0, scale0: null, scales: [] };
+      world: null, right: true, depth: 0, scale0: null, scales: [], looked: 0, every: 60 };
     holder.hidden = false;
     this.pointer = null;
     this.grip = false;
@@ -276,6 +278,9 @@ export class Drive {
     const video = camera.video;
     if (video.readyState < 2 || video.currentTime === camera.stamp) return;
     camera.stamp = video.currentTime;
+    const began = performance.now();                           // how often this machine gets to look at the picture
+    if (camera.looked) camera.every += (Math.min(2000, began - camera.looked) - camera.every) * 0.3;
+    camera.looked = began;
     let hand = null;
     let seen = null;
     try {
@@ -369,12 +374,18 @@ export class Drive {
       overlay.height = h;
     }
     const g = overlay.getContext('2d');
+    if (!hand) {
+      // one look without a hand is not a lost hand: the last drawing stays until the page says it is lost
+      const lost = this.handLost;
+      camera.holder.toggleAttribute('data-lost', lost);
+      if (lost) g.clearRect(0, 0, w, h);
+      return;
+    }
     g.clearRect(0, 0, w, h);
-    camera.holder.toggleAttribute('data-lost', !hand);
-    if (!hand) return;
+    camera.holder.removeAttribute('data-lost');
     const at = pictureToBox(camera.video.videoWidth, camera.video.videoHeight, w, h);
     const pinched = this.grip;
-    g.lineWidth = 1.5 * devicePixelRatio;
+    g.lineWidth = 2 * devicePixelRatio;
     g.strokeStyle = pinched ? 'rgba(74, 222, 128, 0.95)' : 'rgba(255, 255, 255, 0.9)';
     g.fillStyle = g.strokeStyle;
     g.beginPath();
@@ -385,7 +396,7 @@ export class Drive {
     g.stroke();
     for (const tip of [4, 8]) {
       g.beginPath();
-      g.arc(...at(hand[tip]), 3.5 * devicePixelRatio, 0, Math.PI * 2);
+      g.arc(...at(hand[tip]), 4 * devicePixelRatio, 0, Math.PI * 2);
       g.fill();
     }
     if (this.own) {

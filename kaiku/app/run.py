@@ -485,7 +485,8 @@ class Runner:
             about, where = self.trainer.about, "on rented GPUs" if self.trainer.rented else "on this machine"
             self.toast(f"Training two policies on the last {self.trainer.last} demonstrations: one with their "
                        "echoes, one without."
-                       + (f" It takes about {about:.0f} minutes {where}." if about and about >= 1.5 else ""), "info")
+                       + (f" It takes {'up to' if self.trainer.rented else 'about'} {about:.0f} minutes {where}."
+                          if about and about >= 1.5 else ""), "info")
 
     def _policy_news(self) -> None:
         """Pick up a policy that has finished loading, and a training run that has ended."""

@@ -219,7 +219,10 @@ class Trainer:
             eta = self._left(progress) if state == "training" else None
             took = self.took_s
         k = jobs["kaiku"]
-        return {"state": state, "error": error, "stage": k.get("stage"), "loss": k.get("loss"),
+        # The two train side by side and one can be minutes behind (a cold machine): what the page says is
+        # being done is what the slower one is doing, or "Finishing" stands over half a bar.
+        behind = min(jobs.values(), key=lambda j: j.get("progress", 0.0))
+        return {"state": state, "error": error, "stage": behind.get("stage") or k.get("stage"), "loss": k.get("loss"),
                 "eta_s": None if eta is None else round(eta), "took_s": None if took is None else round(took),
                 "progress": round(progress, 4), "jobs": jobs}
 

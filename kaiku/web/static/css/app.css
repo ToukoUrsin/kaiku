@@ -1620,6 +1620,33 @@ a.button {
   margin-top: 6px;
 }
 
+/* what the colours mean, before a comparison turns some of them red */
+.minimap-key {
+  display: flex;
+  justify-content: center;
+  gap: var(--s-4);
+  margin: 2px 0 0;
+  color: var(--text-3);
+  font-size: var(--t-12);
+}
+
+.minimap-key i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 2px;
+  background: oklch(0.62 0.012 264);
+}
+
+.minimap-key i[data-state="success"] {
+  background: var(--ok);
+}
+
+.minimap-key i[data-state="failed"] {
+  background: var(--fail);
+}
+
 .pair {
   display: flex;
   gap: var(--s-6);
@@ -2130,7 +2157,7 @@ a.button {
     padding: var(--s-1) 0 0;
   }
 
-  .minimap + .pair {
+  .minimap-key + .pair {
     margin-top: var(--s-2);
   }
 }
@@ -2347,6 +2374,7 @@ a.button {
   }
 
   .story-label {
+    max-width: 200px;                /* two lines, clear of the button beside it */
     margin-top: 2px;
   }
 

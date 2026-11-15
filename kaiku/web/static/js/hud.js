@@ -69,7 +69,8 @@ function left(seconds) {
 /** What a training run takes, as it is promised before anybody presses Train: "about 25 minutes on this machine". */
 function takes(policy) {
   if (!Number.isFinite(policy?.about_min) || policy.about_min < 1.5) return '';
-  return `about ${Math.round(policy.about_min)} minutes ${where(policy)}`;
+  // rented GPUs take three minutes warm and six cold: the page promises the slowest, and says it is the most
+  return `${policy.rented ? 'up to' : 'about'} ${Math.round(policy.about_min)} minutes ${where(policy)}`;
 }
 
 function where(policy) {
@@ -430,7 +431,8 @@ export class Hud {
     // With nobody driving the number is the total of every round so far, and says so: the banner's is one round's.
     this.text('demos-label', first ? 'Driving its first scenes'
       : alone ? (tally.rounds > 1 ? `scenes sorted in ${count(tally.rounds)} rounds, nobody driving` : 'scenes sorted in round 1, nobody driving')
-        : dataset.recording ? 'demonstrations saved' : 'demonstrations');
+        // what the count is made of is said with it: a big number of a script's runs is not a person's work
+        : dataset.recording ? 'demonstrations saved, most from the scripted hand' : 'demonstrations');
 
     const labels = alone ? ['Scenes sorted alone', 'Learned from the operator', 'Learned from echoes']
       : ['Saved per scene', 'Echoes that succeed', 'Saved per minute'];

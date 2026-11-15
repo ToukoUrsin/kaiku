@@ -47,14 +47,20 @@ export function playOpening({ app, line, rig, wide, words, rest }) {
     const text = words()[showing];
     if (text && line.textContent !== text) line.textContent = text;
   };
-  const end = () => {
+  const end = (event) => {
     if (over) return;
     over = true;
     timers.forEach(clearTimeout);
     for (const name of ['pointerdown', 'keydown', 'wheel']) window.removeEventListener(name, end, true);
     line.removeAttribute('data-show');
-    app.removeAttribute('data-opening');
-    rest();
+    const back = () => {
+      app.removeAttribute('data-opening');
+      rest();
+    };
+    // by itself the last line fades before the page comes back, so the two are never on top of each
+    // other; a visitor's own click gets the page at once
+    if (event) back();
+    else setTimeout(back, 300);
   };
   for (const name of ['pointerdown', 'keydown', 'wheel']) window.addEventListener(name, end, { capture: true, passive: true });
 
