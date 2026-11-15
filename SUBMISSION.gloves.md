@@ -10,23 +10,21 @@ Use this instead of [SUBMISSION.md](SUBMISSION.md) once a person has driven Kaik
 
 ## Description
 
-Kaiku is Finnish for echo. One person in Rokoko Smartgloves sorts parts with a simulated Unitree G1. 47 more G1s do the same job at the same moment, each on its own table where the parts lie somewhere else, turned differently, sometimes a different shape. So the motion is not copied. It is redone on every table, relative to the parts that are actually there, while the person is still moving. We call those 47 runs echoes.
+Kaiku is Finnish for echo. One person in Rokoko Smartgloves sorts parts with a simulated Unitree G1. 47 more G1s do the same job at the same moment, each on its own table where the parts lie somewhere else. Each robot aims the person's motion at its own parts while they are still moving. We call those 47 runs echoes.
 
-Robots learn by watching the job being done, and there are never enough recordings. We trained a policy on 32 demonstrations from a scripted hand, not a person. It got every part in the right bin on 58% of new tables. With the 1,498 echoes of those 32 it got 95%. Four times the demonstrations, 128 without echoes, got 92%. Each number is the average of 3 training runs, tested on 96 tables the policy never saw.
+Robots learn by watching a job being done, and there are never enough recordings. A policy trained on 32 demonstrations got every part in the right bin on 58% of new tables. With the 1,498 echoes that worked added, 95%. It took 128 demonstrations without echoes to get 92%.
 
-The session in the film is a person wearing real Smartgloves at Junction, read by Rokoko's driver and hand solver. The hosted demo replays it with its echoes when nobody drives. A camera plugs into the same code as the gloves, so you can drive it without them.
+The session in the film is a person wearing real Smartgloves at Junction, read by Rokoko's driver and hand solver. The hosted demo replays it with its echoes when nobody drives. A camera plugs into the same code, so you can drive it without gloves.
 
-What is not real: everything runs in a simulator, a MuJoCo twin of Junction's G1 sorting station, and the simulator tells the policy where the parts are. A policy given only the robot's head camera instead got 189 of 370 parts into the right bin and finished 18 of 96 tables. No real G1 has moved.
+MimicGen also turns one demonstration into many, but afterwards, from recordings. Kaiku does it live. On 752 harder tables, with the parts moved much further than in the demo, the echoes sorted 214. Replaying the recording the way MimicGen does sorted 5. We wrote that replay ourselves.
 
-In the demo, press Drive it yourself, then Use my hand, and hold your hand up to the camera. Press See it without Kaiku to watch 47 robots copy the same motion and miss, then the same tables again with Kaiku on.
+What is not real: it all runs in a simulator, a MuJoCo copy of Junction's G1 sorting station, and the simulator tells the policy where the parts are. The demonstrations behind the numbers came from a scripted hand, not a person. No real G1 has moved.
 
-MimicGen and DexMimicGen also turn one demonstration into many, but afterwards, from recordings. Kaiku does it live. We also compared the two on 752 tables with the parts moved much further than in the demo. Kaiku's echoes sorted every part on 214 of them, a bit over a quarter. Replaying the recording the way MimicGen does managed 5. We wrote that replay ourselves. A policy trained with those 5 sorted 8% of new tables. With 5 echoes it sorted 19%, with all 214, 73%.
-
-Every command is checked against the speed and workspace limits Junction's humanoid challenge sets for its real G1. Runs that pass, with every part in the right bin, are saved in LeRobot and GR00T format, and the page offers them as a download.
+In the demo, press Drive it yourself, then Use my hand. "See it without Kaiku" shows 47 robots copying the same motion and missing. Runs that get every part in the right bin are saved in LeRobot and GR00T format, and the page offers them as a download.
 
 ## How we used Modal
 
-Every number above was trained on Modal, 63 runs in all, 48 for the curve and 15 for the comparison, each on its own GPU. The Train both button on the live page trains two policies on Modal while you watch, one with the echoes and one without, a few minutes from the click to the result.
+Every policy above was trained on Modal, 63 runs, each on its own GPU. On the live page, "Train both" trains two policies on Modal while you watch, one with the echoes and one without.
 
 ## Deck line
 
@@ -46,4 +44,4 @@ Rokoko's booth had one glove. If that is the session, change three lines and not
 
 ## Technologies
 
-Rokoko Smartgloves II, Rokoko Device SDK (RGMP, hand solver), Unitree G1 with Dex3 hands, MuJoCo, MediaPipe hand landmarks, Python, PyTorch, Modal, LeRobot v3.0, GR00T, three.js, Fly.io
+Rokoko Smartgloves, Rokoko Device SDK, Unitree G1 with Dex3 hands, MuJoCo, MediaPipe, PyTorch, Modal, LeRobot, GR00T, three.js, Fly.io
