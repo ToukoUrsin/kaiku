@@ -53,7 +53,8 @@ def bars(base: dict) -> str:
     arms = base["policy"]["arms"]
     rows = [("The 16 demonstrations alone", arms["plain"], ""),
             (f"+ the {base['generation']['mimicgen']['clean']} a MimicGen-style replay kept", arms["mimicgen"], ""),
-            (f"+ the {base['generation']['kaiku']['clean']} Kaiku's echo kept", arms["kaiku"], " kaiku")]
+            (f"+ {base['generation']['mimicgen']['clean']} of Kaiku's echoes, the same number", arms["kaiku_matched"], " kaiku"),
+            (f"+ all {base['generation']['kaiku']['clean']} Kaiku's echo kept", arms["kaiku"], " kaiku")]
     return '<div class="bars">' + "".join(
         f'<div class="bar"><span class="what">{name}</span><span class="track"><i class="fill{kind}" '
         f'style="width:{100 * arm["yield"]:.1f}%"></i></span><b>{pct(arm["yield"])}</b></div>'
@@ -132,7 +133,7 @@ def slides(study: dict, words: dict, base: dict) -> list[str]:
 </section>""",
         f"""<section class="slide figure">
   <h2>32 demonstrations: {pct(by[32]["plain"])} alone, {pct(by[32]["kaiku"])} with echoes.</h2>
-  <p class="lede">32 with echoes beat 128 without ({pct(by[128]["plain"])}). {words["quarter"]}</p>
+  <p class="lede">32 and their {by[32]["echoes"]:,} echoes beat 128 alone ({pct(by[128]["plain"])}). {words["quarter"]}</p>
   {chart(curve)}
   <p class="note">Share of {about["scenes"]} scenes nobody had seen in which every part ended in its own bin. Mean of {about["runs"]} training runs. At 16 demonstrations: {pct(by[16]["plain"])} alone, {pct(by[16]["kaiku"])} with echoes (other sets of 16 gave 0% to 31% alone).</p>
 </section>""",
