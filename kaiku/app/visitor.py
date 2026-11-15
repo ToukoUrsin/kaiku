@@ -133,6 +133,7 @@ class VisitorOperator:
         self.pinched = False                                  # the solved hand's own pinch
         self.posture = None                                   # the Dex3 posture their fingers ask for
         self.closed_at = None                                 # since when the fingers have been closed, their own grasp
+        self.at_part = False                                  # ... around a part, lifted yet or not
         self.was_own = False
         self.drove = None                                     # whose fingers drove in this scene, for its label
         self.grasped_own = False                              # and whether a grasp in it was the visitor's own
@@ -422,11 +423,13 @@ class VisitorOperator:
         # What the page says next: is a part in the hand, and which.
         was = self.held
         self.held, self.phase = -1, "idle"
+        self.at_part = False
         idx = self.s.echo.lead_idx
         if not free and len(idx):
             p = obs.obj_pos[0, idx]
             d = np.linalg.norm(p - obs.pinch[0, s], axis=1)
             k = int(np.argmin(d))
+            self.at_part = bool(d[k] < 0.06)
             if d[k] < 0.06 and p[k, 2] > self.scene.rest_z + 0.02:
                 ob = self.scene.by_name[self.s.layouts[0].placements[k].name]
                 self.held, self.phase = int(idx[k]), "carry"
@@ -444,7 +447,11 @@ class VisitorOperator:
                 and self._bin_at(obs.obj_pos[0, was, :2]) is None:
             self.dropped_at = now
         self.held_since = None
-        if self.closed_at is not None and now - self.closed_at > 1.2 and now - self.dropped_at > DROPPED_S:
+        if was >= 0 and self.closed_at is not None:
+            self.closed_at = now                               # fingers that just let a part go have not closed on nothing
+        # Closed around a part, the fingers get the time the lift takes before the page calls it a miss.
+        wait = 2.5 if self.at_part else 1.2
+        if self.closed_at is not None and now - self.closed_at > wait and now - self.dropped_at > DROPPED_S:
             self.missed_at = now
 
     def _left_hand(self, obs: Observation, index: int, now: float) -> None:

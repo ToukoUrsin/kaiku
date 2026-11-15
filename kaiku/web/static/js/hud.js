@@ -714,7 +714,7 @@ export class Hud {
     } else if (glove && !camera) {
       say = coil ? 'Move your hand over a part and pinch' : 'Point at a part and pinch';
     } else {
-      say = camera ? 'Move your hand over a part and pinch' : 'Press on a part and hold';
+      say = camera ? 'Move your hand over a part and pinch, or make a fist' : 'Press on a part and hold';
     }
     if (failed > 0 && !settling) more = `${failed} of ${robots} echoes could not follow that. The rest keep up with you.`;
 
@@ -975,7 +975,8 @@ export class Hud {
     this.show('ds-get', Boolean(dataset.download));
     // The size of the zip the runner last built, when it has built one. Until then a range, not a guess.
     this.text('ds-size', `One demonstration from every robot that sorted it, as LeRobot v3.0 and GR00T. ${Number.isFinite(dataset.zip_mb)
-      ? `The last download was ${Math.max(1, Math.round(dataset.zip_mb))} MB.` : 'About 30 MB.'}`);
+      // the scene decides the size: five parts take twice as long to sort as three
+      ? `The last download was ${Math.max(1, Math.round(dataset.zip_mb))} MB, a longer scene is more.` : '25 to 50 MB, by the length of the scene.'}`);
     this.show('ds-where', !this.hud.shared);                          // a path on the server says nothing to a visitor
     this.text('ds-path', dataset.path || 'Not recording to disk');
     this.show('ds-copy', Boolean(dataset.path));

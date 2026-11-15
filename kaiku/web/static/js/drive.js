@@ -10,6 +10,8 @@ const SEND_MS = 33;                   // as often as the robots are commanded
 const NEAR_M = 0.05;                  // a part this close to the pointer is the one a press takes
 const PINCH_ON = 0.38;                // thumb tip to index tip, in hand lengths: closer is a pinch
 const PINCH_OFF = 0.55;               // further is open again
+const FIST_ON = 1.0;                  // index and middle fingertips this near the wrist, in hand lengths: a fist, which takes a part too
+const FIST_OFF = 1.3;                 // further is open again
 const HAND_LOST_MS = 600;             // no hand in the picture for this long: it is not seen (one missed frame is not that)
 const HAND_LOST_LOOKS = 3;            // ... or for this many looks, on a machine that looks less often than that
 const BONES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
@@ -302,7 +304,7 @@ export class Drive {
     }
     camera.seen = performance.now();
     this.measure(camera, hand, seen, video.videoWidth / Math.max(1, video.videoHeight));
-    const reading = readHand(hand, this.grip);
+    const reading = readHand(hand, this.grip, seen.worldLandmarks?.[0]);
     const s = camera.smooth || { x: reading.x, y: reading.y };
     s.x += (reading.x - s.x) * 0.4;
     s.y += (reading.y - s.y) * 0.4;
@@ -412,11 +414,19 @@ export class Drive {
 }
 
 /** Where a hand is in the picture (mirrored, 0..1) and whether thumb and index finger pinch. */
-export function readHand(hand, wasPinched) {
+export function readHand(hand, wasPinched, world = null) {
   const palm = [0, 5, 17].reduce((sum, i) => ({ x: sum.x + hand[i].x / 3, y: sum.y + hand[i].y / 3 }), { x: 0, y: 0 });
   const length = Math.hypot(hand[9].x - hand[0].x, hand[9].y - hand[0].y) || 1e-6;
   const gap = Math.hypot(hand[8].x - hand[4].x, hand[8].y - hand[4].y) / length;
-  return { x: 1 - palm.x, y: palm.y, gap, grip: wasPinched ? gap < PINCH_OFF : gap < PINCH_ON };
+  // A closed fist takes a part as a pinch does: people close the whole hand on a thing as often as they pinch
+  // it. Measured on the hand in metres, not in the picture, where fingers pointing at the camera look closed.
+  let tips = Infinity;
+  if (world?.length === 21) {
+    const far = (a, b) => Math.hypot(world[a].x - world[b].x, world[a].y - world[b].y, world[a].z - world[b].z);
+    tips = (far(8, 0) + far(12, 0)) / (2 * (far(9, 0) || 1e-6));
+  }
+  const grip = wasPinched ? gap < PINCH_OFF || tips < FIST_OFF : gap < PINCH_ON || tips < FIST_ON;
+  return { x: 1 - palm.x, y: palm.y, gap, tips, grip };
 }
 
 /**

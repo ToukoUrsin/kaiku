@@ -2188,6 +2188,22 @@ a.button {
   }
 }
 
+/* A stage too narrow to centre the words between the camera inset and its mirror image: the words sit
+   left of the inset and take the room it leaves, or they end up one word to a line. */
+@media (max-width: 1280px) and (min-width: 761px) {
+  .drive-top:has(.hand-cam:not([hidden])) {
+    align-items: flex-start;
+  }
+
+  .drive-top:has(.hand-cam:not([hidden])) .drive-card {
+    max-width: min(560px, calc(100% - 160px - var(--s-3)));
+  }
+
+  .hand-cam {
+    width: 160px;
+  }
+}
+
 /* ---------------------------------------------------------------- phone: stage on top, a sheet below */
 
 @media (max-width: 760px) {
