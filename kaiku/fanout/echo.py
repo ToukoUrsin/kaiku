@@ -206,7 +206,7 @@ class EchoParams:
     wall_room: float = 0.085         # m a part is put down short of the bins' wall, where a hand can take it again
     tidy: bool = True                # after a mistake of the lead's, a follower takes what is left on its mat itself
     retake: float = 0.06             # m around the lead's hand in which a part it closes on is the part it takes
-    tidy_tries: int = 2              # times a follower tries a part of its own
+    tidy_tries: int = 3              # times a follower tries a part of its own
     tidy_pace: float = 1.25          # its pace for that, against the stand-in's unhurried 1.0
 
 
