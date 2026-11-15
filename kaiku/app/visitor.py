@@ -148,6 +148,7 @@ class VisitorOperator:
         self.lost = False                                     # their own grasp, and nothing sees the hand: it holds
         self.let_go = None                                    # the part that just left the hand, until it lies still
         self.landed = None                                    # where it came to rest, for the page to say
+        self.there = None                                     # since when the hand has been as near the pointer as it gets
 
     def _toward(self, s: int, target: np.ndarray) -> None:
         """Move one hand's target after ``target`` at a hand's pace, not a pointer's."""
@@ -267,8 +268,16 @@ class VisitorOperator:
         while it carries a part and is still on its way, it is not over the bin the pointer is over."""
         name = self._bin_at(self.command)
         if name is None or self.seen is None or self.phase != "carry":
+            self.there = None
             return name
-        return name if np.linalg.norm(self.seen.pinch[0, self.side, :2] - self.command) < 0.05 else None
+        if np.linalg.norm(self.seen.pinch[0, self.side, :2] - self.command) < 0.05:
+            return name
+        # The arm does not reach every corner of a bin. Once the hand has gone as far as it gets, letting go
+        # still puts the part in that bin, so the page says so and does not ask for more.
+        now = time.monotonic()
+        arrived = np.linalg.norm(self.pinch[self.side][:2] - self.command) < 0.01
+        self.there = (self.there or now) if arrived else None
+        return name if self.there is not None and now - self.there > 1.0 else None
 
     @property
     def busy(self) -> bool:

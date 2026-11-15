@@ -51,6 +51,8 @@ MODES = ("gloves", "autopilot", "policy", "visitor")
 VISITOR_SCENE_S = 150.0                                # a scene a visitor drives is replaced after this long
 VISITOR_GRACE_S = 20.0                                 # and this much later when a part is in the hand just then
 TURN_S, IDLE_S = 240.0, 45.0                      # a visitor's turn at the robots, and how long it may sit untouched
+TURN_QUEUED_S, TURN_NOTICE_S = 120.0, 20.0        # with somebody waiting a turn is this long, and lasts this long after they asked
+PRESSED = ("pause", "next_scene", "parts", "record", "mode", "calibrate", "copy_scene", "reset")   # buttons, not streams
 HELD_BY_COMPARISON = ("pause", "next_scene", "parts", "mode", "drive_start")   # what waits while a comparison runs
 COPY_EVERY_S = 30.0                               # everybody shares the page: the scene without the echo is not the only one shown
 HERE = Path(__file__).resolve().parents[1]
@@ -115,6 +117,8 @@ class Runner:
         self.visitor: VisitorOperator | None = None
         self.driver_client: int | None = None
         self.turn_started = 0.0
+        self.queued_at = 0.0                                   # when the first of those waiting asked
+        self.told: dict[int, float] = {}                       # when each page was last told its button did nothing
         self.last_visitor_command = 0.0
         self._visitor_expired = False
         self.queue: list[int] = []                             # pages that asked for the next turn, in order
@@ -295,6 +299,12 @@ class Runner:
         on that page, so "started" and "ended" never stand on screen together."""
         self.viewer.send_event({"type": "toast", "text": text, "level": level, "to": client, "key": "turn"})
 
+    def _turn_s(self) -> float:
+        """How long the turn in hand may last: shorter while somebody waits, and never over the moment they asked."""
+        if not self.queue:
+            return TURN_S
+        return min(TURN_S, max(TURN_QUEUED_S, self.queued_at - self.turn_started + TURN_NOTICE_S))
+
     def _end_visitor_turn(self, reason: str = "") -> None:
         if self.driver_client is None:
             return
@@ -316,6 +326,8 @@ class Runner:
     def _start_visitor(self, client: int) -> None:
         if self.driver_client is not None:
             if int(client) != self.driver_client and int(client) not in self.queue:
+                if not self.queue:
+                    self.queued_at = time.monotonic()
                 self.queue.append(int(client))                 # the page says who drives, for how long, and who is next
             return
         if int(client) in self.queue:
@@ -564,8 +576,13 @@ class Runner:
                         or float(np.abs(self.visitor.command - was[0]).max()) > 1e-4:
                     self.last_visitor_command = time.monotonic()
             elif self.driver_client is not None and client != self.driver_client and name != "train":
-                continue                                       # a visitor has the robots: nobody else's buttons count
-                                                               # (training is rented elsewhere and touches no robot)
+                # A visitor has the robots: nobody else's buttons count (training is rented elsewhere and touches
+                # no robot). The page that pressed is told why nothing happened.
+                if name in PRESSED and client is not None and time.monotonic() - self.told.get(client, 0.0) > 4.0:
+                    self.told[client] = time.monotonic()
+                    self.viewer.send_event({"type": "toast", "level": "info", "to": client,
+                                            "text": "A visitor is driving now. That works again when their turn ends."})
+                continue
             elif name == "pause":
                 was, self.paused = self.paused, bool(value)
                 self.paused_by = client if self.paused else None
@@ -667,8 +684,8 @@ class Runner:
         if self.driver_client is not None:
             now = time.monotonic()
             # a glove on this machine is one person's sitting, not a queue of visitors: it has no clock
-            if not self.glove_fingers and (now - self.last_visitor_command > IDLE_S or now - self.turn_started > TURN_S):
-                self._end_visitor_turn("idle" if now - self.turn_started <= TURN_S else "timeout")
+            if not self.glove_fingers and (now - self.last_visitor_command > IDLE_S or now - self.turn_started > self._turn_s()):
+                self._end_visitor_turn("idle" if now - self.turn_started <= self._turn_s() else "timeout")
                 return
         obs = s.observe()
         if isinstance(self.op, GloveOperator) and not self.op.person and not self.op.healthy:
@@ -685,7 +702,10 @@ class Runner:
             limit += int(VISITOR_GRACE_S * CONTROL_HZ)         # a part in the hand is put down before the scene ends
         if self.op.done or s.tick_no >= limit:
             if self.mode == "visitor" and s.tick_no >= limit and not self.op.done:
+                # Nothing of a scene that ran out of time is saved: nobody waits for the echoes to finish it.
                 self._visitor_expired = True
+                self._end_episode(record=False)
+                return
             s.finish_lead()
         s.tick(cmd)
         if not s.copy:
@@ -758,7 +778,7 @@ class Runner:
             operator["starting"] = self.mode != "visitor"      # asked for, and the tables are still being laid
             operator["queue"] = list(self.queue)               # who asked for the next turn, first first
             if not self.glove_fingers:
-                operator["turn_left_s"] = round(max(0.0, TURN_S - (now - self.turn_started)))
+                operator["turn_left_s"] = round(max(0.0, self._turn_s() - (now - self.turn_started)))
             if self.mode == "visitor" and working:
                 # A scene a visitor drives is replaced after VISITOR_SCENE_S of simulated time. In the
                 # seconds of this clock it is that over the rate the simulation keeps up.

@@ -435,7 +435,7 @@ export class Hud {
         : dataset.recording ? 'demonstrations saved, most from the scripted hand' : 'demonstrations');
 
     const labels = alone ? ['Scenes sorted alone', 'Learned from the operator', 'Learned from echoes']
-      : ['Saved per scene', 'Echoes that succeed', 'Saved per minute'];
+      : ['Saved per scene, average', 'Echoes that succeed', 'Saved per minute'];
     const short = alone ? ['Sorted alone', 'From operator', 'From echoes']               // a phone has a quarter of the room
       : ['Per scene', 'Echoes right', 'Per minute'];
     labels.forEach((label, i) => {
