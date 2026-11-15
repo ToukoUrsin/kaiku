@@ -996,7 +996,9 @@ export class Hud {
       this.show('claim', Boolean(point));
       if (point) {
         const both = `${cap(percent(point.plain))} alone, ${percent(point.kaiku)} with echoes`;
-        const beat = found.beats ? `${point.demos} with echoes beat ${found.beats.demos} without` : '';
+        // the echoes are counted: "with echoes" alone hides how many the few demonstrations bring
+        const theirs = Number.isFinite(point.echoes) ? `and their ${point.echoes.toLocaleString('en-US')} echoes` : 'with echoes';
+        const beat = found.beats ? `${point.demos} ${theirs} beat ${found.beats.demos} alone` : '';
         this.text('headline-top', `The study, ${point.demos} demonstrations`);
         this.text('headline-main', both);
         this.text('headline-tail', beat);
@@ -1422,7 +1424,7 @@ function cap(text) {
 
 /**
  * The study's one result: the fewest demonstrations that, with their echoes, beat the most the operator gave
- * alone (32 with echoes beat 128 without). A curve where none does leads with the widest gap instead.
+ * alone (32 and their 1,498 echoes beat 128 alone). A curve where none does leads with the widest gap instead.
  * @returns {{point: object, beats: object | null} | null}
  */
 export function finding(curve) {

@@ -1833,6 +1833,7 @@ a.button {
   color: var(--text);
   font-size: var(--t-14);
   font-weight: 500;
+  text-wrap: balance;
 }
 
 .claim-more:empty {
@@ -2481,6 +2482,28 @@ a.button {
 
   .controls {
     padding-inline: var(--s-3);
+  }
+}
+
+/* a short window (a phone on its side, a small browser window): the card is low and wide, so the
+   robot under it stays in view */
+@media (max-height: 520px) and (min-width: 560px) {
+  .drive-card,
+  .drive-top:has(.hand-cam:not([hidden])) .drive-card {
+    width: max-content;
+    max-width: min(100%, 640px);
+    gap: 2px;
+    padding: var(--s-2) var(--s-4) 6px;
+  }
+
+  .drive-say {
+    font-size: 16px;
+  }
+
+  .drive-more {
+    max-width: none;
+    min-height: 0;
+    font-size: var(--t-12);
   }
 }
 
