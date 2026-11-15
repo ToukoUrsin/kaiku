@@ -111,6 +111,10 @@ live page in "Use my hand", one of us sorting the yellow part with a bare hand, 
 recorder's own controls painted out. The end card is left out (`open.end` is empty) so that the film
 with the team's two clips around it (`film/team.sh`) is 1:59.6.
 
+The film handed in (v8) has both parts he sorted, the yellow and then the red one: 23.6 s of the same
+recording with one cut between them (`dur_real` 23.6). To stay under 2:00, shots 3-fleet and 8-runner
+are left out of film.json; `film/edit.py` skips a shot that is not there. It is 1:58.9 with the team's clips.
+
 Everything after shot 1 is the same film, word for word. The gloves words are true only of a clip
 that shows what they say: a real glove on a real hand, driving Kaiku. `film/make.sh v5` alone goes
 back to the hand film and rebuilds the no-gloves film.

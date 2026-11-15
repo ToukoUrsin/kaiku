@@ -89,7 +89,7 @@
   {
    "id": "1-hand",
    "dur": 6.8,
-   "dur_real": 9.6,
+   "dur_real": 23.6,
    "swappable": true,
    "clip": "shot2.mp4",
    "about": "The swappable shot, and the one the cold open cuts to: it starts full frame on the hand, where the robot's hand was in the open's last frame, then the picture moves to its place (see open). Without --shot2 it is the hand film: the page's own camera picture beside the robot's hand, both from take hand (film/hand.py), lined up on the clock they were recorded with. With film/make.sh vN --shot2 FILE the phone clip of a gloved hand is the picture, for dur_real seconds, and head_real, label_real and vo_real are used: the only words in the film that say gloves.",
@@ -138,17 +138,6 @@
     {
      "at": 0.3,
      "text": "Everything here runs in a simulator, a twin of Junction's G1 sorting station. The policy is told where the parts are. On the live page, a scripted hand drives when no visitor does."
-    }
-   ]
-  },
-  {
-   "id": "3-fleet",
-   "dur": 6.5,
-   "head": "1 robot driven, {fleet_others} echoes, each on its own table",
-   "vo": [
-    {
-     "at": 0.2,
-     "text": "{fleet_others_say} echoes redo the driven robot's job as it happens, each on its own table."
     }
    ]
   },
@@ -243,25 +232,6 @@
     "{matched_kaiku_say} percent"
    ],
    "about": "The same 16 demonstrations turned into more two ways on the same 752 tables: how many clean runs each kept, then what a policy trained with them sorts. cues: each count and each share appears as the voice says it."
-  },
-  {
-   "id": "8-runner",
-   "dur": 8.3,
-   "about": "The runner's log is on screen for takes.runner.for seconds (5 at most), printing its lines when the runner printed them. Its summary line arrives where the voice starts cut_cue, and the part of it that matters is shown large.",
-   "head": "The challenge's own runner and safety filter, with a mock robot",
-   "label_robot": "A local Kaiku. The runner follows this robot's commands.",
-   "vo": [
-    {
-     "at": 0.3,
-     "text": "The humanoid challenge's own runner, with a mock robot: {runner_commands_low} commands through its safety filter, none clipped."
-    }
-   ],
-   "cut_cue": "{runner_commands_low}",
-   "count": [
-    "{runner_commands_shown} commands",
-    "through the safety filter",
-    "{runner_clipped} clipped"
-   ]
   },
   {
    "id": "9-nobody",

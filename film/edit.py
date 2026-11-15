@@ -482,15 +482,16 @@ def plan(work: Path, use_open: bool = True) -> None:
         pages[f"ov-2{'abc'[k]}"] = (full, f"<div class=line style='top:{196 + 122 * k}px'>{e(text)}</div>")
         recipe[sid]["over"].append({"file": f"ov-2{'abc'[k]}", "a": max(0.0, cue(sid, words) - 0.1), "b": dur(s), "in": 0.25})
 
-    # ---- shot 3: one driven, the rest echo
-    s, sid = shots["3-fleet"], "3-fleet"
-    rows = page_said("3-all")
-    need(all(r.get("robots") == str(n["fleet_others"]) and "scripted hand" in r.get("caption", "").lower() and r.get("chain-count") == "1"
-             and r.get("chain-who") == "robot driven" for r in rows),
-         f"shot 3: the page says a scripted hand drives 1 robot and {n['fleet_others']} echoes follow BUT a row of 3-all.says.jsonl differs")
-    need(n["fleet"] == n["fleet_others"] + 1, f"the fleet is {n['fleet']} robots: one driven and {n['fleet_others']} echoes BUT film.json's numbers disagree")
-    pages["ov-3"] = (full, head(fill(s["head"])))
-    recipe[sid] = {**join(sid, ["3-all"]), "over": [{"file": "ov-3", "a": 0, "b": dur(s)}]}
+    if "3-fleet" in shots:                      # a cut that leaves this shot out of film.json
+        # ---- shot 3: one driven, the rest echo
+        s, sid = shots["3-fleet"], "3-fleet"
+        rows = page_said("3-all")
+        need(all(r.get("robots") == str(n["fleet_others"]) and "scripted hand" in r.get("caption", "").lower() and r.get("chain-count") == "1"
+                 and r.get("chain-who") == "robot driven" for r in rows),
+             f"shot 3: the page says a scripted hand drives 1 robot and {n['fleet_others']} echoes follow BUT a row of 3-all.says.jsonl differs")
+        need(n["fleet"] == n["fleet_others"] + 1, f"the fleet is {n['fleet']} robots: one driven and {n['fleet_others']} echoes BUT film.json's numbers disagree")
+        pages["ov-3"] = (full, head(fill(s["head"])))
+        recipe[sid] = {**join(sid, ["3-all"]), "over": [{"file": "ov-3", "a": 0, "b": dur(s)}]}
 
     # ---- shots 4 and 5: the same tables without Kaiku and with it, three tables close and then all of them, at the speed they ran
     rows4c, rows4, rows5c, rows5 = page_said("4-close"), page_said("4-wide"), page_said("5-close"), page_said("5-wide")
@@ -602,51 +603,52 @@ def plan(work: Path, use_open: bool = True) -> None:
     recipe[sid] = {**join(sid, ["7-robots"]), "over": [{"file": "ov-7", "a": 0, "b": dur(s)}]
                    + [{"file": f"ov-7{x}", "a": c, "b": dur(s), "in": 0.25} for x, c in zip("abcd", cs)]}
 
-    # ---- shot 8: the challenge's own runner: its log for five seconds at most, its own lines at the moments it printed them
-    s, sid = shots["8-runner"], "8-runner"
-    g1 = json.loads((work / "g1" / "summary.json").read_text())
-    log = (work / "g1" / "runner.log").read_text().splitlines()
-    need(g1["safety"]["mode"] == "ok" and g1["safety"]["steps"] == g1["ticks"] == n["runner_commands"] and g1["safety"]["clipped_steps"] == n["runner_clipped"],
-         f"shot 8: the runner's summary says {n['runner_commands']} commands went through the safety filter and {n['runner_clipped']} were clipped BUT it says {g1['safety']} of {g1['ticks']} ticks")
-    need("--backend mock" in log[0], "shot 8: the runner ran with its mock robot BUT the first line of runner.log does not say --backend mock")
-    t0 = json.loads((work.parent / "rec" / "g1" / "recording.json").read_text())["t0_epoch"]
-    timed, last = [], 0.0
-    for text in log:
-        m = re.match(r"(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d),(\d+) ", text)
-        if m:
-            last = datetime.datetime.strptime(m[1], "%Y-%m-%d %H:%M:%S").timestamp() + int(m[2]) / 1000 - t0
-        timed.append((last, "cmd" if not timed else "", re.sub(r"/\S+?/work(?=/g1)", "\u2026", text)))
-    summary, line = next((t, text) for t, _, text in timed if " episode 0: " in text)
-    on, held = takes["runner"]["on"], takes["runner"]["for"]
-    need(held <= 5.0, f"shot 8: the runner's log is on screen for {held} s BUT the brief says 5 at most")
-    lead = round((cue(sid, s["cut_cue"]) - 0.2) * fps) / fps
-    need(on + 1.0 <= lead <= on + held - 1.8, f"shot 8: the runner's summary line arrives {lead - on:.1f} s after its log comes on and stays {on + held - lead:.1f} s BUT that is too early or too short to read")
-    start = summary - lead                                   # the second of the recording the shot starts at
-    c = takes["clips"]["8-robot"]
-    need(c["start"] <= start and c["end"] >= start + dur(s), "shot 8: the robot beside the log is the same seconds of the same run BUT the take in film.json does not cover them")
-    states = [(on, start + on)] + [(round(t - start, 3), t) for t, _, _ in timed if start + on < t < start + on + held]
-    states = sorted({st[0]: st for st in states}.values())
-    over8 = []
-    for i, (at, now) in enumerate(states):
-        lines = [(k, text) for t, k, text in timed if t <= now + 1e-6]
-        pages[f"term-{i:02d}"] = (full, terminal(lines, "aaltonomous.deploy.runner --backend mock"))
-        over8.append({"file": f"term-{i:02d}", "a": at, "b": states[i + 1][0] if i + 1 < len(states) else on + held, "hard": True})
-    m = re.search(r"'safety': \{'steps': (\d+), 'clipped_steps': (\d+), 'mode': '(\w+)'", line)
-    need(bool(m) and int(m[1]) == n["runner_commands"] and int(m[2]) == n["runner_clipped"] and m[3] == "ok",
-         "shot 8: the line shown large is cut from the runner's own summary line and says the same as its summary file BUT it does not")
-    pages["ov-8z"] = (full, f"<div class=zoom>{e(m[0], quote=False)}, \u2026}}</div>")
-    over8.append({"file": "ov-8z", "a": lead, "b": on + held, "hard": True})
-    pages["ov-8"] = (full, head(s["head"], width=TERM, col=True)
-                     + f"<div class=pill style='left:{TERM + 24}px;bottom:40px;max-width:{W - TERM - 60}px;font-size:34px'>{e(s['label_robot'])}</div>")
-    over8.insert(0, {"file": "ov-8", "a": 0, "b": dur(s)})
-    need(f"{g1['safety']['steps']:,}" == n["runner_commands_shown"], f"shot 8: the count shown is the runner's own ({n['runner_commands_shown']}) BUT its summary says {g1['safety']['steps']:,}")
-    pages["ov-8n"] = (full, f"<div class=count style='left:{TERM + 24}px;width:{W - TERM - 60}px'><b>{e(fill(s['count'][0]))}</b><span>{e(fill(s['count'][1]))}</span><b>{e(fill(s['count'][2]))}</b></div>")
-    over8.append({"file": "ov-8n", "a": lead + 0.4, "b": dur(s), "in": 0.25})
-    recipe[sid] = {"inputs": clip("8-robot"), "n": 1, "over": over8,
-                   "graph": f"[0:v]trim=start={start - c['start']:.4f},setpts=PTS-STARTPTS,{hold}[base]"}
-    facts["shots"][sid].update(log_on=[on, on + held], summary_at=lead, rec_from=round(start, 3), states=len(states))
-    used.append("8-robot.mp4")
-    page_said("8-robot")
+    if "8-runner" in shots:                      # a cut that leaves this shot out of film.json
+        # ---- shot 8: the challenge's own runner: its log for five seconds at most, its own lines at the moments it printed them
+        s, sid = shots["8-runner"], "8-runner"
+        g1 = json.loads((work / "g1" / "summary.json").read_text())
+        log = (work / "g1" / "runner.log").read_text().splitlines()
+        need(g1["safety"]["mode"] == "ok" and g1["safety"]["steps"] == g1["ticks"] == n["runner_commands"] and g1["safety"]["clipped_steps"] == n["runner_clipped"],
+             f"shot 8: the runner's summary says {n['runner_commands']} commands went through the safety filter and {n['runner_clipped']} were clipped BUT it says {g1['safety']} of {g1['ticks']} ticks")
+        need("--backend mock" in log[0], "shot 8: the runner ran with its mock robot BUT the first line of runner.log does not say --backend mock")
+        t0 = json.loads((work.parent / "rec" / "g1" / "recording.json").read_text())["t0_epoch"]
+        timed, last = [], 0.0
+        for text in log:
+            m = re.match(r"(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d),(\d+) ", text)
+            if m:
+                last = datetime.datetime.strptime(m[1], "%Y-%m-%d %H:%M:%S").timestamp() + int(m[2]) / 1000 - t0
+            timed.append((last, "cmd" if not timed else "", re.sub(r"/\S+?/work(?=/g1)", "\u2026", text)))
+        summary, line = next((t, text) for t, _, text in timed if " episode 0: " in text)
+        on, held = takes["runner"]["on"], takes["runner"]["for"]
+        need(held <= 5.0, f"shot 8: the runner's log is on screen for {held} s BUT the brief says 5 at most")
+        lead = round((cue(sid, s["cut_cue"]) - 0.2) * fps) / fps
+        need(on + 1.0 <= lead <= on + held - 1.8, f"shot 8: the runner's summary line arrives {lead - on:.1f} s after its log comes on and stays {on + held - lead:.1f} s BUT that is too early or too short to read")
+        start = summary - lead                                   # the second of the recording the shot starts at
+        c = takes["clips"]["8-robot"]
+        need(c["start"] <= start and c["end"] >= start + dur(s), "shot 8: the robot beside the log is the same seconds of the same run BUT the take in film.json does not cover them")
+        states = [(on, start + on)] + [(round(t - start, 3), t) for t, _, _ in timed if start + on < t < start + on + held]
+        states = sorted({st[0]: st for st in states}.values())
+        over8 = []
+        for i, (at, now) in enumerate(states):
+            lines = [(k, text) for t, k, text in timed if t <= now + 1e-6]
+            pages[f"term-{i:02d}"] = (full, terminal(lines, "aaltonomous.deploy.runner --backend mock"))
+            over8.append({"file": f"term-{i:02d}", "a": at, "b": states[i + 1][0] if i + 1 < len(states) else on + held, "hard": True})
+        m = re.search(r"'safety': \{'steps': (\d+), 'clipped_steps': (\d+), 'mode': '(\w+)'", line)
+        need(bool(m) and int(m[1]) == n["runner_commands"] and int(m[2]) == n["runner_clipped"] and m[3] == "ok",
+             "shot 8: the line shown large is cut from the runner's own summary line and says the same as its summary file BUT it does not")
+        pages["ov-8z"] = (full, f"<div class=zoom>{e(m[0], quote=False)}, \u2026}}</div>")
+        over8.append({"file": "ov-8z", "a": lead, "b": on + held, "hard": True})
+        pages["ov-8"] = (full, head(s["head"], width=TERM, col=True)
+                         + f"<div class=pill style='left:{TERM + 24}px;bottom:40px;max-width:{W - TERM - 60}px;font-size:34px'>{e(s['label_robot'])}</div>")
+        over8.insert(0, {"file": "ov-8", "a": 0, "b": dur(s)})
+        need(f"{g1['safety']['steps']:,}" == n["runner_commands_shown"], f"shot 8: the count shown is the runner's own ({n['runner_commands_shown']}) BUT its summary says {g1['safety']['steps']:,}")
+        pages["ov-8n"] = (full, f"<div class=count style='left:{TERM + 24}px;width:{W - TERM - 60}px'><b>{e(fill(s['count'][0]))}</b><span>{e(fill(s['count'][1]))}</span><b>{e(fill(s['count'][2]))}</b></div>")
+        over8.append({"file": "ov-8n", "a": lead + 0.4, "b": dur(s), "in": 0.25})
+        recipe[sid] = {"inputs": clip("8-robot"), "n": 1, "over": over8,
+                       "graph": f"[0:v]trim=start={start - c['start']:.4f},setpts=PTS-STARTPTS,{hold}[base]"}
+        facts["shots"][sid].update(log_on=[on, on + held], summary_at=lead, rec_from=round(start, 3), states=len(states))
+        used.append("8-robot.mp4")
+        page_said("8-robot")
 
     # ---- shot 9: nobody drives
     s, sid = shots["9-nobody"], "9-nobody"
