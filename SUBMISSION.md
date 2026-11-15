@@ -16,7 +16,7 @@ Robots learn by watching the job being done, and there are never enough recordin
 
 Rokoko gloves plug into the same code as the camera. The gloves give the fingers. Where the hand is comes from a Coil Pro, or from the camera when there is none. We had no real gloves, so we have only tested this with the emulated Smartgloves II in Rokoko's Device SDK. With it, a pinch picks a part up.
 
-What is not real: everything runs in a simulator, a MuJoCo twin of Junction's G1 sorting station, and the simulator tells the policy where the parts are. When no visitor drives the demo, the scripted hand does.
+What is not real: everything runs in a simulator, a MuJoCo twin of Junction's G1 sorting station, and the simulator tells the policy where the parts are. A policy given only the robot's head camera instead got 189 of 370 parts into the right bin and finished 18 of 96 tables. When no visitor drives the demo, the scripted hand does.
 
 In the demo, press Drive it yourself, then Use my hand. Press See it without Kaiku to watch 47 robots copy the same motion and miss, then the same tables again with Kaiku on.
 

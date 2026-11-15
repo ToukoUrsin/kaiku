@@ -16,7 +16,7 @@ Robots learn by watching the job being done, and there are never enough recordin
 
 The session in the film is a person wearing real Smartgloves at Junction, read by Rokoko's driver and hand solver. The hosted demo replays it with its echoes when nobody drives. A camera plugs into the same code as the gloves, so you can drive it without them.
 
-What is not real: everything runs in a simulator, a MuJoCo twin of Junction's G1 sorting station, and the simulator tells the policy where the parts are. No real G1 has moved.
+What is not real: everything runs in a simulator, a MuJoCo twin of Junction's G1 sorting station, and the simulator tells the policy where the parts are. A policy given only the robot's head camera instead got 189 of 370 parts into the right bin and finished 18 of 96 tables. No real G1 has moved.
 
 In the demo, press Drive it yourself, then Use my hand, and hold your hand up to the camera. Press See it without Kaiku to watch 47 robots copy the same motion and miss, then the same tables again with Kaiku on.
 
