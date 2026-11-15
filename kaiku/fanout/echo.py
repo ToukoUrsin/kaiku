@@ -190,6 +190,7 @@ class EchoParams:
     down_length: float = 0.045       # and over which that fades out above it
     down_travel: float = 0.03        # m the hand must have carried it (and as much again) for that to be a new place
     room: float = 0.10               # m between the centres of a part put down and the parts lying on the mat
+    ahead: float = 0.03              # m more room towards a part that lies ahead of the place: the hand reaches past what it holds
     wall_room: float = 0.085         # m a part is put down short of the bins' wall, where a hand can take it again
 
 
@@ -433,7 +434,8 @@ class Echo:
         for _ in range(4):
             away = q[:, None] - obj_xy                                                     # (F, n, 2)
             gap = np.linalg.norm(away, axis=-1)
-            push = np.where(lying, np.maximum(p.room - gap, 0.0), 0.0)
+            need = p.room + p.ahead * np.clip(-away[..., 0] / np.maximum(gap, 1e-6), 0.0, 1.0)   # the hand reaches ahead
+            push = np.where(lying, np.maximum(need - gap, 0.0), 0.0)
             away = np.where(gap[..., None] > 1e-6, away / np.maximum(gap, 1e-6)[..., None], [0.0, 1.0])
             q = np.clip(q + (push[..., None] * away).sum(axis=1), lo, hi)
         return q
