@@ -1,6 +1,6 @@
 # Kaiku
 
-This is the version in force: no real gloves have been worn. The version for after a real glove session is [SUBMISSION.gloves.md](SUBMISSION.gloves.md).
+No real gloves have been worn. The glove path is tested with Rokoko's driver and its emulated Smartgloves II only.
 
 **Punchline:** One hand, 48 robots.
 
