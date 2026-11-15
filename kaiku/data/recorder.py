@@ -99,6 +99,11 @@ class Recorder:
         hands_extra = {"hands": np.stack(self._hands).astype(np.float32)} if len(self._hands) == state.shape[1] else {}
         self.begin()
         good = result.success & (result.clipped == 0) & ~result.aborted
+        # A robot that finished a part by itself after the operator's mistake is no demonstration of the
+        # operator's: that part was the stand-in's pick. Its run counts on the page and is not saved.
+        own = np.asarray(getattr(result, "own", ()), bool)
+        if own.shape == good.shape:
+            good &= ~own
         keep = np.flatnonzero(good)
         out["dropped"] = int((~good).sum())
         self.dropped += out["dropped"]

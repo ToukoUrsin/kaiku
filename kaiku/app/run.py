@@ -410,11 +410,16 @@ class Runner:
             self.rec.operator = self._who()
         kept = self.rec.end(r)
         clean = ok & (r.clipped == 0)
+        helped = int((r.own[1:] & clean[1:]).sum()) if len(r.own) == self.n else 0
+        if helped:                                             # said, so the count of sorted tables is not taken for echoes alone
+            self.toast(f"{helped} robot{'s' if helped > 1 else ''} finished a part on {'their' if helped > 1 else 'its'} own "
+                       f"after the second try. {'Those runs are' if helped > 1 else 'That run is'} not saved as "
+                       f"{'demonstrations' if helped > 1 else 'a demonstration'}.", "info")
         if record:
             t = self.tot
             t["episodes"] += 1
             t["human"] += int(clean[0])
-            t["robot"] += int(clean[1:].sum())
+            t["robot"] += int(clean[1:].sum()) - helped        # demonstrations: not the runs the stand-in's pick finished
             t["attempts"] += self.n - 1
             t["clipped"] += int(r.clipped.sum())
             t["ticks"] += s.tick_no

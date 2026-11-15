@@ -246,3 +246,5 @@ def test_a_part_put_down_next_to_another_part_does_not_cost_the_echoes(aside, se
     assert led and r.success[0], "the scripted person did not sort the lead's own table"
     assert r.clipped.sum() == 0
     assert r.success[1:].sum() >= least, f"only {int(r.success[1:].sum())} of {n - 1} echoes sorted their own table"
+    # Those echoes are marked, so the recorder does not save the stand-in's pick as the person's demonstration.
+    assert r.own.shape == (n,) and not r.own[0] and r.own[1:].any()

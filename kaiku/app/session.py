@@ -65,6 +65,7 @@ class EpisodeResult:
     aborted: np.ndarray                    # (N,)
     ticks: int
     lag: np.ndarray = field(default_factory=lambda: np.zeros(0))   # (N-1,) worst echo lag, s
+    own: np.ndarray = field(default_factory=lambda: np.zeros(0, bool))   # (N,) took a part by itself after the lead's mistake
 
 
 def draw_lead(scene, reach: ReachMap, rng: np.random.Generator, n: int | None = None,
@@ -313,8 +314,12 @@ class Session:
         score = np.array([self.scene.score(o.values()) for o in outcomes])
         success = np.array([all(v == "correct" for v in o.values()) and len(o) > 0 for o in outcomes])
         success &= ~self.safety.aborted
+        # A follower that finished a part with the stand-in's pick did not get there on the operator's motion.
+        own = np.zeros(self.n, bool)
+        if self.n > 1 and not self.copy:
+            own[1:] = self.echo.helped
         return EpisodeResult(list(self.layouts), outcomes, score, success, self.clipped.copy(),
-                             self.safety.aborted.copy(), self.tick_no, self.max_lag.copy())
+                             self.safety.aborted.copy(), self.tick_no, self.max_lag.copy(), own)
 
     def close(self) -> None:
         self.sim.close()

@@ -286,6 +286,7 @@ class Echo:
         self.own: list[dict | None] = [None] * F     # a follower taking a part of its own: {job, hand, part}
         self.tidying = np.zeros(F, bool)             # which followers are doing that now
         self.tidied = np.zeros((F, n), int)          # tries at each part
+        self.helped = np.zeros(F, bool)              # which followers have taken a part by themselves this scene
 
     def push(self, tick: LeadTick) -> None:
         k = self.len
@@ -451,6 +452,7 @@ class Echo:
             if job is None:
                 job = self.own[f] = self._own_pick(f, obj_xy[f], obj_yaw[f], obj_on_mat[f], out_x[f], out_R[f])
                 self.tidying[f] = job is not None
+                self.helped[f] |= job is not None
                 if job is None:
                     continue
             s = job["hand"]
