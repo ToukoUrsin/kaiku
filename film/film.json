@@ -7,7 +7,7 @@
   "dir": "/bulk3/runs/opens/final/kaiku",
   "file": "open.mp4",
   "sound": "open.wav",
-  "end": "end.mp4",
+  "end": "",
   "max": 120,
   "aim": 110,
   "hand": {
@@ -89,7 +89,7 @@
   {
    "id": "1-hand",
    "dur": 6.8,
-   "dur_real": 10.0,
+   "dur_real": 9.6,
    "swappable": true,
    "clip": "shot2.mp4",
    "about": "The swappable shot, and the one the cold open cuts to: it starts full frame on the hand, where the robot's hand was in the open's last frame, then the picture moves to its place (see open). Without --shot2 it is the hand film: the page's own camera picture beside the robot's hand, both from take hand (film/hand.py), lined up on the clock they were recorded with. With film/make.sh vN --shot2 FILE the phone clip of a gloved hand is the picture, for dur_real seconds, and head_real, label_real and vo_real are used: the only words in the film that say gloves.",
@@ -115,7 +115,7 @@
    "vo_bare": [
     {
      "at": 0.5,
-     "text": "This is our own hand at Junction. The laptop's camera reads it, and the first robot follows."
+     "text": "This is our own hand. The laptop's camera reads it, and the first robot sorts the part."
     }
    ]
   },

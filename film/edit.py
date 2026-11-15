@@ -391,7 +391,10 @@ def plan(work: Path, use_open: bool = True) -> None:
         recipe[sid] = {"inputs": ["-i", "in/shot2.mp4"] + (last if op else []), "n": 2 if op else 1,
                        "over": [{"file": "ov-1", "a": words_at, "b": dur(s), **({"in": 0.4} if op else {})}],
                        "graph": graph + out_of_open(1) if op else graph.replace("[pic]", "[base]")}
-        pages["ov-1"] = (full, head(s["head" + sfx]) + f"<div class=pill style='left:56px;bottom:52px;font-size:40px'>{e(s['label' + sfx])}</div>")
+        # A screen recording of the page has the bins and the person's own camera picture along its lower left:
+        # the bare-hand label sits lower right, clear of both.
+        where = "right:56px;bottom:52px;font-size:36px" if kind == "bare" else "left:56px;bottom:52px;font-size:40px"
+        pages["ov-1"] = (full, head(s["head" + sfx]) + f"<div class=pill style='{where}'>{e(s['label' + sfx])}</div>")
         facts["match"] = {**facts.get("match", {}), "picture": [pw, ph], "hand_in_picture": hand, "starts_at": [round(v) for v in box], "ends_at": [round(v) for v in fit]}
     else:
         take = (work / takes["hand"]["take"]).resolve()
@@ -468,8 +471,10 @@ def plan(work: Path, use_open: bool = True) -> None:
          f"shot 2: the page's own line and its label on the hand say a scripted hand drives, with {n['fleet_others']} echoes BUT a row of 2-sim.says.jsonl differs")
     study = json.loads((ROOT / "kaiku/policy/pretrained/study.json").read_text())
     told = (ROOT / "SUBMISSION.md").read_text()
-    need("everything runs in a simulator" in told and "twin of Junction's G1 sorting station" in told and "the simulator tells the policy where the parts are" in told
-         and "When no visitor drives the demo, the scripted hand does" in told,
+    # The text was cut to under 2,000 characters on 15.11: it says the same three things in fewer words, and that
+    # a scripted hand drives when no visitor does is read off the page itself (rows, above).
+    need("runs in a simulator" in told and "copy of Junction's G1 sorting station" in told and "the simulator tells the policy where the parts are" in told
+         and "scripted hand" in told,
          "shot 2: the three lines about what is simulated are what SUBMISSION.md says BUT its words have changed")
     pages["ov-2"] = (full, "<div class=side></div>" + head(s["head"]).replace("<div class=scrim style='width:1920px'></div>", ""))
     recipe[sid] = {**join(sid, ["2-sim"]), "over": [{"file": "ov-2", "a": 0, "b": dur(s)}]}
