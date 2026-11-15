@@ -36,6 +36,16 @@ partner for the part the lead takes (its own already lies in its bin, fell off t
 where its arm cannot take it) leaves that one grasp out: its hand stays up and open, the rest
 of its table is sorted as before, and it says which part it left out (``left_out``).
 
+After a mistake a follower tidies its own table. A part put down and taken again does not come to
+lie on a follower's table as it does on the lead's: another part may be right next to it there, and
+the hand that redoes the lead's second grasp then comes down on that neighbour, or closes beside
+the part. So in a scene where the lead closed its hand on the same part twice, a follower that has
+replayed everything and still has a part on its mat whose partner the lead did sort takes that
+part itself: it knows where the part lies and which bin is its own, and by then the rest of its
+table is out of the way. That is a grasp the lead did not show (the stand-in's pick and place for
+where the part is now, ``tidying``); a part its arm cannot take is said (``out_of_reach``) and that
+follower fails alone. A scene without such a mistake is replayed exactly as before.
+
 All arrays are batched over F followers; nothing here touches the simulator.
 """
 from __future__ import annotations
@@ -44,7 +54,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from kaiku.sim.grasp import HAND_OPEN, NATURAL_DIR, TRIANGLE_PHI, arm_for, hand14
+from kaiku.sim.grasp import (HAND_OPEN, NATURAL_DIR, TRIANGLE_PHI, Waypoint, arm_for, hand14, left_to_right,
+                             plan_pick_place)
+from kaiku.sim.motion import Follower
 from kaiku.sim.reach import ReachMap, level_palm, part_radius
 from kaiku.sim.scene import SHAPES, Layout, Placement, Scene
 
@@ -192,6 +204,10 @@ class EchoParams:
     room: float = 0.10               # m between the centres of a part put down and the parts lying on the mat
     ahead: float = 0.03              # m more room towards a part that lies ahead of the place: the hand reaches past what it holds
     wall_room: float = 0.085         # m a part is put down short of the bins' wall, where a hand can take it again
+    tidy: bool = True                # after a mistake of the lead's, a follower takes what is left on its mat itself
+    retake: float = 0.06             # m around the lead's hand in which a part it closes on is the part it takes
+    tidy_tries: int = 2              # times a follower tries a part of its own
+    tidy_pace: float = 1.25          # its pace for that, against the stand-in's unhurried 1.0
 
 
 class Echo:
@@ -204,6 +220,7 @@ class Echo:
         self.max_ticks = max_ticks
         self.natural = np.array([NATURAL_DIR["left"], NATURAL_DIR["right"]])
         self._open = hand14(HAND_OPEN, HAND_OPEN)
+        self.by_index = {o.index: o for o in scene.objects}
         self.n = 0
         self.begin(Layout([]), [Layout([]) for _ in range(n_followers)])
 
@@ -215,6 +232,7 @@ class Echo:
         n = self.n = len(lead.placements)
         assert all(len(f.placements) == n for f in followers), "followers need one partner per lead object"
         self.lead_idx = np.array([sc.by_name[p.name].index for p in lead.placements], int)
+        self.bins = [lead.mapping[sc.by_name[p.name].color] for p in lead.placements]     # where each pair belongs
         self.lead_shape = np.array([SHAPE_CODE[sc.by_name[p.name].shape] for p in lead.placements], int)
         self.foll_idx = np.array([[sc.by_name[p.name].index for p in f.placements] for f in followers], int).reshape(F, n)
         self.foll_shape = np.array([[SHAPE_CODE[sc.by_name[p.name].shape] for p in f.placements] for f in followers],
@@ -260,6 +278,14 @@ class Echo:
         self.stall = np.zeros(F, int)
         self.rate = np.ones(F)
         self.finished = False
+        # A person's mistake: the lead closed its hand on the same part a second time.
+        self.taken = np.zeros(n, int)                # times the lead's hand has closed on each part
+        self.lead_closed = np.zeros(2, bool)
+        self.mistake = False
+        self.still = np.zeros((F, n), bool)          # the follower's part lies still
+        self.own: list[dict | None] = [None] * F     # a follower taking a part of its own: {job, hand, part}
+        self.tidying = np.zeros(F, bool)             # which followers are doing that now
+        self.tidied = np.zeros((F, n), int)          # tries at each part
 
     def push(self, tick: LeadTick) -> None:
         k = self.len
@@ -270,6 +296,15 @@ class Echo:
         if tick.arm is not None:
             self.h_arm[k] = tick.arm
         self.len = k + 1
+        closure = np.array([-0.5 * (tick.hand[3] + tick.hand[5]), 0.5 * (tick.hand[10] + tick.hand[12])])
+        for s in range(2):
+            if closure[s] > self.p.grip_on and not self.lead_closed[s] and self.n:
+                flat = np.where(tick.on_mat, np.linalg.norm(tick.obj_xy - tick.pinch[s, :2], axis=-1), np.inf)
+                part = int(np.argmin(flat))
+                if flat[part] < self.p.retake:
+                    self.taken[part] += 1
+                    self.mistake |= bool(self.taken[part] > 1)
+            self.lead_closed[s] = closure[s] > self.p.grip_on if not self.lead_closed[s] else closure[s] > self.p.grip_off
 
     def finish(self) -> None:
         """The lead's episode is over; followers read the rest of the history and stop."""
@@ -287,8 +322,8 @@ class Echo:
 
     @property
     def done(self) -> np.ndarray:
-        """(F,) the follower has replayed everything the lead did."""
-        return self.finished & (self.tau >= self.len - 1 - 1e-6)
+        """(F,) the follower has replayed everything the lead did, and is not taking a part of its own."""
+        return self.finished & (self.tau >= self.len - 1 - 1e-6) & ~self.tidying
 
     # ------------------------------------------------------------------ per tick
     def targets(self, obj_xy: np.ndarray, obj_yaw: np.ndarray, obj_on_mat: np.ndarray,
@@ -399,15 +434,69 @@ class Echo:
                 wait = stay > 0.0
                 out_x[wait, s, 2] = np.maximum(out_x[wait, s, 2], self.scene.rest_z + stay[wait] * p.stay_height)
                 hand[stay > 0.5, 7 * s:7 * s + 7] = self._open[7 * s:7 * s + 7]
+        if p.tidy and self.mistake and self.finished and rot_now is not None:
+            self._tidy(obj_xy, obj_yaw, obj_on_mat, pinch_now, rot_now, out_x, out_R, hand)
         self.last_target, self.last_rot = out_x, out_R
         return out_x, out_R, hand
+
+    def _tidy(self, obj_xy: np.ndarray, obj_yaw: np.ndarray, obj_on_mat: np.ndarray, pinch_now: np.ndarray,
+              rot_now: np.ndarray, out_x: np.ndarray, out_R: np.ndarray, hand: np.ndarray) -> None:
+        """After a mistake of the lead's, a follower that has replayed everything takes what still lies on its
+        mat, part by part, wherever the lead sorted the partner: the stand-in's pick and place for where the
+        part is now. Changes the targets of the hand that does it, in place."""
+        p, sc, n = self.p, self.scene, self.n
+        end = self.len - 1
+        for f in np.nonzero(self.tau >= end - 1e-6)[0]:
+            job = self.own[f]
+            if job is None:
+                job = self.own[f] = self._own_pick(f, obj_xy[f], obj_yaw[f], obj_on_mat[f], out_x[f], out_R[f])
+                self.tidying[f] = job is not None
+                if job is None:
+                    continue
+            s = job["hand"]
+            st = job["job"].update(1.0 / 30.0, pinch_now[f, s], rot_now[f, s])
+            if job["job"].done:
+                self.own[f], self.tidying[f] = None, False
+                continue
+            out_x[f, s], out_R[f, s] = st.point, st.rot
+            hand[f, 7 * s:7 * s + 7] = st.hand if s == 0 else left_to_right(st.hand)
+
+    def _own_pick(self, f: int, xy: np.ndarray, yaw: np.ndarray, on_mat: np.ndarray, at: np.ndarray,
+                  rot: np.ndarray) -> dict | None:
+        """The next part follower ``f`` takes by itself, as a motion from where its hands are (``at`` (2, 3),
+        ``rot`` (2, 3, 3)): one that lies still on its mat while the lead's partner lies in its bin."""
+        p, sc = self.p, self.scene
+        lead_xy = self.h_xy[self.len - 1]
+        for k in np.argsort(-xy[:, 0]):                        # the one nearest the bins first: the hand reaches over the rest
+            lo, hi = sc.bin_inner(self.bins[k])
+            sorted_by_lead = bool(np.all(lead_xy[k] >= lo[:2]) and np.all(lead_xy[k] <= hi[:2]))
+            if not (on_mat[k] and self.still[f, k] and sorted_by_lead and self.tidied[f, k] < p.tidy_tries):
+                continue
+            side = arm_for(self.bins[k], float(xy[k, 1]))
+            s = 0 if side == "left" else 1
+            rest = [j for j in range(self.n) if j != k and on_mat[j]]
+            others = xy[rest].reshape(-1, 2)
+            radius = part_radius(self.foll_shape[f, rest], sc.size)
+            finger, cost = self.reach.best(self.foll_shape[f, k], yaw[k], xy[k], s, others=others, radius=radius)
+            self.tidied[f, k] += 1
+            if cost > p.give_up:                               # where its arm cannot take it: it says so
+                self.tidied[f, k] = p.tidy_tries
+                self.left_out[f, k] = self.out_of_reach[f, k] = True
+                continue
+            ob = self.by_index[int(self.foll_idx[f, k])]
+            slot = sum(1 for j in range(self.n) if j != k and self.bins[j] == self.bins[k] and not on_mat[j])
+            wps = plan_pick_place(sc, side, ob.shape, np.r_[xy[k], sc.rest_z], float(yaw[k]), self.bins[k], slot=slot,
+                                  speed=p.tidy_pace, finger_dir=float(finger))
+            wps.append(Waypoint("back", at[s].copy(), rot[s].copy(), HAND_OPEN, 1.2 / p.tidy_pace, tol=0.05))
+            return {"job": Follower(at[s], rot[s], HAND_OPEN, wps), "hand": s, "part": int(k)}
+        return None
 
     def _choose_again(self, obj_xy: np.ndarray, obj_yaw: np.ndarray, obj_on_mat: np.ndarray) -> None:
         """A part that has come to rest somewhere else than where its grasp was chosen (put down,
         dropped, pushed) gets its grasp chosen afresh: for where it lies now, for both arms, and
         around the parts that are on the mat now."""
         p, n = self.p, self.n
-        still = np.linalg.norm(obj_xy - self.prev_xy, axis=-1) < p.rest_step
+        still = self.still = np.linalg.norm(obj_xy - self.prev_xy, axis=-1) < p.rest_step
         self.prev_xy = obj_xy.copy()
         held = (self.grip[:, :, None] == np.arange(n)).any(axis=1)                         # (F, n)
         todo = still & obj_on_mat & ~held & (np.linalg.norm(obj_xy - self.g_xy, axis=-1) > p.moved)
