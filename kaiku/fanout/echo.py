@@ -189,7 +189,7 @@ class EchoParams:
     down_start: float = 0.015        # m above grasp height under which a carried part is being put down on the table,
     down_length: float = 0.045       # and over which that fades out above it
     down_travel: float = 0.03        # m the hand must have carried it (and as much again) for that to be a new place
-    room: float = 0.075              # m between the centres of a part put down and the parts lying on the mat
+    room: float = 0.10               # m between the centres of a part put down and the parts lying on the mat
     wall_room: float = 0.085         # m a part is put down short of the bins' wall, where a hand can take it again
 
 
