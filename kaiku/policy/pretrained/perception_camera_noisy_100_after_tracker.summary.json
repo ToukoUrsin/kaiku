@@ -1,22 +1,21 @@
 {
   "aborted_scenes": 0,
-  "arm": "camera-noisy-after-tracker",
+  "arm": "camera-noisy",
   "clipped_commands": 0,
   "clipped_scenes": 0,
   "parts": 370,
-  "parts_rate": 0.297297,
-  "parts_rate_ci95": [
-    0.251159,
-    0.346714
-  ],
+  "parts_rate": 0.513514,
+  "policy": "default",
   "scenes": 96,
   "seed": 100,
+  "shards": [
+    0,
+    1,
+    2,
+    3
+  ],
   "sim_seconds_cap": 80.0,
-  "sorted": 110,
-  "success": 7,
-  "success_rate": 0.072917,
-  "success_rate_ci95": [
-    0.029818,
-    0.14448
-  ]
+  "sorted": 190,
+  "success": 20,
+  "success_rate": 0.208333
 }

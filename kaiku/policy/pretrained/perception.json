@@ -29,81 +29,33 @@
       "camera_clean": {
         "clipped_commands": 0,
         "clipped_scenes": 0,
-        "parts_rate": 0.34324324324324323,
+        "parts_rate": 0.5108108108108108,
         "parts_rate_ci95": [
-          0.294939,
-          0.39408
+          0.458614,
+          0.562833
         ],
-        "sorted": 127,
-        "success": 8,
-        "success_rate": 0.08333333333333333,
+        "sorted": 189,
+        "success": 18,
+        "success_rate": 0.1875,
         "success_rate_ci95": [
-          0.036666,
-          0.157611
-        ]
-      },
-      "camera_clean_before_fix": {
-        "clipped_commands": 0,
-        "clipped_scenes": 0,
-        "parts_rate": 0.051351,
-        "parts_rate_ci95": [
-          0.031196,
-          0.079032
-        ],
-        "sorted": 19,
-        "success": 0,
-        "success_rate": 0.0,
-        "success_rate_ci95": [
-          0.0,
-          0.037697
+          0.115078,
+          0.280046
         ]
       },
       "camera_noisy": {
         "clipped_commands": 0,
         "clipped_scenes": 0,
-        "parts_rate": 0.2972972972972973,
+        "parts_rate": 0.5135135135135135,
         "parts_rate_ci95": [
-          0.251159,
-          0.346714
+          0.461302,
+          0.565507
         ],
-        "sorted": 110,
-        "success": 7,
-        "success_rate": 0.07291666666666667,
+        "sorted": 190,
+        "success": 20,
+        "success_rate": 0.20833333333333334,
         "success_rate_ci95": [
-          0.029818,
-          0.14448
-        ]
-      },
-      "camera_noisy_after_fix": {
-        "clipped_commands": 0,
-        "clipped_scenes": 0,
-        "parts_rate": 0.043243,
-        "parts_rate_ci95": [
-          0.024916,
-          0.069276
-        ],
-        "sorted": 16,
-        "success": 0,
-        "success_rate": 0.0,
-        "success_rate_ci95": [
-          0.0,
-          0.037697
-        ]
-      },
-      "camera_noisy_before_fix": {
-        "clipped_commands": 0,
-        "clipped_scenes": 0,
-        "parts_rate": 0.056757,
-        "parts_rate_ci95": [
-          0.035473,
-          0.085453
-        ],
-        "sorted": 21,
-        "success": 0,
-        "success_rate": 0.0,
-        "success_rate_ci95": [
-          0.0,
-          0.037697
+          0.132145,
+          0.303251
         ]
       },
       "simulator": {
@@ -125,40 +77,46 @@
     },
     "camera": {
       "parts": 370,
-      "parts_rate": 0.34324324324324323,
-      "sorted": 127,
-      "success": 8,
-      "success_rate": 0.08333333333333333
+      "parts_rate": 0.5108108108108108,
+      "sorted": 189,
+      "success": 18,
+      "success_rate": 0.1875
     },
-    "camera_clean_before_fix": {
+    "camera_clean": {
       "parts": 370,
-      "parts_rate": 0.051351,
-      "sorted": 19,
-      "success": 0,
-      "success_rate": 0.0
+      "parts_rate": 0.5108108108108108,
+      "sorted": 189,
+      "success": 18,
+      "success_rate": 0.1875
     },
     "camera_noisy": {
       "parts": 370,
-      "parts_rate": 0.2972972972972973,
-      "sorted": 110,
-      "success": 7,
-      "success_rate": 0.07291666666666667
+      "parts_rate": 0.5135135135135135,
+      "sorted": 190,
+      "success": 20,
+      "success_rate": 0.20833333333333334
     },
-    "camera_noisy_before_fix": {
-      "parts": 370,
-      "parts_rate": 0.056757,
-      "sorted": 21,
-      "success": 0,
-      "success_rate": 0.0
-    },
-    "camera_noisy_before_tracker": {
-      "parts": 370,
-      "parts_rate": 0.043243,
-      "sorted": 16,
-      "success": 0,
-      "success_rate": 0.0
+    "checkpoint": {
+      "camera": "kaiku/policy/pretrained/camera_noisy_shape.pt",
+      "simulator": "kaiku/policy/pretrained/kaiku.pt"
     },
     "evaluation_seed": 100,
+    "freeze_fix": {
+      "clean": {
+        "parts": 370,
+        "scenes": 96,
+        "sorted": 189,
+        "success": 18
+      },
+      "noisy": {
+        "parts": 370,
+        "scenes": 96,
+        "sorted": 190,
+        "success": 20
+      },
+      "seed": 100,
+      "sim_seconds_cap": 80.0
+    },
     "noisy_policy_second_seed_run": false,
     "noisy_policy_seeds_run": 1,
     "parts": 370,
@@ -170,22 +128,6 @@
       "sorted": 370,
       "success": 96,
       "success_rate": 1.0
-    },
-    "tracker_fix": {
-      "clean": {
-        "parts": 370,
-        "scenes": 96,
-        "sorted": 127,
-        "success": 8
-      },
-      "noisy": {
-        "parts": 370,
-        "scenes": 96,
-        "sorted": 110,
-        "success": 7
-      },
-      "seed": 100,
-      "sim_seconds_cap": 80.0
     }
   }
 }

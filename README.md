@@ -121,10 +121,10 @@ pytest                                                        # the tests, about
 | what tells the policy where the parts are | scenes sorted | parts sorted |
 |---|---:|---:|
 | the simulator | 96 of 96 | 370 of 370 |
-| the head camera, tracked | 8 of 96 | 127 of 370 |
-| the head camera, 3 mm depth noise and 1 px edge noise, tracked | 7 of 96 | 110 of 370 |
+| the head camera | 18 of 96 | 189 of 370 |
+| the head camera with 3 mm depth noise and 1 px edge noise | 20 of 96 | 190 of 370 |
 
-The camera path votes over five still frames before moving, keeps each chosen shape fixed, filters depth, and drops a track for a fresh camera match after a failed grasp. Watching ten zero-progress scenes and classifying all 243 failed parts by the first observable cause gave 26 shape misreads, 7 position or yaw errors at the grasp, 0 same-colour swaps, 0 order mismatches, 0 lost parts, 0 hidden parts, and 210 that reached the 80 second cap. The camera sees the robot joints, known bin places, and its colour and depth images. The camera is rendered in the MuJoCo twin, so the robot, parts, and physics are still simulated.
+The camera uses `camera_noisy_shape.pt`; the simulator row uses `kaiku.pt`. In three zero-progress scenes, the first large error was a 31.8 degree cube yaw error at 0.4 seconds, a 43.2 degree triangle yaw error in the first frame, and a 10.9 mm position shift at 2.8 seconds while a closed hand was over the part. The policy now decides each tabletop pose, yaw, and shape from clear frames, keeps it while a hand is near, follows the hand while carrying, and looks again after a failed grasp. It sees the robot joints, known bin places, and head-camera colour and depth images. The camera is rendered in the MuJoCo twin, so the robot, parts, bins, and physics remain simulated.
 
 ## Layout
 
