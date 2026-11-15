@@ -19,6 +19,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WHICH = ("kaiku", "plain")
+WAIT_S = 60.0                        # a run still at nothing done after this long is waiting for its machines
 SMOOTH_S = 45.0                      # how slowly the time left may change its mind
 MODAL_ABOUT_MIN = 6.0                # what a run on rented GPUs takes, start to result (5.9 measured on the hosted demo)
 RENTED_KEPT = 5                      # rented runs whose times are kept: the page promises the slowest of them
@@ -53,6 +54,7 @@ class Trainer:
         self.started = 0.0                   # when the run began
         self.total_s: float | None = None    # how long the whole run looks like taking
         self.total_at = 0.0                  # ... as of when
+        self.wait_s = 0.0                    # how long the run sat at nothing done (machines still starting)
         self.took_s: float | None = None     # how long the last finished run took
         self.proc: subprocess.Popen | None = None
         self.lock = threading.Lock()
@@ -122,6 +124,7 @@ class Trainer:
             self.jobs = {w: {"stage": "loading", "progress": 0.0} for w in WHICH}
             self.error, self.finished, self.fresh = None, False, False
             self.started, self.total_s, self.took_s = self.clock(), None, None
+            self.wait_s = 0.0
         self.proc = subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                                      start_new_session=True)
         threading.Thread(target=self._read, args=(self.proc,), daemon=True, name="kaiku-trainer").start()
@@ -187,8 +190,15 @@ class Trainer:
         elapsed = now - self.started
         about = self.rented_min if self.using == "modal" else self.about_min
         prior = about * 60.0 if about else None
+        if progress < 0.02:
+            # Nothing has started where it runs (a rented GPU can take minutes to come): that wait says
+            # nothing about the pace of the run, and past the first minute there is no honest time to give.
+            self.wait_s = elapsed
+            if elapsed > WAIT_S:
+                self.total_s = None
+                return None
         if progress >= 0.05 and elapsed >= 20.0:
-            own = elapsed / progress
+            own = self.wait_s + (elapsed - self.wait_s) / progress
             if prior is None:
                 total = own
             else:
@@ -197,7 +207,7 @@ class Trainer:
                 weight = progress if own <= prior else min(1.0, progress * (1.0 + 3.0 * math.log(own / prior)))
                 total = (1.0 - weight) * prior + weight * own
         elif prior is not None:
-            total = prior
+            total = prior + (self.wait_s if self.wait_s > WAIT_S else 0.0)
         else:
             return None
         if self.total_s is None:
@@ -222,7 +232,10 @@ class Trainer:
         # The two train side by side and one can be minutes behind (a cold machine): what the page says is
         # being done is what the slower one is doing, or "Finishing" stands over half a bar.
         behind = min(jobs.values(), key=lambda j: j.get("progress", 0.0))
-        return {"state": state, "error": error, "stage": behind.get("stage") or k.get("stage"), "loss": k.get("loss"),
+        stage = behind.get("stage") or k.get("stage")
+        if state == "training" and progress < 0.02 and self.clock() - self.started > WAIT_S:
+            stage = "starting"
+        return {"state": state, "error": error, "stage": stage, "loss": k.get("loss"),
                 "eta_s": None if eta is None else round(eta), "took_s": None if took is None else round(took),
                 "progress": round(progress, 4), "jobs": jobs}
 

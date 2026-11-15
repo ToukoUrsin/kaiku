@@ -66,3 +66,27 @@ def test_the_page_promises_the_slowest_of_the_last_rented_runs(tmp_path):
     assert t.rented_min == round(250.0 / 60.0, 1)       # five warm runs in a row and it is forgotten
     again = T.Trainer(tmp_path, out, "modal", about_min=25)
     assert again.rented_min == t.rented_min and again.about_min == 25
+
+
+def test_a_rented_run_that_waits_for_its_machines_gives_no_time_and_then_an_honest_one(tmp_path):
+    """Eight minutes at nothing done is a wait for a GPU, not the pace of the run."""
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "timing.json").write_text(json.dumps({"minutes": 25.0, "rented_runs": [3.7, 7.5, 3.7, 3.7]}))
+    t = T.Trainer(tmp_path, out, "modal", about_min=25)
+    now = [1000.0]
+    t.clock = lambda: now[0]
+    t.using, t.started = "modal", now[0]
+    t.jobs = {w: {"stage": "loading", "progress": 0.0} for w in ("kaiku", "plain")}
+    now[0] += 30.0
+    st = t.status()
+    assert st["stage"] == "loading" and 400 < st["eta_s"] <= 450          # the usual promise at first
+    for _ in range(45):
+        now[0] += 10.0
+        st = t.status()
+    assert st["stage"] == "starting" and st["eta_s"] is None              # 8 minutes in: no countdown to nothing
+    for progress, after in ((0.2, 12.0), (0.37, 12.0), (0.6, 20.0)):
+        now[0] += after
+        t.jobs = {w: {"stage": "training", "progress": progress} for w in ("kaiku", "plain")}
+        st = t.status()
+        assert st["stage"] == "training" and st["eta_s"] is not None and st["eta_s"] < 480   # never "18 minutes left"

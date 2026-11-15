@@ -58,7 +58,7 @@ const WITH = {
   'glove-camera': 'with a Smartglove and a camera',
   'glove-coil': 'with a Smartglove on a Coil Pro',
 };
-const STAGE_TEXT = { loading: 'Reading the demonstrations', training: 'Training', testing: 'Testing on scenes it has not seen', done: 'Finishing' };
+const STAGE_TEXT = { starting: 'Still starting', loading: 'Reading the demonstrations', training: 'Training', testing: 'Testing on scenes it has not seen', done: 'Finishing' };
 const TOAST_MS = 4200;
 
 /** Seconds as something a person waits for: "40 s", "3 min". */
@@ -1091,7 +1091,11 @@ export class Hud {
       this.etaShown = null;
       return null;
     }
-    const eta = Number.isFinite(policy.eta_s) && policy.eta_s > 0 ? policy.eta_s : null;
+    if (!Number.isFinite(policy.eta_s)) {                   // the runner has no honest time to give (still starting)
+      this.etaShown = null;
+      return null;
+    }
+    const eta = policy.eta_s > 0 ? policy.eta_s : null;
     if (eta == null) return this.etaShown;
     this.etaShown = this.etaShown == null ? eta : Math.min(this.etaShown, eta);
     return this.etaShown;
