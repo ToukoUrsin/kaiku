@@ -24,11 +24,12 @@ def test_export_tiny_recorder_round_trip(tmp_path: Path):
     (rec / "episodes.jsonl").write_text(json.dumps(row) + "\n")
     result = export(rec, tmp_path / "out")
     assert result["episodes"] == 1 and result["frames"] == 3
-    for root in (result["groot"], result["lerobot"]):
+    for root, data_path in ((result["groot"], "data/chunk-000/episode_000000.parquet"),
+                            (result["lerobot"], "data/chunk-000/file-000.parquet")):
         assert (root / "meta" / "info.json").exists()
         assert (root / "meta" / "aalto_episodes.jsonl").exists()
         import pyarrow.parquet as pq
-        table = pq.read_table(root / "data/chunk-000/episode_000000.parquet")
+        table = pq.read_table(root / data_path)
         assert table.column_names[:4] == ["observation.state", "observation.arm_dq", "observation.environment_state", "action"]
         np.testing.assert_allclose(np.asarray(table["observation.state"].to_pylist()), state[0, 1:4])
         np.testing.assert_allclose(np.asarray(table["action"].to_pylist()), action[0, 1:4])
@@ -62,9 +63,11 @@ def test_download_is_the_last_scene_only(tmp_path: Path):
     got = bundle(rec, tmp_path / "dl" / "scene.zip", rows=rows)
     assert got["episodes"] == 3 and got["frames"] == 3 * n
     names = zipfile.ZipFile(got["zip"]).namelist()
-    for layout in ("lerobot", "groot"):
+    for layout in ("groot",):
         assert f"kaiku-demonstrations/{layout}/meta/info.json" in names
         assert sum(x.startswith(f"kaiku-demonstrations/{layout}/data/") for x in names) == 3
+    assert "kaiku-demonstrations/lerobot/meta/tasks.parquet" in names
+    assert sum(x.startswith("kaiku-demonstrations/lerobot/data/") for x in names) == 1
 
 
 def test_export_says_what_it_ships_and_who_drove(tmp_path: Path):
@@ -87,16 +90,21 @@ def test_export_says_what_it_ships_and_who_drove(tmp_path: Path):
              "clipped": 0, "instruction": "Sort parts.", "layout": layout} for k in range(2)]
     (rec / "episodes.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
     result = export(rec, tmp_path / "out")
-    for root in (result["groot"], result["lerobot"]):
+    for root, data_path in ((result["groot"], "data/chunk-000/episode_000000.parquet"),
+                            (result["lerobot"], "data/chunk-000/file-000.parquet")):
         info = json.loads((root / "meta" / "info.json").read_text())
-        assert info["total_videos"] == 0 and "video_path" not in info
+        if root == result["groot"]:
+            assert info["total_videos"] == 0 and "video_path" not in info
+        else:
+            assert info["codebase_version"] == "v3.0" and info["video_path"] is None
         assert not any(f["dtype"] == "video" for f in info["features"].values())
         assert not (root / "videos").exists()
         assert info["features"][PARTS]["shape"] == [PARTS_MAX * 7]
-        table = pq.read_table(root / "data/chunk-000/episode_000000.parquet")
+        table = pq.read_table(root / data_path)
         assert set(info["features"]) == set(table.column_names)          # every listed feature is there, and no other
-        poses = np.asarray(table[PARTS].to_pylist()).reshape(n, PARTS_MAX, 7)
-        np.testing.assert_allclose(poses[:, :3, 0], [[1, 2, 3]] * n)
+        rows_count = n if root == result["groot"] else 2 * n
+        poses = np.asarray(table[PARTS].to_pylist()).reshape(rows_count, PARTS_MAX, 7)
+        np.testing.assert_allclose(poses[:, :3, 0], [[1, 2, 3]] * rows_count)
         assert not poses[:, 3:].any()                                    # the parts this scene does not have
         side = [json.loads(x) for x in (root / "meta" / "aalto_episodes.jsonl").read_text().splitlines()]
         assert [s["source"] for s in side] == ["operator", "echo"]
