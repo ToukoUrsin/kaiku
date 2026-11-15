@@ -744,7 +744,9 @@ export class Hud {
       }
     } else if (operator.dropped && !held) {
       say = 'It fell out of the hand';
-      more = own ? 'Move over it and grasp it again.' : `Let go, move over it and ${pinchWord} again.`;
+      more = own ? 'Move over it and grasp it again.'
+        : operator.dropped_n >= 2 ? 'The hand gets no hold of it there. Take another part first, or press Next scene.'
+          : `Let go, move over it and ${pinchWord} again.`;
     } else if (operator.missed && !held && !settling) {
       // What to do next, in the grasp this visitor chose.
       say = own ? 'Your fingers closed on nothing' : 'No part under the hand';

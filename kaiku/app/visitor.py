@@ -141,6 +141,8 @@ class VisitorOperator:
         self.missed_at = -1e9
         self.dropped_at = -1e9
         self.again = False                                    # a grasp took nothing: the next one starts with a new press
+        self.fell: dict[int, int] = {}                        # times the helped grasp has come up without each part
+        self.fell_n = 0                                       # ... the part it last came up without
         self.away = 0                                         # control steps the part being carried has not been at the hand
         self.held_since = None                                # since when their own fingers have held a part
         self.lost = False                                     # their own grasp, and nothing sees the hand: it holds
@@ -561,6 +563,8 @@ class VisitorOperator:
                 # The hand is empty: the grasp took nothing or the part slipped out. The page says so, the hand
                 # opens, and nothing is carried to a bin that is not in it.
                 self.dropped_at, self.again = now, True
+                if self.held >= 0:                             # the second time from the same place the page says what else to do
+                    self.fell_n = self.fell[self.held] = self.fell.get(self.held, 0) + 1
                 self.phase, self.held, self.away = "idle", -1, 0
                 self.hand[self.side] = HAND_OPEN.copy()
             elif not grip:
@@ -637,6 +641,7 @@ class VisitorOperator:
                 # A pinch that took nothing, a part that fell out of the hand: just now, for the page to say.
                 "missed": time.monotonic() - self.missed_at < MISSED_S and not held,
                 "dropped": time.monotonic() - self.dropped_at < DROPPED_S and not held,
+                "dropped_n": int(self.fell_n),
                 "holding": self.held >= 0 and self.phase in ("carry", "release"),
                 "over": self._over(),
                 # A part being let go: over which bin (None: onto the table). Then where it came to rest.
