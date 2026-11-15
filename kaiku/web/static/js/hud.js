@@ -973,7 +973,7 @@ export class Hud {
     this.show('ds-get', Boolean(dataset.download));
     // The size of the zip the runner last built, when it has built one. Until then a range, not a guess.
     this.text('ds-size', `One demonstration from every robot that sorted it, as LeRobot v3.0 and GR00T. ${Number.isFinite(dataset.zip_mb)
-      ? `The last download was ${Math.max(1, Math.round(dataset.zip_mb))} MB.` : '40 to 60 MB.'}`);
+      ? `The last download was ${Math.max(1, Math.round(dataset.zip_mb))} MB.` : 'About 30 MB.'}`);
     this.show('ds-where', !this.hud.shared);                          // a path on the server says nothing to a visitor
     this.text('ds-path', dataset.path || 'Not recording to disk');
     this.show('ds-copy', Boolean(dataset.path));
