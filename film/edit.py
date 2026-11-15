@@ -142,9 +142,13 @@ letter-spacing:-.02em;text-shadow:0 2px 14px rgba(0,0,0,.8)}
 .then span{display:block;font-size:42px;color:#d5d8dd;margin-top:14px;font-weight:500}
 .snote{position:absolute;left:210px;right:210px;bottom:48px;text-align:center;font-size:38px;line-height:1.3;color:#c9cdd3;font-weight:500;text-wrap:balance}
 .low{position:absolute;left:0;right:0;bottom:0;height:430px;background:linear-gradient(180deg,rgba(8,9,11,0),rgba(8,9,11,.84) 36%,rgba(8,9,11,.92))}
-.lowbig{position:absolute;bottom:118px;display:flex;align-items:baseline;gap:26px}
-.lowbig b{font-size:176px;font-weight:750;letter-spacing:-.05em;line-height:1;text-shadow:0 4px 30px rgba(0,0,0,.6)}
-.lowbig span{font-size:44px;font-weight:600;color:#eceef0;max-width:400px;line-height:1.12}
+.mrow{position:absolute;display:flex;align-items:baseline;gap:22px}
+.mrow b{font-size:140px;font-weight:750;letter-spacing:-.05em;line-height:1;text-shadow:0 4px 30px rgba(0,0,0,.6)}
+.mrow span{font-size:40px;font-weight:600;color:#eceef0;max-width:540px;line-height:1.12}
+.mrow.pct b{font-size:104px}
+.mrow.pct span{color:#d5d8dd;font-weight:500}
+.low.tall{height:520px}
+.lownote.two{bottom:26px;line-height:1.25;text-wrap:balance}
 .lownote{position:absolute;left:56px;right:56px;bottom:42px;font-size:36px;font-weight:500;color:#c9cdd3}
 .end{position:absolute;left:0;right:0;bottom:0;height:470px;background:linear-gradient(180deg,rgba(8,9,11,0),rgba(8,9,11,.88) 30%,rgba(8,9,11,.95));
 display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:40px;text-align:center}
@@ -363,8 +367,11 @@ def plan(work: Path, use_open: bool = True) -> None:
         *to, how = robot_hand(ins / "open-last.png", op["hand"])
         facts["match"] = {"robot_hand": [round(v) for v in to], "how": how}
     last = ["-loop", "1", "-framerate", str(fps), "-t", "5", "-i", "in/open-last.png"]
-    # shot 1 comes out of the open's last frame in a short dissolve
-    out_of_open = lambda k: f";[{k}:v]format=rgba,fade=t=out:st=0:d={DV}:alpha=1[ol];[pic][ol]overlay=0:0:enable='lt(t,{DV})'[base]"
+    # shot 1 comes out of the open's last frame on a plain cut: the open's own last frame is the last one shown, and the
+    # shot's first frame is already the hand (the open's maker asks for a cut, no dissolve). A dissolve is drawn only when
+    # film.json asks for one longer than a film frame; anything shorter could only repeat the open's last frame.
+    out_of_open = lambda k: (f";[{k}:v]format=rgba,fade=t=out:st=0:d={DV}:alpha=1[ol];[pic][ol]overlay=0:0:enable='lt(t,{DV})'[base]"
+                             if DV * fps > 1.5 else ";[pic]null[base]")
     words_at = round(H0 + MV - 0.1, 3) if op else 0          # the film's own type waits until the picture is in its place
 
     # ---- shot 1: the hand
@@ -532,12 +539,18 @@ def plan(work: Path, use_open: bool = True) -> None:
         need(piece in panel.get(key, ""), f"shot 6: the page's panel says {piece!r} BUT the panel in this take says {panel.get(key)!r}. "
              "Change film.json numbers, or record the page again (film/README.md)")
     s, sid = shots["6-study"], "6-study"
-    need(dur(s) <= 12.0, f"shot 6: the one number slide is {dur(s)} s BUT the brief says 12 at most")
+    need(dur(s) <= 13.0, f"shot 6: the one number slide is {dur(s)} s BUT it may be 13 at most (12 in v4; v5 also says whose demonstrations and that the echoes cost no one's time)")
+    need(a["echoes"] == n["study_echoes"] and f"{a['echoes']:,}" == n["study_echoes_shown"],
+         f"shot 6: study.json has {n['study_demos']} demonstrations bring {n['study_echoes_shown']} echoes BUT the file says {a['echoes']:,}")
+    need("scripted hand" in fill(s["head"]) and "scripted hand" in fill(s["vo"][0]["text"]),
+         "shot 6: the slide says, on screen and in the voice, that the study's demonstrations are the scripted hand's BUT one of them does not")
     c1, c2, c3 = cue(sid, s["cues"][0]), cue(sid, s["cues"][1]), cue(sid, s["then_cue"])
-    then = e(fill(s["then"])).replace(e(f"{n['study_demos']} with echoes"), f"<i>{e(str(n['study_demos']) + ' with echoes')}</i>")
+    mine = f"{n['study_demos']} + {n['study_echoes_shown']} echoes"
+    need(mine in fill(s["then"]), f"shot 6: the line under the numbers counts the echoes ({mine}) BUT it says {fill(s['then'])!r}")
+    then = e(fill(s["then"])).replace(e(mine), f"<i>{e(mine)}</i>")
     pages["ov-6"] = (full, f"<div class=shead>{e(fill(s['head']))}</div><div class=snote>{e(fill(s['note']))}</div>")
-    pages["ov-6a"] = (full, big(fill(s["big"][0][0]), s["big"][0][1], 160, GREY))
-    pages["ov-6b"] = (full, big(fill(s["big"][1][0]), s["big"][1][1], 960, GREEN))
+    pages["ov-6a"] = (full, big(fill(s["big"][0][0]), fill(s["big"][0][1]), 160, GREY))
+    pages["ov-6b"] = (full, big(fill(s["big"][1][0]), fill(s["big"][1][1]), 960, GREEN))
     pages["ov-6c"] = (full, f"<div class=then><b>{then}</b><span>{e(fill(s['then_sub']))}</span></div>")
     page_said("6-back")
     base = join(sid, ["6-back"])
@@ -554,6 +567,14 @@ def plan(work: Path, use_open: bool = True) -> None:
          f"shot 7: baselines.json has the same {n['matched_demos']} demonstrations at {n['matched_replay']} with the replay and {n['matched_kaiku']} with Kaiku's echoes, "
          f"{n['study_runs']} runs on {n['study_scenes']} tables BUT the file says {pct(arms['mimicgen']['yield'])} and {pct(arms['kaiku']['yield'])}")
     need("re-implementation" in base["about"]["notes"], "shot 7: baselines.json says the replay is our own re-implementation BUT its notes do not")
+    gen = base["generation"]
+    need(gen["mimicgen"]["clean"] == n["matched_replay_kept"] and gen["kaiku"]["clean"] == n["matched_kaiku_kept"]
+         and gen["mimicgen"]["attempts"] == gen["kaiku"]["attempts"] == n["matched_tables"] and gen["mimicgen"]["source_scenes"] == n["matched_demos"]
+         and f"{n['matched_tables']:,}" == n["matched_tables_shown"],
+         f"shot 7: on the same {n['matched_tables']} tables the replay kept {n['matched_replay_kept']} clean runs and Kaiku's echoes {n['matched_kaiku_kept']} "
+         f"BUT baselines.json says {gen['mimicgen']['clean']} and {gen['kaiku']['clean']} of {gen['kaiku']['attempts']}")
+    need(arms["mimicgen"]["pairs"] > arms["plain"]["pairs"] and arms["kaiku"]["pairs"] > arms["plain"]["pairs"],
+         "shot 7: each policy was trained on the 16 demonstrations plus the runs kept, as the note says BUT baselines.json's training pairs say otherwise")
     bars = dict(panel.get("bars") or [])
     shown = {name: f"{round(float(v.rstrip('%')))}%" for name, v in bars.items()}
     need(shown.get("With MimicGen-style replays") == n["matched_replay"] and shown.get("With all of Kaiku's echoes") == n["matched_kaiku"]
@@ -561,14 +582,19 @@ def plan(work: Path, use_open: bool = True) -> None:
          f"shot 7: the page's panel shows {n['matched_replay']} with MimicGen-style replays and {n['matched_kaiku']} with Kaiku's echoes, and says the replay is our own "
          f"BUT the panel in this take says {bars!r}")
     s, sid = shots["7-matched"], "7-matched"
-    c1, c2 = cue(sid, s["cues"][0]), cue(sid, s["cues"][1])
-    lowbig = lambda v, label, left, colour: f"<div class=lowbig style='left:{left}px;color:{colour}'><b>{e(v)}</b><span>{e(label)}</span></div>"
-    pages["ov-7"] = (full, head(fill(s["head"])) + f"<div class=low></div><div class=lownote>{e(fill(s['note']))}</div>")
-    pages["ov-7a"] = (full, lowbig(fill(s["big"][0][0]), s["big"][0][1], 56, GREY))
-    pages["ov-7b"] = (full, lowbig(fill(s["big"][1][0]), s["big"][1][1], 800, GREEN))
+    cs = [cue(sid, c) for c in s["cues"]]                   # the two counts, then the two shares, each as the voice says it
+    # each column's two numbers share one width, so its two labels start at the same place
+    row = lambda v, label, left, colour, bottom, k="": (f"<div class='mrow {k}' style='left:{left}px;bottom:{bottom}px;color:{colour}'>"
+                                                        f"<b style='min-width:{210 if left < W / 2 else 280}px'>{e(fill(v))}</b><span>{e(fill(label))}</span></div>")
+    pages["ov-7"] = (full, head(fill(s["head"])) + f"<div class='low tall'></div><div class='lownote two'>{e(fill(s['note']))}</div>")
+    (k1, l1, p1, q1), (k2, l2, p2, q2) = s["big"]
+    pages["ov-7a"] = (full, row(k1, l1, 56, GREY, 290))
+    pages["ov-7b"] = (full, row(k2, l2, 980, GREEN, 290))
+    pages["ov-7c"] = (full, row(p1, q1, 56, GREY, 148, "pct"))
+    pages["ov-7d"] = (full, row(p2, q2, 980, GREEN, 148, "pct"))
     page_said("7-robots")
-    recipe[sid] = {**join(sid, ["7-robots"]), "over": [{"file": "ov-7", "a": 0, "b": dur(s)}, {"file": "ov-7a", "a": c1, "b": dur(s), "in": 0.25},
-                                                      {"file": "ov-7b", "a": c2, "b": dur(s), "in": 0.25}]}
+    recipe[sid] = {**join(sid, ["7-robots"]), "over": [{"file": "ov-7", "a": 0, "b": dur(s)}]
+                   + [{"file": f"ov-7{x}", "a": c, "b": dur(s), "in": 0.25} for x, c in zip("abcd", cs)]}
 
     # ---- shot 8: the challenge's own runner: its log for five seconds at most, its own lines at the moments it printed them
     s, sid = shots["8-runner"], "8-runner"

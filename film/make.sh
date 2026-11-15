@@ -1,9 +1,9 @@
 #!/bin/bash
 # Build the film from film/film.json.
 #
-#   film/make.sh v4                          the no-gloves film: the cold open, then film of a real hand played into the page as its camera
-#   film/make.sh v4 --no-open                the body alone, without the cold open and the end card (kaiku-nogloves-v4-noopen.mp4)
-#   film/make.sh v5 --shot2 glove.mp4        the same film with a phone clip of a real gloved hand as its first shot, with the gloves words
+#   film/make.sh v5                          the no-gloves film: the cold open, then film of a real hand played into the page as its camera
+#   film/make.sh v5 --no-open                the body alone, without the cold open and the end card (kaiku-nogloves-v5-noopen.mp4)
+#   film/make.sh v6 --shot2 glove.mp4        the same film with a phone clip of a real gloved hand as its first shot, with the gloves words
 #       [--from 3]                           start 3 s into the clip (default 0)
 #       [--turn 90|180|270]                  turn the clip clockwise, if it plays on its side
 #       [--hand 0.5,0.45,0.5]                where the hand is in the (turned) clip when it starts: centre x, centre y, height,
@@ -16,9 +16,9 @@
 # Result: /bulk3/runs/robotteleop/film/kaiku-nogloves-VERSION.mp4, or kaiku-gloves-VERSION.mp4 with --shot2,
 # with captions (.srt), a contact sheet and a report beside it. film/README.md says what --shot2 changes.
 set -euo pipefail
-work=${KAIKU_FILM_WORK:-/bulk3/runs/robotteleop/film/v4/work}
+work=${KAIKU_FILM_WORK:-/bulk3/runs/robotteleop/film/v5/work}
 films=${KAIKU_FILM_OUT:-/bulk3/runs/robotteleop/film}
-ver=v4; shot2=""; from=0; turn=0; hand=0.5,0.45,0.5; open=""; tag=""
+ver=v5; shot2=""; from=0; turn=0; hand=0.5,0.45,0.5; open=""; tag=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --shot2) shot2=$2; shift 2 ;;
