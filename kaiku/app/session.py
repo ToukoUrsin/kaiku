@@ -251,6 +251,8 @@ class Session:
             pinch_t[1:], rot_t[1:], hand_t[1:] = self.echo.targets(
                 fpos[..., :2], fyaw, self._on_mat(fpos, 0.06), obs.pinch[1:], obs.rot[1:])
             self.max_lag = np.maximum(self.max_lag, self.echo.lag)
+            if self.lead_done and self.echo.tidying.any():        # a follower taking a part of its own gets the time
+                self.behind = int(min(max(self.behind, self.after_done), 60 * CONTROL_HZ))
         self.timing["echo"] += time.perf_counter() - t0
         lean = np.broadcast_to(self.kin.rest, (n, 2, 7)).copy()
         if F:

@@ -198,3 +198,51 @@ def test_an_echo_with_no_partner_for_a_grasp_leaves_it_out_and_fails_alone():
     assert r.success[1] and left_out[0, k] and not out_of_reach[0, k]          # already in its bin: nothing to redo
     assert not r.success[2] and out_of_reach[1, k] and got[2] == parts - 1     # says so, and fails alone
     assert left_out[2:].sum() == 0 and r.success[3:].sum() >= 12
+
+
+def live(seed: int, aside, n: int = 16):
+    """A scene driven the way the page's own script drives it: the pointer jumps onto a part, waits, is
+    pressed, jumps to the goal with the part in the hand, is held there and let go. The first part is first
+    put down on the mat ``aside`` of the part nearest to it, and taken again from there."""
+    s = Session(n, seed=seed)
+    try:
+        v = VisitorOperator(s)
+        h = Hand(s, v)
+
+        def take(k: int, goal) -> bool:
+            xy = h.where(k)
+            h.run(xy, False, 45)
+            if not h.run(xy, True, 750, lambda: v.phase == "carry"):
+                h.run(xy, False, 20)
+                return False
+            h.run(goal, True, 120)
+            h.run(goal, False, 900, lambda: v.phase == "idle")
+            h.run(goal, False, 5)
+            return True
+
+        parts = range(len(h.lay.placements))
+        near = min((h.where(j) for j in parts[1:]), key=lambda q: float(np.linalg.norm(q - h.where(0))))
+        take(0, np.clip(near + [aside[0], aside[1] if near[1] < 0 else -aside[1]], [0.26, -0.2], [0.345, 0.2]))
+        tries = 0
+        for k in parts:
+            while not take(k, h.part(k)[1]) and tries < 3:
+                tries += 1
+        led = bool(v.done)
+        s.finish_lead()
+        while not s.settled and s.tick_no < 12000:
+            s.tick(s.home_command())
+        return s.result(), led, s.progress(), (s.echo.left_out.copy(), s.echo.out_of_reach.copy())
+    finally:
+        s.close()
+
+
+# Echoes that sorted their own table before a follower took what the mistake left on its own mat: 2 of 7, 10 of 15.
+@pytest.mark.parametrize("aside,seed,n,least", [((0.10, -0.004), 2, 8, 4), ((0.025, 0.077), 4, 16, 12)])
+def test_a_part_put_down_next_to_another_part_does_not_cost_the_echoes(aside, seed, n, least):
+    """The mistake as the page's script makes it: the part is put down beside another one, far out or a
+    hand's width aside. On an echo's own table it then lies between its neighbours, the grasp the lead
+    shows next takes nothing there, and that echo takes the part by itself once it has replayed the rest."""
+    r, led, _, _ = live(seed, aside, n)
+    assert led and r.success[0], "the scripted person did not sort the lead's own table"
+    assert r.clipped.sum() == 0
+    assert r.success[1:].sum() >= least, f"only {int(r.success[1:].sum())} of {n - 1} echoes sorted their own table"
