@@ -193,6 +193,18 @@ def _encode_video(frames: list[np.ndarray], path: Path, depth: bool = False) -> 
     subprocess.run(cmd, input=arr.tobytes(), check=True)
 
 
+def _join_videos(parts: list[Path], path: Path) -> None:
+    """Join films of the same encoding into one, in order, without encoding them again."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    listing = path.with_suffix(".txt")
+    listing.write_text("".join(f"file '{p.resolve()}'\n" for p in parts))
+    try:
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(listing),
+                        "-c", "copy", "-movflags", "+faststart", str(path)], check=True)
+    finally:
+        listing.unlink()
+
+
 def _stats(cols: dict, videos: dict[str, list[np.ndarray]], n: int) -> dict:
     out = {}
     for key, value in cols.items():
@@ -386,7 +398,7 @@ def export(recorder_dir: str | Path, out_dir: str | Path, *, limit: int | None =
         for key, frames in videos.items():
             _encode_video(frames, groot / "videos" / f"chunk-{chunk:03d}" / key / f"episode_{ep:06d}.mp4")
         episode_columns.append(cols)
-        episode_videos.append(videos)
+        episode_videos.append({key: len(frames) for key, frames in videos.items()})   # how many frames, not the frames
         episodes.append({"episode_index": ep, "tasks": [instruction], "length": b - a})
         lead = row.get("source", "human") != "echo"
         side.append({"episode_index": ep, "source": "operator" if lead else "echo",
@@ -411,11 +423,11 @@ def export(recorder_dir: str | Path, out_dir: str | Path, *, limit: int | None =
                 "meta/episodes/chunk_index": chunk, "meta/episodes/file_index": file}
         for key, ep_frames in videos.items():
             # All episodes are concatenated in order into their chunk's video file.
-            previous = sum(len(episode_videos[i].get(key, [])) for i in range(ep) if i // 1000 == chunk)
+            previous = sum(episode_videos[i].get(key, 0) for i in range(ep) if i // 1000 == chunk)
             meta[f"videos/{key}/chunk_index"] = chunk
             meta[f"videos/{key}/file_index"] = file
             meta[f"videos/{key}/from_timestamp"] = previous / FPS
-            meta[f"videos/{key}/to_timestamp"] = (previous + len(ep_frames)) / FPS
+            meta[f"videos/{key}/to_timestamp"] = (previous + ep_frames) / FPS
         meta.update(_flatten_stats(ep_stats["stats"]))
         v3_episode_rows.append(meta)
 
@@ -426,11 +438,14 @@ def export(recorder_dir: str | Path, out_dir: str | Path, *, limit: int | None =
         merged = {key: np.concatenate([np.asarray(cols[key]) for cols in grouped], axis=0) for key in grouped[0]}
         _write_parquet(v3 / "data" / f"chunk-{chunk:03d}" / f"file-{file:03d}.parquet", merged)
     if renderer:
+        # One film per camera and chunk: the episodes' own films (in the GR00T copy, no B-frames, so
+        # every one is exactly its frames long) joined without encoding them again or holding a frame.
         for key in VIDEO_KEYS:
             for chunk in sorted({ep // 1000 for ep in range(len(episode_videos))}):
-                frames = [frame for ep, videos in enumerate(episode_videos) if ep // 1000 == chunk for frame in videos.get(key, [])]
-                if frames:
-                    _encode_video(frames, v3 / "videos" / key / f"chunk-{chunk:03d}" / "file-000.mp4")
+                parts_ = [groot / "videos" / f"chunk-{chunk:03d}" / key / f"episode_{ep:06d}.mp4"
+                          for ep, counts in enumerate(episode_videos) if ep // 1000 == chunk and counts.get(key)]
+                if parts_:
+                    _join_videos(parts_, v3 / "videos" / key / f"chunk-{chunk:03d}" / "file-000.mp4")
 
     _write_tasks(v3 / "meta" / "tasks.parquet", tasks)
     by_episode_meta_file = {}
