@@ -28,6 +28,7 @@ CAMS = ("head_rgb", "left_wrist_rgb", "right_wrist_rgb")
 VIDEO_KEYS = tuple(f"observation.images.{x}" for x in CAMS)
 GROUPS = {"left_arm": (0, 7), "right_arm": (7, 14), "left_hand": (14, 21), "right_hand": (21, 28)}
 ROBOT_TYPE = "unitree_g1_29dof_dex3"
+LEROBOT_VERIFIED_VERSION = "0.7.0"
 ANNOTATION = "annotation.human.task_description"
 PARTS = "observation.environment_state"      # where the parts are: what the shipped policy reads besides the robot
 PARTS_MAX = 5                                 # a scene has 3 to 5 parts; a scene with fewer is padded with zeros
@@ -111,6 +112,70 @@ def _write_parquet(path: Path, cols: dict) -> None:
         arrays[key] = pa.array(value.tolist(), type=pa.list_(pa.float32())) if value.ndim == 2 else pa.array(value)
     path.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(pa.table(arrays), path)
+
+
+def _write_tasks(path: Path, tasks: dict[str, int]) -> None:
+    """Write the v3 task table with the task text as its pandas index."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    names = [text for text, _ in sorted(tasks.items(), key=lambda item: item[1])]
+    indices = [tasks[text] for text in names]
+    table = pa.table({"task_index": pa.array(indices, type=pa.int64()), "task": pa.array(names, type=pa.string())})
+    pandas_metadata = {
+        "index_columns": ["task"],
+        "column_indexes": [{"name": None, "field_name": None, "pandas_type": "unicode", "numpy_type": "object", "metadata": None}],
+        "columns": [
+            {"name": "task_index", "field_name": "task_index", "pandas_type": "int64", "numpy_type": "int64", "metadata": None},
+            {"name": "task", "field_name": "task", "pandas_type": "unicode", "numpy_type": "object", "metadata": None},
+        ],
+        "creator": {"library": "pyarrow", "version": pa.__version__},
+        "pandas_version": "2.0.0",
+    }
+    table = table.replace_schema_metadata({b"pandas": json.dumps(pandas_metadata).encode()})
+    pq.write_table(table, path)
+
+
+def _flatten_stats(stats: dict) -> dict:
+    return {f"stats/{feature}/{name}": value for feature, values in stats.items() for name, value in values.items()}
+
+
+def _aggregate_stats(stats_list: list[dict]) -> dict:
+    """Aggregate per-episode statistics into the dataset-level stats.json shape."""
+    if not stats_list:
+        return {}
+    out = {}
+    keys = {key for stats in stats_list for key in stats}
+    for key in keys:
+        entries = [stats[key] for stats in stats_list if key in stats]
+        total = float(sum(entry.get("count", [0])[0] for entry in entries))
+        merged = {}
+        for name in ("min", "max"):
+            vals = [np.asarray(entry[name]) for entry in entries if name in entry]
+            if vals:
+                fn = np.minimum if name == "min" else np.maximum
+                value = vals[0]
+                for val in vals[1:]:
+                    value = fn(value, val)
+                merged[name] = value.tolist()
+        means = [np.asarray(entry["mean"], dtype=np.float64) for entry in entries if "mean" in entry]
+        if means:
+            weights = np.asarray([entry.get("count", [0])[0] for entry in entries], dtype=np.float64)
+            merged["mean"] = np.average(np.stack(means), axis=0, weights=weights).tolist() if weights.sum() else means[0].tolist()
+        stds = [np.asarray(entry["std"], dtype=np.float64) for entry in entries if "std" in entry]
+        if stds:
+            # A pooled variance is sufficient for normalization and preserves the exact
+            # one-episode result while avoiding a second pass over every frame.
+            means_arr = np.stack(means) if means else np.zeros_like(np.stack(stds))
+            weights = np.asarray([entry.get("count", [0])[0] for entry in entries], dtype=np.float64)
+            mean_all = np.asarray(merged.get("mean", means_arr[0].tolist()))
+            variance = sum(w * (s * s + (m - mean_all) ** 2) for w, s, m in zip(weights, stds, means_arr, strict=False))
+            merged["std"] = np.sqrt(variance / weights.sum()).tolist() if weights.sum() else stds[0].tolist()
+        for name in ("q01", "q10", "q50", "q90", "q99"):
+            vals = [np.asarray(entry[name]) for entry in entries if name in entry]
+            if vals:
+                merged[name] = np.median(np.stack(vals), axis=0).tolist()
+        merged["count"] = [int(total)]
+        out[key] = merged
+    return out
 
 
 def _encode_video(frames: list[np.ndarray], path: Path, depth: bool = False) -> None:
@@ -264,8 +329,9 @@ operator: the scripted stand-in in emulated Smartgloves, a visitor's pointer or 
 with the robot state it is what the shipped policy reads. `observation.arm_dq` is derived from measured arm angles with
 a central difference at 30 Hz (one-sided differences at episode boundaries), because the recorder has no velocities.
 {camera_note}
-The GR00T copy is LeRobot v2.1 with `meta/modality.json`; the other copy is the LeRobot v3.0-compatible direct layout
-written without the optional `lerobot` package. Depth is {depth_note}
+The GR00T copy is LeRobot v2.1 with `meta/modality.json`. The other copy is LeRobot v3.0, checked by loading it with
+`lerobot` version {LEROBOT_VERIFIED_VERSION}. It uses shared chunked parquet files and parquet episode metadata. Depth
+is {depth_note}
 """)
 
 
@@ -300,6 +366,7 @@ def export(recorder_dir: str | Path, out_dir: str | Path, *, limit: int | None =
     except Exception:
         pass
     tasks, episodes, side, stats = {}, [], [], []
+    episode_columns, episode_videos = [], []
     total, renderer = 0, CameraRenderer() if render_cameras else None
     for ep, row in enumerate(rows):
         state, action, parts, a, b = _prepare_episode(src, row)
@@ -312,11 +379,14 @@ def export(recorder_dir: str | Path, out_dir: str | Path, *, limit: int | None =
             for cam, image in renderer.render(state, parts, row.get("layout", [])):
                 frames[cam].append(image)
             videos = {f"observation.images.{k}": v for k, v in frames.items()}
-        for root, version in ((groot, "v2.1"), (v3, "v3.0")):
-            chunk = ep // 1000
-            _write_parquet(root / "data" / f"chunk-{chunk:03d}" / f"episode_{ep:06d}.parquet", cols)
-            for key, frames in videos.items():
-                _encode_video(frames, root / "videos" / f"chunk-{chunk:03d}" / key / f"episode_{ep:06d}.mp4")
+        # Keep the original per-episode files in the GR00T v2.1 copy. The v3 copy
+        # is written below after all episodes are collected into shared files.
+        chunk = ep // 1000
+        _write_parquet(groot / "data" / f"chunk-{chunk:03d}" / f"episode_{ep:06d}.parquet", cols)
+        for key, frames in videos.items():
+            _encode_video(frames, groot / "videos" / f"chunk-{chunk:03d}" / key / f"episode_{ep:06d}.mp4")
+        episode_columns.append(cols)
+        episode_videos.append(videos)
         episodes.append({"episode_index": ep, "tasks": [instruction], "length": b - a})
         lead = row.get("source", "human") != "echo"
         side.append({"episode_index": ep, "source": "operator" if lead else "echo",
@@ -325,24 +395,78 @@ def export(recorder_dir: str | Path, out_dir: str | Path, *, limit: int | None =
                      "frames": [a, b], "clipped_steps": 0, "success": row.get("success", True), "task": row.get("task"),
                      "instruction": instruction, "mapping": row.get("mapping"), "layout": row.get("layout"),
                      "operator": row.get("operator"), "lag_s": row.get("lag_s")})
-        stats.append({"episode_index": ep, "stats": _stats(cols, videos, b - a)})
+        ep_stats = _stats(cols, videos, b - a)
+        stats.append({"episode_index": ep, "stats": ep_stats})
         total += b - a
+    # LeRobot v3 stores many episodes in each data shard and points to the shard
+    # from the episode metadata table.
+    v3_episode_rows = []
+    for ep, (cols, videos, episode, ep_stats) in enumerate(zip(episode_columns, episode_videos, episodes, stats, strict=True)):
+        chunk, file = ep // 1000, 0
+        start = int(cols["index"][0])
+        end = start + len(cols["index"])
+        meta = {"episode_index": ep, "tasks": episode["tasks"], "length": episode["length"],
+                "data/chunk_index": chunk, "data/file_index": file,
+                "dataset_from_index": start, "dataset_to_index": end,
+                "meta/episodes/chunk_index": chunk, "meta/episodes/file_index": file}
+        for key, ep_frames in videos.items():
+            # All episodes are concatenated in order into their chunk's video file.
+            previous = sum(len(episode_videos[i].get(key, [])) for i in range(ep) if i // 1000 == chunk)
+            meta[f"videos/{key}/chunk_index"] = chunk
+            meta[f"videos/{key}/file_index"] = file
+            meta[f"videos/{key}/from_timestamp"] = previous / FPS
+            meta[f"videos/{key}/to_timestamp"] = (previous + len(ep_frames)) / FPS
+        meta.update(_flatten_stats(ep_stats["stats"]))
+        v3_episode_rows.append(meta)
+
+    by_data_file = {}
+    for ep, cols in enumerate(episode_columns):
+        by_data_file.setdefault((ep // 1000, 0), []).append(cols)
+    for (chunk, file), grouped in by_data_file.items():
+        merged = {key: np.concatenate([np.asarray(cols[key]) for cols in grouped], axis=0) for key in grouped[0]}
+        _write_parquet(v3 / "data" / f"chunk-{chunk:03d}" / f"file-{file:03d}.parquet", merged)
+    if renderer:
+        for key in VIDEO_KEYS:
+            for chunk in sorted({ep // 1000 for ep in range(len(episode_videos))}):
+                frames = [frame for ep, videos in enumerate(episode_videos) if ep // 1000 == chunk for frame in videos.get(key, [])]
+                if frames:
+                    _encode_video(frames, v3 / "videos" / key / f"chunk-{chunk:03d}" / "file-000.mp4")
+
+    _write_tasks(v3 / "meta" / "tasks.parquet", tasks)
+    by_episode_meta_file = {}
+    for row in v3_episode_rows:
+        key = (row["meta/episodes/chunk_index"], row["meta/episodes/file_index"])
+        by_episode_meta_file.setdefault(key, []).append(row)
+    for (chunk, file), grouped in by_episode_meta_file.items():
+        episodes_meta_path = v3 / "meta" / "episodes" / f"chunk-{chunk:03d}" / f"file-{file:03d}.parquet"
+        episodes_meta_path.parent.mkdir(parents=True, exist_ok=True)
+        pq.write_table(pa.Table.from_pylist(grouped), episodes_meta_path)
+    (v3 / "meta" / "stats.json").write_text(json.dumps(_aggregate_stats([x["stats"] for x in stats]), indent=2))
+
     features = _feature_info(arm_names, hand_names, cameras=bool(renderer), depth=False)
+    for feature in features.values():
+        if feature["dtype"] != "video":
+            feature["fps"] = FPS
     info_common = {"robot_type": ROBOT_TYPE, "total_episodes": len(episodes), "total_frames": total,
-                   "total_tasks": len(tasks), "total_videos": len(episodes) * len(CAMS) if renderer else 0, "fps": FPS,
+                   "total_tasks": len(tasks), "fps": FPS,
                    "splits": {"train": f"0:{len(episodes)}"}, "features": features}
-    video_path = ({"video_path": "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4"}
-                  if renderer else {})
+    video_path_g = ({"video_path": "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4"}
+                    if renderer else {})
+    video_path_v = ({"video_path": "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4"}
+                    if renderer else {"video_path": None})
     info_g = {"codebase_version": "v2.1", "chunks_size": 1000, "total_chunks": (len(episodes) + 999) // 1000,
-              "data_path": "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet", **video_path, **info_common}
-    info_v = {"codebase_version": "v3.0", "data_path": "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet",
-              **video_path, **info_common}
+              "total_videos": len(episodes) * len(CAMS) if renderer else 0,
+              "data_path": "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet", **video_path_g, **info_common}
+    info_v = {"codebase_version": "v3.0", "chunks_size": 1000, "data_files_size_in_mb": 100,
+              "video_files_size_in_mb": 200, "data_path": "data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet",
+              **video_path_v, **info_common}
     _jsonl(groot / "meta" / "episodes.jsonl", episodes); _jsonl(v3 / "meta" / "episodes.jsonl", episodes)
     tasks_rows = [{"task_index": i, "task": text} for text, i in tasks.items()]
     for root, info in ((groot, info_g), (v3, info_v)):
         _jsonl(root / "meta" / "tasks.jsonl", tasks_rows)
         _jsonl(root / "meta" / "episodes_stats.jsonl", stats)
         _jsonl(root / "meta" / "aalto_episodes.jsonl", side)
+        _jsonl(root / "meta" / "episodes.jsonl", episodes)
         (root / "meta" / "info.json").write_text(json.dumps(info, indent=2))
         if root == groot:
             (root / "meta" / "modality.json").write_text(json.dumps({"state": {k: {"start": a, "end": b} for k, (a, b) in GROUPS.items()},
