@@ -28,6 +28,14 @@ the part is carried away the frozen offset fades out, so every follower converge
 operator's own path and releases above the same bin. Over the bins, which stand at the same
 place for everyone, followers mirror the lead exactly.
 
+Each grasp is its own piece. An operator is a person: a part is put down and taken again, a
+pinch takes nothing, parts are sorted in any order. So nothing is carried over from one grasp
+to the next. A part that has come to rest somewhere else gets its grasp chosen afresh for where
+it lies now, and the map is frozen anew when the fingers close on it again. A follower with no
+partner for the part the lead takes (its own already lies in its bin, fell off the mat, or lies
+where its arm cannot take it) leaves that one grasp out: its hand stays up and open, the rest
+of its table is sorted as before, and it says which part it left out (``left_out``).
+
 All arrays are batched over F followers; nothing here touches the simulator.
 """
 from __future__ import annotations
@@ -36,7 +44,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from kaiku.sim.grasp import NATURAL_DIR, TRIANGLE_PHI, arm_for
+from kaiku.sim.grasp import HAND_OPEN, NATURAL_DIR, TRIANGLE_PHI, arm_for, hand14
 from kaiku.sim.reach import ReachMap, level_palm, part_radius
 from kaiku.sim.scene import SHAPES, Layout, Placement, Scene
 
@@ -160,6 +168,8 @@ class EchoParams:
     bin_fade_length: float = 0.06    # m over which it fades to zero: over the bins followers mirror the lead
     grip_on: float = 0.5             # finger closure (rad, 0.4 = open preshape) above which a hand is gripping
     grip_off: float = 0.3            # and below which it has let go
+    grip_rest: float = 0.45          # or below this and no longer moving: opened to the preshape, not straightened
+                                     # (a pinch let go before the lift, a hand that found itself empty)
     carry_fade_start: float = 0.06   # m of travel after gripping before the frozen offset starts fading
     carry_fade_length: float = 0.12  # m over which it fades to zero
     err_ok: float = 0.020            # m of tracking error below which a follower reads at full speed
@@ -171,6 +181,16 @@ class EchoParams:
     fine_change: float = 0.15        # rad of finger motion in that window for fully strict tolerances
     catch_up: float = 1.6            # fastest reading speed when behind (1 = real time)
     patience: int = 60               # ticks a follower may stall before it goes on regardless
+    moved: float = 0.02              # m from where its grasp was chosen at which a resting part gets a new one
+    rest_step: float = 0.0005        # m per tick under which a part lies still
+    give_up: float = 0.034           # m of grasp cost (ReachMap.best) above which a part that was moved is out of
+                                     # reach: the hand would come down on the bins' wall or on a neighbour
+    stay_height: float = 0.09        # m above a resting part at which a hand that leaves a grasp out waits
+    down_start: float = 0.015        # m above grasp height under which a carried part is being put down on the table,
+    down_length: float = 0.045       # and over which that fades out above it
+    down_travel: float = 0.03        # m the hand must have carried it (and as much again) for that to be a new place
+    room: float = 0.075              # m between the centres of a part put down and the parts lying on the mat
+    wall_room: float = 0.085         # m a part is put down short of the bins' wall, where a hand can take it again
 
 
 class Echo:
@@ -182,6 +202,7 @@ class Echo:
         self.reach = reach or ReachMap(scene)
         self.max_ticks = max_ticks
         self.natural = np.array([NATURAL_DIR["left"], NATURAL_DIR["right"]])
+        self._open = hand14(HAND_OPEN, HAND_OPEN)
         self.n = 0
         self.begin(Layout([]), [Layout([]) for _ in range(n_followers)])
 
@@ -210,6 +231,9 @@ class Echo:
         self.tau = np.zeros(F)                       # each follower's read position in the history, in ticks
         # The grasp chosen for each (follower, hand, part): the equivalent one that arm reaches best.
         self.g_f = np.zeros((F, 2, n))
+        self.g_cost = np.zeros((F, 2, n))            # what that grasp costs the arm (ReachMap.best)
+        self.g_xy = np.zeros((F, n, 2))              # where the part lay when it was chosen
+        self._rest = np.array([[j for j in range(n) if j != k] for k in range(n)], int).reshape(n, max(n - 1, 0))
         if n and F:
             xy = np.array([[p.pos[:2] for p in f.placements] for f in followers]).reshape(F, n, 2)
             yaw = np.array([[p.yaw for p in f.placements] for f in followers]).reshape(F, n)
@@ -217,7 +241,14 @@ class Echo:
             others = xy[:, rest]                                                           # (F, n, n-1, 2)
             radius = part_radius(self.foll_shape, sc.size)[:, rest]
             for s in range(2):
-                self.g_f[:, s] = self.reach.best(self.foll_shape, yaw, xy, s, others=others, radius=radius)[0]
+                self.g_f[:, s], self.g_cost[:, s] = self.reach.best(self.foll_shape, yaw, xy, s, others=others,
+                                                                    radius=radius)
+            self.g_xy = xy.copy()
+        self.prev_xy = self.g_xy.copy()
+        self.moved = np.zeros((F, n), bool)          # the part came to rest elsewhere and its grasp was chosen anew
+        self.skip = np.zeros((F, 2), bool)           # this hand leaves out the grasp the lead's hand is making
+        self.left_out = np.zeros((F, n), bool)       # grasps of the lead this follower did not redo, by part
+        self.out_of_reach = np.zeros((F, n), bool)   # of those, the ones whose part lay where its arm cannot take it
         self.grip = np.full((F, 2), -1, int)         # part each hand has closed on, -1 for none
         self.a_cf = np.zeros((F, 2, 2))              # the map frozen when it closed: follower's grasp centre,
         self.a_cl = np.zeros((F, 2, 2))              # the lead's,
@@ -282,8 +313,12 @@ class Echo:
         if n == 0:
             self.last_target, self.last_rot = x, R
             return x, R, hand
+        self._choose_again(obj_xy, obj_yaw, obj_on_mat)
         h = self.h_hand[i0]
         closure = np.stack([-0.5 * (h[:, 3] + h[:, 5]), 0.5 * (h[:, 10] + h[:, 12])], axis=1)   # (F, 2) rad
+        before = self.h_hand[np.maximum(i0 - 3, 0)]
+        was = np.stack([-0.5 * (before[:, 3] + before[:, 5]), 0.5 * (before[:, 10] + before[:, 12])], axis=1)
+        opened = (closure < p.grip_off) | ((closure < p.grip_rest) & (was < p.grip_rest) & (np.abs(closure - was) < 0.01))
         band_end = self.scene.region[1][0]
         l_xy, l_yaw, l_on = self.h_xy[i0], self.h_yaw[i0], self.h_on[i0]                   # (F, n, ..)
         out_x, out_R = x.copy(), R.copy()
@@ -306,7 +341,11 @@ class Echo:
             flat = np.sqrt((rel ** 2).sum(-1))
             dz = np.maximum(xs[:, None, 2] - self.scene.rest_z, 0.0) * p.height_factor
             near = smoothstep(1.0 - (np.sqrt(flat ** 2 + dz ** 2) - p.attach_radius) / (p.reach_radius - p.attach_radius))
-            usable = l_on & obj_on_mat
+            gone = self.moved & (self.g_cost[:, s] > p.give_up)                            # lies beyond this arm now
+            usable = l_on & obj_on_mat & ~gone
+            # The part the lead's hand is at. A follower that has no partner for it stays out of this grasp.
+            aim = np.argmin(np.where(l_on, flat, np.inf), axis=1)                          # (F,)
+            out = np.where(l_on[idx, aim] & ~usable[idx, aim] & (self.grip[:, s] < 0), near[idx, aim], 0.0)
             near = np.where(usable, near, 0.0)
             share = np.where(usable, (flat + 1e-3) ** -p.idw_power, 0.0)
             share = share / np.maximum(share.sum(-1, keepdims=True), 1e-12)
@@ -319,26 +358,85 @@ class Echo:
             # Fingers closing on a part: freeze that part's map for this hand. Fingers open: back to live.
             top = np.argmax(wn, axis=1)
             start = (self.grip[:, s] < 0) & (closure[:, s] > p.grip_on) & (wn[idx, top] > 0.5)
+            leave = (self.grip[:, s] < 0) & (closure[:, s] > p.grip_on) & (out > 0.5)
+            if leave.any():
+                self.skip[leave, s] = True
+                self.left_out[idx[leave], aim[leave]] = True
+                self.out_of_reach[idx[leave], aim[leave]] |= obj_on_mat[idx[leave], aim[leave]]
+            start &= ~self.skip[:, s]
             if start.any():
                 r, k = idx[start], top[start]
                 self.grip[r, s] = k
                 self.a_cf[r, s], self.a_cl[r, s], self.a_turn[r, s] = c_f[r, k], c_l[r, k], turn[r, k]
                 self.a_from[r, s] = xs[r]
-            self.grip[closure[:, s] < p.grip_off, s] = -1
+            self.grip[opened[:, s], s] = -1
+            self.skip[opened[:, s], s] = False
             gripping = self.grip[:, s] >= 0
             travel = np.linalg.norm(xs - self.a_from[:, s], axis=-1)
             keep = (1.0 - smoothstep((travel - p.carry_fade_start) / p.carry_fade_length)) * (1.0 - over_bins)
             frozen = self._map(self.a_cf[:, s], self.a_cl[:, s], self.a_turn[:, s], xs[:, :2] - self.a_cl[:, s])
             d_xy = np.where(gripping[:, None], keep[:, None] * frozen, d_xy)
             d_yaw = np.where(gripping, keep * self.a_turn[:, s], d_yaw)
+            # A carried part put down on the table, somewhere else than it was taken from: on this follower's
+            # own table that is a free place near the lead's, from where its own hand can take the part again.
+            down = (1.0 - smoothstep((xs[:, 2] - self.scene.rest_z - p.down_start) / p.down_length)) * (1.0 - over_bins) \
+                * smoothstep(np.linalg.norm(xs[:, :2] - self.a_from[:, s, :2], axis=-1) / p.down_travel - 1.0)
+            down = np.where(gripping, down, 0.0)
+            if (down > 0.0).any():
+                lying = obj_on_mat & (np.arange(n) != self.grip[:, s:s + 1])
+                spot = xs[:, :2] + d_xy
+                d_xy = d_xy + down[:, None] * (self._free_place(spot, obj_xy, lying) - spot)
             out_x[:, s, :2] += d_xy
             turned = rot_z(d_yaw) @ R[:, s]
             heading = np.arctan2(turned[:, 1, 0], turned[:, 0, 0])
             level = level_palm(np.stack([heading, heading], axis=-1))[:, s]
             attached = np.where(gripping, keep, gain)
             out_R[:, s] = rotate_towards(turned, level, attached * smoothstep(np.abs(d_yaw) / p.level_turn))
+            # Nothing of its own to take here: the hand waits above, open, until the lead's has let go again.
+            stay = np.maximum(out, self.skip[:, s])
+            if (stay > 0.0).any():
+                wait = stay > 0.0
+                out_x[wait, s, 2] = np.maximum(out_x[wait, s, 2], self.scene.rest_z + stay[wait] * p.stay_height)
+                hand[stay > 0.5, 7 * s:7 * s + 7] = self._open[7 * s:7 * s + 7]
         self.last_target, self.last_rot = out_x, out_R
         return out_x, out_R, hand
+
+    def _choose_again(self, obj_xy: np.ndarray, obj_yaw: np.ndarray, obj_on_mat: np.ndarray) -> None:
+        """A part that has come to rest somewhere else than where its grasp was chosen (put down,
+        dropped, pushed) gets its grasp chosen afresh: for where it lies now, for both arms, and
+        around the parts that are on the mat now."""
+        p, n = self.p, self.n
+        still = np.linalg.norm(obj_xy - self.prev_xy, axis=-1) < p.rest_step
+        self.prev_xy = obj_xy.copy()
+        held = (self.grip[:, :, None] == np.arange(n)).any(axis=1)                         # (F, n)
+        todo = still & obj_on_mat & ~held & (np.linalg.norm(obj_xy - self.g_xy, axis=-1) > p.moved)
+        if not todo.any():
+            return
+        f, k = np.nonzero(todo)
+        rest = self._rest[k]                                                               # (m, n-1)
+        rows = f[:, None]
+        others = np.where(obj_on_mat[rows, rest][..., None], obj_xy[rows, rest], np.nan)
+        radius = part_radius(self.foll_shape, self.scene.size)[rows, rest]
+        for s in range(2):
+            self.g_f[f, s, k], self.g_cost[f, s, k] = self.reach.best(self.foll_shape[f, k], obj_yaw[f, k], obj_xy[f, k],
+                                                                      s, others=others, radius=radius)
+        self.g_xy[f, k] = obj_xy[f, k]
+        self.moved[f, k] = True
+
+    def _free_place(self, spot: np.ndarray, obj_xy: np.ndarray, lying: np.ndarray) -> np.ndarray:
+        """The place nearest ``spot`` (F, 2) where a part can be put down and taken again: clear of
+        the parts ``lying`` (F, n) on that follower's mat and short of the bins' wall."""
+        p = self.p
+        lo, hi = self.scene.region
+        lo, hi = lo - 0.03, np.array([min(hi[0] + 0.03, self.reach.wall_x - p.wall_room), hi[1] + 0.03])
+        q = np.clip(spot, lo, hi)
+        for _ in range(4):
+            away = q[:, None] - obj_xy                                                     # (F, n, 2)
+            gap = np.linalg.norm(away, axis=-1)
+            push = np.where(lying, np.maximum(p.room - gap, 0.0), 0.0)
+            away = np.where(gap[..., None] > 1e-6, away / np.maximum(gap, 1e-6)[..., None], [0.0, 1.0])
+            q = np.clip(q + (push[..., None] * away).sum(axis=1), lo, hi)
+        return q
 
     def _map(self, c_f: np.ndarray, c_l: np.ndarray, turn: np.ndarray, rel: np.ndarray) -> np.ndarray:
         """Where a point ``rel`` away from the lead's grasp centre goes, as an offset: the shift

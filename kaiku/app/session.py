@@ -137,6 +137,7 @@ class Session:
         self.tick_no = 0
         self.lead_done = False
         self.after_done = 0
+        self.behind = 0
         self.rest_ticks = 0
         self.max_lag = np.zeros(self.n - 1)
         self.clipped = np.zeros(self.n, int)
@@ -157,7 +158,7 @@ class Session:
         self.copy = False
         self.tick_no = 0
         self.lead_done = False
-        self.after_done = self.rest_ticks = 0
+        self.after_done = self.rest_ticks = self.behind = 0
         self.max_lag = np.zeros(self.n - 1)
         self.clipped = np.zeros(self.n, int)
         self.last_action = (np.tile(HOME_ARM, (self.n, 1)), np.tile(HOME_HAND, (self.n, 1)))
@@ -181,13 +182,16 @@ class Session:
         if not self.lead_done:
             self.lead_done = True
             self.echo.finish()
+            # Followers that fell behind (they waited for their own hands) still get to play out what is left.
+            if self.n > 1 and not self.copy and self.echo.len:
+                self.behind = int(min(np.ceil(self.echo.lag.max() * CONTROL_HZ), 60 * CONTROL_HZ))
 
     @property
     def settled(self) -> bool:
         """Everybody has finished (or run out of time) and things have come to rest."""
         if not self.lead_done:
             return False
-        if self.after_done >= self.timeout_ticks:
+        if self.after_done >= self.timeout_ticks + self.behind:
             return True
         if self.n > 1 and not self.copy and not self.echo.done.all():
             return False
